@@ -1,0 +1,22 @@
+# Core API
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+email-validator==2.2.0
+python-multipart==0.0.20
+python-dotenv==1.0.1
+
+# NLP
+spacy==3.8.3
+
+# ML / personalization engine
+scikit-learn==1.6.0
+numpy==2.2.1
+joblib==1.4.2
+
+# Speech-to-text (real STT path; falls back to mock transcript if unavailable)
+SpeechRecognition==3.10.4
+
+# PDF resume parsing
+pypdf==5.1.0

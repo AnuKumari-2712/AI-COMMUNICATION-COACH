@@ -1,0 +1,12 @@
+# Optional, heavier ML dependencies.
+#
+# The API runs correctly WITHOUT these — every module that uses them
+# (see app/ml/transformer_confidence.py) catches ImportError / OSError and
+# falls back to a lightweight heuristic, and logs clearly that it did so.
+#
+# Install these to enable the real transformer-based confidence/tone model:
+#   pip install -r requirements-ml-optional.txt
+#
+# torch is CPU-only here on purpose (no CUDA requirement for a student project).
+torch==2.5.1
+transformers==4.47.1
