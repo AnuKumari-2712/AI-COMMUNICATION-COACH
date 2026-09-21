@@ -105,6 +105,50 @@ Both hit maximum raw diversity (neither repeats a word), but only the long answe
 
 ---
 
-## Modules 3-12 — Not yet started
+## Module 3 — Filler Word False-Positive Reduction — ✅ DONE
 
-See the module plan and per-module findings in the audit delivered in-conversation (fluency, pace, filler words, pronunciation, confidence, answer relevance, answer structure, technical correctness, interview follow-ups, scoring transparency, data validation). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.
+**Current metric (before):** `filler_word_count`, from a fixed word list matched anywhere in the transcript, including "actually", "basically", "you know", "like", "kind of"/"sort of".
+
+**Accuracy problem found:** Real, demonstrable false positives — "Do **you know** the deadline?" and "I **like** pizza" both counted as filler usage, even though neither is hesitation.
+
+**Fix implemented — three-tier detection:**
+1. **Unambiguous** (um, uh, hmm, erm): counted anywhere, high confidence — these have no other real use in English.
+2. **Clause-boundary fillers** (actually, basically, you know, i mean): only counted when they form a whole clause on their own or sit at a clause's start/end (the classic discourse-marker position) — not when embedded mid-clause as part of a genuine question or statement.
+3. **"like"**: uses spaCy's POS tag on the word itself — verb usage ("I like pizza", "my friends like it") and simile usage ("like a filter") are excluded; only genuine filler "like" is counted. **A real bug was found and fixed during testing**: spaCy's small model mis-tags "like" as a preposition after certain noun subjects ("my friends like it" → ADP, not VERB) — a documented model limitation, not a logic bug. Added a targeted correction: "like" immediately followed by a bare object pronoun (it/him/her/them/this/that) is treated as verb usage regardless of the raw POS tag, since a genuine simile essentially never continues that way.
+4. **"kind of"/"sort of"**: POS-tags the following word — precedes a noun ("this kind of problem") = genuine usage, excluded; precedes an adjective ("kind of hard") = filler, counted.
+
+Every excluded near-match is returned in `excluded_examples` (human-readable) so the false-positive-reduction claim is falsifiable, not just asserted.
+
+**Files changed:**
+- `backend/app/speech/speech_metrics.py` (`detect_filler_words` rewritten with clause-boundary/POS-aware sub-detectors; `SpeechMetrics` gains `high_confidence_filler_count`, `ambiguous_filler_count`, `excluded_examples`)
+- `backend/tests/test_filler_detection.py` (new — 14 tests)
+
+**Bug found and fixed mid-module** (documented, not hidden): the first implementation used a fixed pronoun list (I/you/we/they/he/she/it) to detect "like" verb usage, which missed "my friends like it" (noun subject). `test_like_as_verb_is_not_a_filler` caught this immediately — replaced with spaCy POS tagging plus the pronoun-object correction described above.
+
+**Verification — run this yourself:**
+```bash
+cd backend
+venv\Scripts\activate
+pytest tests/ -v
+```
+
+**Actual output obtained (2026-09-21):**
+```
+42 passed, 2 warnings in 2.11s
+```
+
+**Live proof, through the real integration path the API uses** (not a standalone regex demo):
+```bash
+python -c "
+from app.speech.speech_metrics import compute_speech_metrics
+m = compute_speech_metrics('Do you know the deadline? Um, actually, I think, uh, this is kind of hard, you know.', duration_seconds=20.0)
+print(m.filler_word_count, m.high_confidence_filler_count, m.ambiguous_filler_count, m.excluded_examples)
+"
+```
+Result: `filler_word_count=5, high_confidence=2 (um, uh), ambiguous=3 (actually, kind of, you know), excluded=['"you know" in "Do you know the deadline" (mid-clause, not a discourse marker position)']` — the exact false positive named in the audit is now correctly excluded, while every genuine filler in the same sentence is still caught.
+
+---
+
+## Modules 4-12 — Not yet started
+
+See the module plan and per-module findings in the audit delivered in-conversation (fluency, pace, pronunciation, confidence, answer relevance, answer structure, technical correctness, interview follow-ups, scoring transparency, data validation). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.
