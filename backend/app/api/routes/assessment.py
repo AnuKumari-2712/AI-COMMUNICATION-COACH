@@ -45,6 +45,9 @@ async def analyze_voice(
     duration_seconds: float = Form(...),
     audio: UploadFile = File(...),
 ):
+    if duration_seconds <= 0:
+        raise HTTPException(status_code=422, detail="duration_seconds must be positive — a real recording duration is required to compute pace/fluency metrics.")
+
     content = await audio.read()
     if not content:
         raise HTTPException(status_code=422, detail="Empty audio upload.")

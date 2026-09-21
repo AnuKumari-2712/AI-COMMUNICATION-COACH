@@ -149,6 +149,63 @@ Result: `filler_word_count=5, high_confidence=2 (um, uh), ambiguous=3 (actually,
 
 ---
 
-## Modules 4-12 — Not yet started
+## Module 4 — Fluency/Pace Transparency — ✅ DONE
 
-See the module plan and per-module findings in the audit delivered in-conversation (fluency, pace, pronunciation, confidence, answer relevance, answer structure, technical correctness, interview follow-ups, scoring transparency, data validation). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.
+**Current metrics (before):** `fluency_score`, `words_per_minute`/`pace_score` (voice assessment), and the interview session's `total_minutes`.
+
+**Accuracy problems found — three separate fabricated-duration/hardcoded-fluency instances:**
+1. `run_initial_assessment()` (onboarding, text-only, no real recording) fed a hardcoded `duration_seconds=45.0` into `compute_speech_metrics()`, producing a fake WPM/pace number for a student's very first learner profile — before any audio had ever been recorded.
+2. `interview_service.answer_question()` used a flat hardcoded `fluency_score = 90.0` (text mode) or `70.0` (voice mode with no duration) — a constant unrelated to anything in the actual answer — and re-implemented filler detection with a cruder presence-check that bypassed Module 3's false-positive fix entirely.
+3. `compute_speech_metrics()` silently clamped any `duration_seconds <= 0` up to `1.0`, which would make a WPM number look like it came from real audio timing even when the input duration was invalid (e.g. a client bug sending 0).
+4. No field anywhere distinguished a WPM/pace/pause number that came from real WAV pause analysis versus a transcript-based estimate — every number was presented with equal, unearned confidence.
+
+**Fix implemented:**
+- `InvalidDurationError` (real exception, not a silent clamp) raised by `compute_speech_metrics()` for `duration_seconds <= 0`; the `/assessment/voice` route validates this explicitly and returns 422 before doing any processing.
+- `SpeechMetrics` gains `word_count`, `duration_seconds`, `reference_range_wpm` ("130-160"), and `pace_source: "measured" | "estimated"` — `"measured"` only when real WAV pause analysis (`analyze_wav_pauses`) was available, `"estimated"` for the transcript-based pause approximation.
+- Extracted `text_flow_consistency(text)` as a standalone, real (if indirect) text-based fluency signal — sentence-length variance, usable with zero audio/duration data at all.
+- `run_initial_assessment()`: removed the fabricated `45.0` duration entirely. Fluency now comes from `text_flow_consistency()`; `speaking_pace` starts at an explicit, documented neutral baseline (`55.0`, matching `create_profile()`'s own default) instead of a number derived from fake timing — to be replaced by real voice-practice data on the first actual recording.
+- `interview_service.answer_question()`: when `mode == "voice"` and a real positive `duration_seconds` is present, fluency comes from `compute_speech_metrics()` (`pace_consistency`) and filler count from the same detector as Module 3 (dropping the separate cruder re-implementation). Otherwise, both fall back to `text_flow_consistency()` / `detect_filler_words()`. A new `fluency_source: "speech_measured" | "text_estimated"` field on `InterviewAnswerResponse` makes this distinction visible to the caller, not just internal.
+- The `session["answers"]` history entry's `duration_seconds` (used only for practice-time bookkeeping — `submit_session()`'s `total_minutes`, never for scoring) keeps an explicit `90.0`-second estimate for typed/unmeasured answers, now clearly commented as time-tracking only, never fed into any "measured" score.
+
+**Files changed:**
+- `backend/app/speech/speech_metrics.py` (`InvalidDurationError`, new `SpeechMetrics` fields, extracted `text_flow_consistency`, real validation instead of clamping)
+- `backend/app/schemas/assessment.py` (`VoiceAnalysisResponse` gains `word_count`, `reference_range_wpm`, `pace_source`)
+- `backend/app/services/assessment_service.py` (`analyze_voice_upload` maps the new fields through; `run_initial_assessment` fabricated-duration fix)
+- `backend/app/api/routes/assessment.py` (422 validation for non-positive `duration_seconds` on `/assessment/voice`)
+- `backend/app/services/interview_service.py` (`answer_question` fluency/filler rewrite, `fluency_source` computation, bookkeeping-duration comment)
+- `backend/app/schemas/interview.py` (`InterviewAnswerResponse` gains `fluency_source`)
+- `backend/tests/test_speech_metrics.py` (new — 12 tests)
+
+**Known, honest, NOT fixed in this module:** `pace_source="estimated"` still assumes "one pause per sentence boundary, ~0.6s each" — a documented approximation, not a measurement, used only when real WAV pause analysis isn't available (e.g. non-WAV upload). `submit_session()`'s `total_minutes` still blends real voice-recording durations with the fixed 90s bookkeeping estimate for typed answers in the same sum — acceptable for session-length tracking (not presented as a "measured speaking pace"), but not a fully "real" duration total either; a future module could report these as two separate figures if that distinction becomes important to a caller.
+
+**Verification — run this yourself:**
+```bash
+cd backend
+venv\Scripts\activate
+pytest tests/ -v
+```
+
+**Actual output obtained (2026-09-21):**
+```
+54 passed, 2 warnings in 1.97s
+```
+
+**Live API proof, through the real interview session flow:**
+```bash
+BASE=http://127.0.0.1:8000/api/v1
+curl -X POST $BASE/interview/start -H "Content-Type: application/json" -d '{"student_id":"demo-student","category_id":"behavioral","job_role":null,"resume_text":null}'
+# then, text mode (no duration_seconds):
+curl -X POST $BASE/interview/answer -H "Content-Type: application/json" -d '{"session_id":"<id>","question_id":"<qid>","answer_text":"...","mode":"text","duration_seconds":null}'
+# → fluency_source: "text_estimated"
+
+# voice mode with a real duration:
+curl -X POST $BASE/interview/answer -H "Content-Type: application/json" -d '{"session_id":"<id>","question_id":"<qid2>","answer_text":"...","mode":"voice","duration_seconds":30}'
+# → fluency_source: "speech_measured"
+```
+Confirmed against a live running server (port 8123, separate from the dev server): the first call returned `"fluency_source":"text_estimated"`, the second returned `"fluency_source":"speech_measured"` — the caller can now tell the difference between a real speech-timing-derived fluency number and a text-only proxy, which was impossible before this module (both were silently blended into one unlabeled `fluency_score`). `/interview/submit` on the resulting session returned a normal, non-fabricated result with no NaN/impossible values.
+
+---
+
+## Modules 5-12 — Not yet started
+
+See the module plan and per-module findings in the audit delivered in-conversation (pronunciation, confidence, answer relevance, answer structure, technical correctness, interview follow-ups, scoring transparency, data validation). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.

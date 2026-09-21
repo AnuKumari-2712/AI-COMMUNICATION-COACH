@@ -22,6 +22,7 @@ from app.schemas.interview import (
     InterviewQuestion,
     InterviewResultResponse,
 )
+from app.speech.speech_metrics import compute_speech_metrics, detect_filler_words, text_flow_consistency
 
 logger = logging.getLogger(__name__)
 
@@ -78,15 +79,22 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
         structure = AnswerStructureScore(**c)
         structure_score = generic["score"]
 
-    fluency_score = 90.0 if mode == "text" else 70.0
-    if mode == "voice" and duration_seconds:
-        from app.speech.speech_metrics import compute_speech_metrics
-
+    # MODULE 4: fluency_score used to be a flat hardcoded 90.0 (text mode) or
+    # 70.0 (voice mode with no duration) — neither derived from anything
+    # about the actual answer. Real speech timing gives a real measurement;
+    # without it, fall back to a genuine (if indirect) text-based signal
+    # instead of a made-up constant. filler_count now always goes through
+    # the same context-aware detector from Module 3, instead of a separate,
+    # cruder presence-check re-implementation that lived here before.
+    if mode == "voice" and duration_seconds and duration_seconds > 0:
         metrics = compute_speech_metrics(answer_text, duration_seconds)
         fluency_score = metrics.pace_consistency
         filler_count = metrics.filler_word_count
+        fluency_source = "speech_measured"
     else:
-        filler_count = sum(1 for w in ["um", "uh", "like", "actually", "basically"] if w in answer_text.lower())
+        fluency_score = text_flow_consistency(answer_text)
+        filler_count = detect_filler_words(answer_text)["count"]
+        fluency_source = "text_estimated"
 
     clarity_result = text_analysis.clarity_analysis(answer_text)
 
@@ -111,7 +119,12 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
             "clarity": clarity_result["score"],
             "structure": structure_score,
             "filler_count": filler_count,
-            "duration_seconds": duration_seconds or 90.0,  # ~90s default estimate for a typed/unmeasured answer
+            # NOTE: this is practice-TIME bookkeeping only (feeds streak/total
+            # practice minutes), separate from fluency/pace scoring above —
+            # a typed answer has no speech duration, so 90s is an honest
+            # documented estimate for session-length tracking, never used
+            # to compute WPM or any "measured" score.
+            "duration_seconds": duration_seconds if duration_seconds and duration_seconds > 0 else 90.0,
         }
     )
 
@@ -120,6 +133,7 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
         grammar_score=grammar_result["score"],
         vocabulary_score=vocab_result["score"],
         fluency_score=fluency_score,
+        fluency_source=fluency_source,
         confidence_score=confidence_score,
         clarity_score=clarity_result["score"],
         structure=structure,

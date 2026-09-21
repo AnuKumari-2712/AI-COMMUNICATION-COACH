@@ -5,6 +5,7 @@ decisions live here so they're testable independent of FastAPI.
 """
 import logging
 import os
+import re
 import tempfile
 
 from app.ml.transformer_confidence import score_confidence
@@ -19,7 +20,7 @@ from app.schemas.assessment import (
 from app.schemas.common import AnalysisSource, SkillScores
 from app.speech import stt
 from app.speech.audio_utils import analyze_wav_pauses
-from app.speech.speech_metrics import compute_speech_metrics
+from app.speech.speech_metrics import compute_speech_metrics, detect_filler_words, text_flow_consistency
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +187,12 @@ def analyze_voice_upload(student_id: str, tmp_path: str, duration_seconds: float
         most_frequent_filler=metrics.most_frequent_filler,
         pause_count=metrics.pause_count,
         average_pause_seconds=metrics.average_pause_seconds,
+        high_confidence_filler_count=metrics.high_confidence_filler_count,
+        ambiguous_filler_count=metrics.ambiguous_filler_count,
+        filler_excluded_examples=metrics.excluded_examples,
+        word_count=metrics.word_count,
+        reference_range_wpm=metrics.reference_range_wpm,
+        pace_source=metrics.pace_source,
     )
 
 
@@ -219,14 +226,26 @@ def run_initial_assessment(student_id: str, intro_text: str, topic_answer: str, 
     vocab_result = text_analysis.vocabulary_analysis(combined_text)
     structure_result = text_analysis.structure_analysis(text_answer or combined_text)
     confidence_score, _ = score_confidence(combined_text)
-    speech_metrics = compute_speech_metrics(intro_text or combined_text, duration_seconds=45.0)
+
+    # MODULE 4: this step is typed text with no real recording, so there's
+    # no real speaking duration to measure WPM/pace from at all — the
+    # previous code fabricated one (duration_seconds=45.0), which fed a
+    # fake speaking_pace number into the student's very first profile.
+    # fluency uses a real (if indirect) text-only signal instead; pace has
+    # no honest signal available yet, so it starts at the same neutral
+    # baseline create_profile() uses, to be replaced by real voice-practice
+    # data on the first actual recording.
+    fluency_estimate = text_flow_consistency(intro_text or combined_text)
+    filler_result = detect_filler_words(combined_text)
+    word_count = len(re.findall(r"[A-Za-z']+", combined_text))
+    filler_per_word = (filler_result["count"] / word_count) if word_count else 0.0
 
     scores = SkillScores(
         grammar=grammar_result["score"],
         vocabulary=vocab_result["score"],
-        fluency=speech_metrics.pace_consistency,
-        speaking_pace=speech_metrics.pace_score,
-        filler_words=max(0.0, 100.0 - speech_metrics.filler_words_per_minute * 8),
+        fluency=fluency_estimate,
+        speaking_pace=55.0,  # no real duration exists at this stage — neutral baseline, not a fabricated measurement
+        filler_words=max(0.0, 100.0 - filler_per_word * 800),
         confidence=confidence_score,
         pronunciation=75.0,  # no audio available yet at this stage of onboarding
         response_structure=structure_result["score"],

@@ -43,6 +43,16 @@ _LIKE_AS_SIMILE = re.compile(r"\blike\s+(a|an|the|this|that|those|these)\b", re.
 _HEDGE_PATTERN = re.compile(r"\b(sort of|kind of)\b", re.IGNORECASE)
 
 
+class InvalidDurationError(ValueError):
+    """Raised when a non-positive duration is given to compute_speech_metrics.
+    MODULE 4: previously duration_seconds was silently clamped to a minimum
+    of 1.0, which would make WPM/pace numbers look computed from real audio
+    timing when the input was actually invalid (e.g. 0 or negative from a
+    client bug). Now it's a real validation error instead of a silent
+    cover-up — see the /assessment/voice route, which turns this into a
+    422 response."""
+
+
 @dataclass
 class SpeechMetrics:
     words_per_minute: float
@@ -60,6 +70,13 @@ class SpeechMetrics:
     high_confidence_filler_count: int = 0
     ambiguous_filler_count: int = 0
     excluded_examples: list[str] = field(default_factory=list)
+    # MODULE 4 transparency: raw measurements behind words_per_minute, and
+    # whether pause data came from real audio analysis or a transcript-based
+    # estimate — see compute_speech_metrics and audit finding #3/#4.
+    word_count: int = 0
+    duration_seconds: float = 0.0
+    reference_range_wpm: str = "130-160"
+    pace_source: str = "estimated"  # "measured" (real WAV pause analysis) | "estimated" (transcript-based)
 
 
 def _clause_boundary_fillers(transcript: str) -> tuple[list[str], list[str]]:
@@ -202,12 +219,30 @@ def _pace_score(words_per_minute: float) -> float:
     return max(20.0, 95.0 - distance * 0.8)
 
 
+def text_flow_consistency(text: str) -> float:
+    """Sentence-length variance as a proxy for consistent delivery — low
+    variance (similar-length sentences) scores higher, wildly uneven
+    sentence lengths score lower. This is a real, if indirect, textual
+    signal (not a hardcoded constant), usable even when no audio/duration
+    is available at all (e.g. a typed answer) — see MODULE 4 in AUDIT.md
+    for why this replaced a flat hardcoded fluency score for text-mode
+    interview answers."""
+    sentence_lengths = [len(s.split()) for s in re.split(r"[.!?]", text) if s.strip()]
+    if len(sentence_lengths) < 2:
+        return 75.0  # not enough sentences to measure variance — neutral, documented default
+    mean_len = sum(sentence_lengths) / len(sentence_lengths)
+    variance = sum((x - mean_len) ** 2 for x in sentence_lengths) / len(sentence_lengths)
+    return round(max(0.0, 100.0 - min(variance, 100.0)), 1)
+
+
 def compute_speech_metrics(
     transcript: str,
     duration_seconds: float,
     real_pause_analysis: PauseAnalysis | None = None,
 ) -> SpeechMetrics:
-    duration_seconds = max(duration_seconds, 1.0)
+    if duration_seconds <= 0:
+        raise InvalidDurationError(f"duration_seconds must be positive to compute speech metrics, got {duration_seconds}")
+
     words = _WORD_PATTERN.findall(transcript)
     word_count = len(words)
     words_per_minute = round((word_count / duration_seconds) * 60, 1)
@@ -215,24 +250,22 @@ def compute_speech_metrics(
     filler = detect_filler_words(transcript)
     filler_per_minute = round((filler["count"] / duration_seconds) * 60, 2)
 
-    sentence_lengths = [len(s.split()) for s in re.split(r"[.!?]", transcript) if s.strip()]
-    if len(sentence_lengths) >= 2:
-        mean_len = sum(sentence_lengths) / len(sentence_lengths)
-        variance = sum((x - mean_len) ** 2 for x in sentence_lengths) / len(sentence_lengths)
-        pace_consistency = max(0.0, 100.0 - min(variance, 100.0))
-    else:
-        pace_consistency = 75.0
+    pace_consistency = text_flow_consistency(transcript)
 
     if real_pause_analysis is not None:
         pause_count = real_pause_analysis.pause_count
         average_pause = real_pause_analysis.average_pause_seconds
+        pace_source = "measured"
     else:
         # Transcript-based estimate: assume one natural pause per sentence
         # boundary, roughly 0.6s each — a reasonable approximation used only
         # when the raw audio isn't available as WAV/PCM for real analysis.
+        # Labeled pace_source="estimated" below so callers never mistake
+        # this for a real audio measurement.
         sentence_count = max(1, transcript.count(".") + transcript.count(",") // 2)
         pause_count = sentence_count
         average_pause = 0.6
+        pace_source = "estimated"
 
     counts = Counter(w.lower() for w in words if len(w) > 3)
     repeated = [w for w, c in counts.items() if c >= 3]
@@ -250,4 +283,7 @@ def compute_speech_metrics(
         high_confidence_filler_count=filler["high_confidence_count"],
         ambiguous_filler_count=filler["ambiguous_count"],
         excluded_examples=filler["excluded_examples"][:5],
+        word_count=word_count,
+        duration_seconds=duration_seconds,
+        pace_source=pace_source,
     )

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 
 from app.schemas.common import AnalysisSource
@@ -52,6 +54,10 @@ class InterviewAnswerResponse(BaseModel):
     grammar_score: float
     vocabulary_score: float
     fluency_score: float
+    # MODULE 4: whether fluency_score came from real speech timing
+    # (compute_speech_metrics, voice mode with a real duration) or a
+    # text-only proxy (text_flow_consistency) — see interview_service.py.
+    fluency_source: Literal["speech_measured", "text_estimated"] = "text_estimated"
     confidence_score: float
     clarity_score: float
     structure: AnswerStructureScore

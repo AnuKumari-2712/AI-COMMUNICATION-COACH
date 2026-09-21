@@ -76,6 +76,16 @@ class VoiceAnalysisResponse(BaseModel):
     most_frequent_filler: str | None
     pause_count: int
     average_pause_seconds: float
+    # MODULE 3 transparency (see grammar/vocabulary equivalents above)
+    high_confidence_filler_count: int = 0
+    ambiguous_filler_count: int = 0
+    filler_excluded_examples: list[str] = []
+    # MODULE 4 transparency: raw measurements behind words_per_minute/pace,
+    # and whether pause data is real (measured from WAV audio) or a
+    # transcript-based estimate. See speech_metrics.py::compute_speech_metrics.
+    word_count: int = 0
+    reference_range_wpm: str = "130-160"
+    pace_source: Literal["measured", "estimated"] = "estimated"
 
 
 class ExplainMistakeRequest(BaseModel):
