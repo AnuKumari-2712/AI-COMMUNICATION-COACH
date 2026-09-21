@@ -1,6 +1,7 @@
 import { apiClient } from './apiClient';
 import { mockDelay } from './mockDelay';
 import { interviewCategories } from '@/data/mockData';
+import { getCurrentStudentId } from '@/lib/auth';
 import type { InterviewCategory } from '@/types';
 
 export interface InterviewResult {
@@ -121,7 +122,7 @@ export const interviewService = {
   startSession: async (categoryId: string, options?: { resumeText?: string; jobRole?: string }): Promise<InterviewSession> => {
     try {
       const { data } = await apiClient.post<BackendStartResponse>('/interview/start', {
-        student_id: 'demo-student',
+        student_id: getCurrentStudentId(),
         category_id: categoryId,
         resume_text: options?.resumeText,
         job_role: options?.jobRole,

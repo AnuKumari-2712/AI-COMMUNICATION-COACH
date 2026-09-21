@@ -1,7 +1,8 @@
 import { apiClient } from './apiClient';
 import { mockDelay } from './mockDelay';
-import { vocabWords, grammarQuestions } from '@/data/mockData';
-import type { GrammarQuestion, VocabWord } from '@/types';
+import { vocabWords, grammarQuestions, currentStudent } from '@/data/mockData';
+import { getCurrentStudentId } from '@/lib/auth';
+import type { GrammarQuestion, SkillScores, VocabWord } from '@/types';
 
 export interface VoiceAnalysisResult {
   grammar: number;
@@ -21,8 +22,6 @@ export interface TextAnalysisResult {
   /** 'real' = analyzed by the FastAPI backend's NLP pipeline, 'mock' = local demo data (backend not running). */
   source: 'real' | 'mock';
 }
-
-const DEMO_STUDENT_ID = 'demo-student';
 
 function mockTextAnalysis(text: string): TextAnalysisResult {
   return {
@@ -64,6 +63,17 @@ interface BackendGrammarQuestion {
   weakness_tag: string;
 }
 
+interface BackendSkillScores {
+  grammar: number;
+  vocabulary: number;
+  fluency: number;
+  speaking_pace: number;
+  filler_words: number;
+  confidence: number;
+  pronunciation: number;
+  response_structure: number;
+}
+
 interface BackendVoiceAnalysisResponse {
   transcript: string;
   grammar_score: number;
@@ -75,6 +85,40 @@ interface BackendVoiceAnalysisResponse {
 }
 
 export const practiceService = {
+  /**
+   * Runs the student's free-text onboarding answer through the real NLP
+   * pipeline (grammar/vocabulary/structure/confidence) to seed their
+   * initial learner profile, instead of showing static demo numbers on the
+   * "Your Personalized Learning Profile is Ready" screen. Falls back to the
+   * demo profile's scores if the backend is unreachable.
+   */
+  runInitialAssessment: async (assessmentText: string): Promise<SkillScores> => {
+    try {
+      const { data } = await apiClient.post<BackendSkillScores>('/assessment/initial', {
+        student_id: getCurrentStudentId(),
+        intro_text: assessmentText,
+        topic_answer: assessmentText,
+        text_answer: assessmentText,
+      });
+      const overall = Math.round(
+        (data.grammar + data.vocabulary + data.fluency + data.speaking_pace + data.filler_words + data.confidence + data.pronunciation + data.response_structure) / 8,
+      );
+      return {
+        overall,
+        grammar: data.grammar,
+        vocabulary: data.vocabulary,
+        fluency: data.fluency,
+        pronunciation: data.pronunciation,
+        confidence: data.confidence,
+        speakingPace: data.speaking_pace,
+        fillerWords: data.filler_words,
+        structure: data.response_structure,
+      };
+    } catch {
+      return mockDelay(currentStudent.scores, 800);
+    }
+  },
+
   /** Personalized (weakness + difficulty ordered) vocabulary set from the backend; falls back to a fixed demo list. */
   getVocabWords: async (): Promise<VocabWord[]> => {
     try {
@@ -149,7 +193,7 @@ export const practiceService = {
   analyzeText: async (question: string, answer: string): Promise<TextAnalysisResult> => {
     try {
       const { data } = await apiClient.post<BackendTextAnalysisResponse>('/assessment/text', {
-        student_id: DEMO_STUDENT_ID,
+        student_id: getCurrentStudentId(),
         question,
         answer,
       });

@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Pencil, GraduationCap, Building2, Calendar, Target, Award } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent, Button, Modal, Input, Select, Badge } from '@/components/ui';
 import { ProgressBar } from '@/components/ui/ProgressBar';
-import { studentService } from '@/services/studentService';
+import { DataSourceBadge } from '@/components/shared/DataSourceBadge';
+import { studentService, type PracticeHistoryEntry } from '@/services/studentService';
 import { useToast } from '@/hooks/useToast';
 import { currentStudent } from '@/data/mockData';
+import { scoreTone } from '@/lib/utils';
 import type { StudentProfile } from '@/types';
 
 const yearOptions = ['1st Year', '2nd Year', '3rd Year', '4th Year', 'Postgraduate'].map((y) => ({ label: y, value: y }));
@@ -21,6 +23,8 @@ interface FormValues {
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<StudentProfile>(currentStudent);
+  const [source, setSource] = useState<'real' | 'mock'>('mock');
+  const [history, setHistory] = useState<PracticeHistoryEntry[]>([]);
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
@@ -28,6 +32,16 @@ export default function ProfilePage() {
   const { register, handleSubmit, reset } = useForm<FormValues>({
     defaultValues: { name: profile.name, college: profile.college, course: profile.course, year: profile.year, careerGoal: profile.careerGoal },
   });
+
+  useEffect(() => {
+    studentService.getProfile().then((p) => {
+      setProfile(p);
+      setSource(p.source);
+      reset({ name: p.name, college: p.college, course: p.course, year: p.year, careerGoal: p.careerGoal });
+    });
+    studentService.getPracticeHistory().then((res) => setHistory(res.items));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const openEdit = () => {
     reset({ name: profile.name, college: profile.college, course: profile.course, year: profile.year, careerGoal: profile.careerGoal });
@@ -37,7 +51,7 @@ export default function ProfilePage() {
   const onSubmit = async (values: FormValues) => {
     setSaving(true);
     const updated = await studentService.updateProfile(values);
-    setProfile(updated);
+    setProfile((prev) => ({ ...prev, ...updated }));
     setSaving(false);
     setEditOpen(false);
     showToast({ title: 'Profile updated', variant: 'success' });
@@ -53,7 +67,12 @@ export default function ProfilePage() {
 
   return (
     <div>
-      <PageHeader eyebrow="Account" title="Student Profile" description="Your details, communication level and skill progress." />
+      <PageHeader
+        eyebrow="Account"
+        title="Student Profile"
+        description="Your details, communication level and skill progress."
+        actions={<DataSourceBadge source={source} />}
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="p-6 lg:col-span-1">
@@ -101,13 +120,9 @@ export default function ProfilePage() {
           <Card>
             <CardHeader><CardTitle>Practice History</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              {[
-                { label: 'Mock HR Interview', date: 'Today', score: 82 },
-                { label: 'Voice Practice — Speaking Prompt', date: 'Yesterday', score: 74 },
-                { label: 'Grammar Drill — Tense Consistency', date: '2 days ago', score: 68 },
-                { label: 'Vocabulary Session', date: '3 days ago', score: 91 },
-              ].map((h) => (
-                <div key={h.label} className="flex items-center justify-between rounded-xl border border-white/5 bg-base-800/60 p-3.5">
+              {history.length === 0 && <p className="text-sm text-base-400">No sessions yet — your history will appear here after your first practice.</p>}
+              {history.map((h, i) => (
+                <div key={i} className="flex items-center justify-between rounded-xl border border-white/5 bg-base-800/60 p-3.5">
                   <div className="flex items-center gap-3">
                     <div className="flex size-9 items-center justify-center rounded-lg bg-accent-500/15 text-accent-400">
                       <Award className="size-4.5" />
@@ -117,7 +132,7 @@ export default function ProfilePage() {
                       <p className="text-xs text-base-400">{h.date}</p>
                     </div>
                   </div>
-                  <Badge variant={h.score >= 80 ? 'success' : h.score >= 60 ? 'warning' : 'danger'} size="sm">{h.score}</Badge>
+                  <Badge variant={scoreTone(h.score)} size="sm">{h.score}</Badge>
                 </div>
               ))}
             </CardContent>

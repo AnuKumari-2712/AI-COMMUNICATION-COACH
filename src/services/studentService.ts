@@ -99,6 +99,39 @@ const TARGET_MAP: Record<StudentProfile['currentLevel'], StudentProfile['targetL
   Advanced: 'Expert',
 };
 
+export interface PracticeHistoryEntry {
+  label: string;
+  date: string;
+  score: number;
+}
+
+const SESSION_TYPE_LABELS: Record<string, string> = {
+  text_practice: 'Text Practice Session',
+  voice_practice: 'Voice Practice Session',
+  interview: 'Mock Interview',
+  initial_assessment: 'Initial Communication Assessment',
+};
+
+function formatRelativeDate(timestamp: string): string {
+  const then = new Date(timestamp);
+  const days = Math.floor((Date.now() - then.getTime()) / 86400000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  return then.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function mapPracticeHistory(history: BackendLearnerProfile['practice_history']): PracticeHistoryEntry[] {
+  return [...history]
+    .reverse()
+    .map((h) => {
+      const values = Object.values(h.scores ?? {});
+      const score = values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0;
+      return { label: SESSION_TYPE_LABELS[h.type] ?? h.type, date: formatRelativeDate(h.timestamp), score };
+    })
+    .slice(0, 8);
+}
+
 function computeStreakDays(history: BackendLearnerProfile['practice_history']): number {
   if (!history.length) return 0;
   const days = Array.from(new Set(history.map((h) => new Date(h.timestamp).toDateString())));
@@ -249,6 +282,29 @@ export const studentService = {
       // learned state still updates locally in the UI even if this fails
     }
   },
+
+  /** Real recent sessions (type, relative date, session score) from practice_history; falls back to a short representative demo list. */
+  getPracticeHistory: (): Promise<{ items: PracticeHistoryEntry[]; source: 'real' | 'mock' }> =>
+    withFallback<{ items: PracticeHistoryEntry[]; source: 'real' | 'mock' }>(
+      async () => {
+        const { data } = await apiClient.get<BackendLearnerProfile>('/students/me');
+        const items = mapPracticeHistory(data.practice_history);
+        if (!items.length) throw new Error('no history yet');
+        return { items, source: 'real' as const };
+      },
+      async () => ({
+        items: await mockDelay(
+          [
+            { label: 'Mock HR Interview', date: 'Today', score: 82 },
+            { label: 'Voice Practice Session', date: 'Yesterday', score: 74 },
+            { label: 'Grammar Drill', date: '2 days ago', score: 68 },
+            { label: 'Vocabulary Session', date: '3 days ago', score: 91 },
+          ],
+          400,
+        ),
+        source: 'mock' as const,
+      }),
+    ),
 
   getSkillDistribution: (): Promise<SkillDistributionPoint[]> =>
     withFallback(

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -10,6 +10,9 @@ import { RadialProgress } from '@/components/ui/RadialProgress';
 import { CommunicationOrb } from '@/components/three/CommunicationOrb';
 import { cn, scoreTone } from '@/lib/utils';
 import { currentStudent } from '@/data/mockData';
+import { practiceService } from '@/services/practiceService';
+import { studentService } from '@/services/studentService';
+import type { SkillScores, StudentProfile } from '@/types';
 
 const steps = ['Personal Info', 'Goals', 'Career', 'Assessment', 'Your Profile'];
 
@@ -35,18 +38,30 @@ export default function OnboardingPage() {
   const [assessmentAnswer, setAssessmentAnswer] = useState('');
   const [generating, setGenerating] = useState(false);
   const [profileReady, setProfileReady] = useState(false);
+  const [finalScores, setFinalScores] = useState<SkillScores>(currentStudent.scores);
+  const [personalInfo, setPersonalInfo] = useState<StudentProfile>(currentStudent);
+
+  useEffect(() => {
+    // Prefill step 1 with what was actually entered at signup, not the
+    // "Ananya Sharma" demo profile — this only matters once the auth chain
+    // has a real per-student profile to fetch (see src/services/authService.ts).
+    studentService.getProfile().then(setPersonalInfo);
+  }, []);
 
   const toggleGoal = (id: string) =>
     setSelectedGoals((prev) => (prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]));
 
-  const next = () => {
+  const next = async () => {
     if (step === 3) {
       setGenerating(true);
-      setTimeout(() => {
-        setGenerating(false);
-        setProfileReady(true);
-        setStep(4);
-      }, 2200);
+      const [scores] = await Promise.all([
+        practiceService.runInitialAssessment(assessmentAnswer),
+        new Promise((resolve) => setTimeout(resolve, 2200)), // keep the "analyzing" animation feeling substantial even when the API is fast
+      ]);
+      setFinalScores(scores);
+      setGenerating(false);
+      setProfileReady(true);
+      setStep(4);
       return;
     }
     setStep((s) => Math.min(s + 1, steps.length - 1));
@@ -70,12 +85,12 @@ export default function OnboardingPage() {
             <StepShell key="s0">
               <h2 className="font-display text-2xl font-semibold text-base-50">Tell us about yourself</h2>
               <p className="mt-1.5 text-sm text-base-300">This helps us tailor your learning experience.</p>
-              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Input label="Full Name" defaultValue={currentStudent.name} />
-                <Input label="Email" defaultValue={currentStudent.email} type="email" />
-                <Input label="College / University" defaultValue={currentStudent.college} className="sm:col-span-2" />
-                <Input label="Course" defaultValue={currentStudent.course} />
-                <Select label="Year" options={yearOptions} defaultValue={currentStudent.year} />
+              <div key={personalInfo.email} className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Input label="Full Name" defaultValue={personalInfo.name} />
+                <Input label="Email" defaultValue={personalInfo.email} type="email" disabled />
+                <Input label="College / University" defaultValue={personalInfo.college} className="sm:col-span-2" />
+                <Input label="Course" defaultValue={personalInfo.course} />
+                <Select label="Year" options={yearOptions} defaultValue={personalInfo.year} />
               </div>
             </StepShell>
           )}
@@ -173,7 +188,7 @@ export default function OnboardingPage() {
               <div className="mt-8 flex flex-col items-center gap-8 sm:flex-row sm:justify-center">
                 <CommunicationOrb className="h-40 w-40" />
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  {Object.entries(currentStudent.scores)
+                  {Object.entries(finalScores)
                     .filter(([k]) => k !== 'overall')
                     .slice(0, 6)
                     .map(([k, v]) => (

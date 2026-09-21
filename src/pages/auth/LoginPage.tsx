@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
@@ -33,12 +34,17 @@ export default function LoginPage() {
   const onSubmit = async (values: FormValues) => {
     setSubmitting(true);
     try {
-      await authService.login(values);
-      login();
-      showToast({ title: 'Welcome back!', description: 'Logged in successfully.', variant: 'success' });
+      const result = await authService.login(values);
+      login(result.token);
+      showToast({
+        title: 'Welcome back!',
+        description: result.source === 'real' ? 'Logged in successfully.' : 'Logged in with demo data — backend is offline.',
+        variant: 'success',
+      });
       navigate('/app/dashboard');
-    } catch {
-      showToast({ title: 'Login failed', description: 'Please check your credentials.', variant: 'error' });
+    } catch (error) {
+      const detail = axios.isAxiosError(error) ? (error.response?.data as { detail?: string } | undefined)?.detail : undefined;
+      showToast({ title: 'Login failed', description: detail ?? 'Please check your credentials.', variant: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -50,6 +56,14 @@ export default function LoginPage() {
     login();
     showToast({ title: 'Welcome back!', variant: 'success' });
     navigate('/app/dashboard');
+  };
+
+  const handleForgotPassword = () => {
+    showToast({
+      title: 'Password reset not available in this demo',
+      description: 'This is a portfolio project without an email service — sign up for a new account instead.',
+      variant: 'info',
+    });
   };
 
   return (
@@ -66,9 +80,9 @@ export default function LoginPage() {
             <input type="checkbox" className="size-4 rounded border-base-500 bg-base-800 accent-accent-500" {...register('remember')} />
             Remember me
           </label>
-          <a href="#" className="text-sm font-medium text-accent-400 hover:text-accent-300">
+          <button type="button" onClick={handleForgotPassword} className="text-sm font-medium text-accent-400 hover:text-accent-300">
             Forgot password?
-          </a>
+          </button>
         </div>
 
         <Button type="submit" className="w-full" loading={submitting}>

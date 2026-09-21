@@ -1,22 +1,55 @@
-import { Link } from 'react-router-dom';
-import { Sparkles, Globe, MessageCircle, Mail } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Sparkles, Mail } from 'lucide-react';
+import { useToast } from '@/hooks/useToast';
 
-const columns = [
+type FooterLink = { label: string; to?: string; comingSoon?: boolean };
+
+const columns: { title: string; links: FooterLink[] }[] = [
   {
     title: 'Product',
-    links: ['How It Works', 'Voice Practice', 'Interview Practice', 'Analytics'],
+    links: [
+      { label: 'How It Works', to: '/#how-it-works' },
+      { label: 'Voice Practice', to: '/app/practice/voice' },
+      { label: 'Interview Practice', to: '/app/interview' },
+      { label: 'Analytics', to: '/app/analytics' },
+    ],
   },
   {
     title: 'Company',
-    links: ['About', 'Careers', 'Blog', 'Contact'],
+    links: [
+      { label: 'About', comingSoon: true },
+      { label: 'Careers', comingSoon: true },
+      { label: 'Blog', comingSoon: true },
+    ],
   },
   {
     title: 'Resources',
-    links: ['FAQ', 'Support', 'Privacy Policy', 'Terms of Service'],
+    links: [
+      { label: 'FAQ', to: '/#faq' },
+      { label: 'Support', to: '/app/coach' },
+      { label: 'Privacy Policy', to: '/privacy' },
+      { label: 'Terms of Service', to: '/terms' },
+    ],
   },
 ];
 
 export function PublicFooter() {
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+
+  const handleClick = (link: FooterLink) => {
+    if (link.to) {
+      navigate(link.to);
+      return;
+    }
+    showToast({ title: `${link.label} — coming soon`, description: 'This page is still being written.', variant: 'info' });
+  };
+
+  // In-page anchors (landing page sections) need a plain <a href="#..."> for
+  // native browser smooth-scroll — react-router's navigate() changes the URL
+  // hash without actually scrolling to it.
+  const isSamePageAnchor = (to?: string) => to?.startsWith('/#');
+
   return (
     <footer className="border-t border-white/5 bg-base-950">
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
@@ -32,22 +65,30 @@ export function PublicFooter() {
               An adaptive AI platform that helps students and candidates build stronger communication and interview skills.
             </p>
             <div className="mt-4 flex items-center gap-3">
-              {[Globe, MessageCircle, Mail].map((Icon, i) => (
-                <a key={i} href="#" className="flex size-9 items-center justify-center rounded-lg bg-base-800 text-base-300 transition-colors hover:bg-base-700 hover:text-base-50">
-                  <Icon className="size-4" />
-                </a>
-              ))}
+              <a
+                href="mailto:hello@communicationcoach.app"
+                aria-label="Email us"
+                className="flex size-9 items-center justify-center rounded-lg bg-base-800 text-base-300 transition-colors hover:bg-base-700 hover:text-base-50"
+              >
+                <Mail className="size-4" />
+              </a>
             </div>
           </div>
           {columns.map((col) => (
             <div key={col.title}>
               <p className="text-sm font-semibold text-base-50">{col.title}</p>
               <ul className="mt-3 space-y-2.5">
-                {col.links.map((l) => (
-                  <li key={l}>
-                    <a href="#" className="text-sm text-base-400 transition-colors hover:text-base-100">
-                      {l}
-                    </a>
+                {col.links.map((link) => (
+                  <li key={link.label}>
+                    {isSamePageAnchor(link.to) ? (
+                      <a href={link.to!.slice(1)} className="text-sm text-base-400 transition-colors hover:text-base-100">
+                        {link.label}
+                      </a>
+                    ) : (
+                      <button onClick={() => handleClick(link)} className="text-sm text-base-400 transition-colors hover:text-base-100">
+                        {link.label}
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, User, CheckCircle2 } from 'lucide-react';
@@ -10,6 +11,7 @@ import { AuthLayout } from './AuthLayout';
 import { PasswordStrength } from '@/components/shared/PasswordStrength';
 import { authService } from '@/services/authService';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/useToast';
 
 const schema = z
   .object({
@@ -42,6 +44,7 @@ const goalOptions = [
 export default function SignupPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const { showToast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -56,10 +59,16 @@ export default function SignupPage() {
 
   const onSubmit = async (values: FormValues) => {
     setSubmitting(true);
-    await authService.signup(values);
-    login();
-    setSubmitting(false);
-    setSuccess(true);
+    try {
+      const result = await authService.signup(values);
+      login(result.token);
+      setSuccess(true);
+    } catch (error) {
+      const detail = axios.isAxiosError(error) ? (error.response?.data as { detail?: string } | undefined)?.detail : undefined;
+      showToast({ title: 'Signup failed', description: detail ?? 'Please try again.', variant: 'error' });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (success) {

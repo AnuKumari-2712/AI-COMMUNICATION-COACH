@@ -10,7 +10,6 @@ import tempfile
 from app.ml.transformer_confidence import score_confidence
 from app.nlp import grammar_rules, text_analysis
 from app.personalization import learner_profile
-from app.personalization.weakness_detector import detect
 from app.schemas.assessment import (
     ExplainMistakeResponse,
     GrammarCorrection,
@@ -216,15 +215,14 @@ def run_initial_assessment(student_id: str, intro_text: str, topic_answer: str, 
         response_structure=structure_result["score"],
     )
 
-    profile = learner_profile.get_profile(student_id)
-    if profile:
-        profile.scores = scores
-        analysis = detect(scores)
-        profile.weaknesses = analysis["weakness_labels"]
-        profile.strengths = analysis["strength_labels"]
-        from app.database.store import upsert_document
-
-        upsert_document("learner_profiles", student_id, profile.model_dump(mode="json"))
+    # weight=1.0 makes this a full replacement rather than a blend — appropriate
+    # since it's establishing the baseline, not adjusting an existing average —
+    # while still recording it as a real session (history entry, streak day 1,
+    # weakness/strength detection) via the same path every other session uses.
+    try:
+        learner_profile.update_scores(student_id, scores.model_dump(), session_type="initial_assessment", weight=1.0, duration_minutes=5.0)
+    except ValueError:
+        logger.info("No learner profile for %s yet — initial assessment not persisted.", student_id)
 
     return scores
 

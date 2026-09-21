@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import axios from 'axios';
 import { User, Palette, Bell, Mic, Shield, Lock, Sun, Moon } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Switch } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useToast } from '@/hooks/useToast';
-import { currentStudent } from '@/data/mockData';
+import { studentService } from '@/services/studentService';
+import { authService } from '@/services/authService';
 import { cn } from '@/lib/utils';
 
 const sections = [
@@ -23,11 +26,61 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { showToast } = useToast();
 
-  const [notifications, setNotifications] = useState({ dailyReminders: true, weeklySummary: true, achievementAlerts: true, productUpdates: false });
-  const [privacy, setPrivacy] = useState({ shareProgress: false, allowDataForImprovement: true });
-  const [voiceSettings, setVoiceSettings] = useState({ autoTranscribe: true, noiseReduction: true, sensitivity: 'Medium' });
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [language, setLanguage] = useLocalStorage('settings:language', 'English (US)');
+  const [savingAccount, setSavingAccount] = useState(false);
 
-  const save = () => showToast({ title: 'Settings saved', variant: 'success' });
+  const [notifications, setNotifications] = useLocalStorage('settings:notifications', {
+    dailyReminders: true, weeklySummary: true, achievementAlerts: true, productUpdates: false,
+  });
+  const [privacy, setPrivacy] = useLocalStorage('settings:privacy', { shareProgress: false, allowDataForImprovement: true });
+  const [voiceSettings, setVoiceSettings] = useLocalStorage('settings:voice', { autoTranscribe: true, noiseReduction: true, sensitivity: 'Medium' });
+
+  useEffect(() => {
+    studentService.getProfile().then((p) => {
+      setFullName(p.name);
+      setEmail(p.email);
+    });
+  }, []);
+
+  const saveAccount = async () => {
+    setSavingAccount(true);
+    await studentService.updateProfile({ name: fullName });
+    setSavingAccount(false);
+    showToast({ title: 'Settings saved', variant: 'success' });
+  };
+
+  const save = () => showToast({ title: 'Settings saved', description: 'Stored on this device.', variant: 'success' });
+
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  const updatePassword = async () => {
+    if (newPassword.length < 8) {
+      showToast({ title: 'Password too short', description: 'Use at least 8 characters.', variant: 'error' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast({ title: "Passwords don't match", variant: 'error' });
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await authService.changePassword(currentPassword, newPassword);
+      showToast({ title: 'Password updated', variant: 'success' });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error) {
+      const detail = axios.isAxiosError(error) ? (error.response?.data as { detail?: string } | undefined)?.detail : undefined;
+      showToast({ title: "Couldn't update password", description: detail ?? 'Please try again.', variant: 'error' });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
 
   return (
     <div>
@@ -55,11 +108,11 @@ export default function SettingsPage() {
               <CardHeader><CardTitle>Account Details</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <Input label="Full Name" defaultValue={currentStudent.name} />
-                  <Input label="Email" defaultValue={currentStudent.email} type="email" />
+                  <Input label="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                  <Input label="Email" value={email} type="email" disabled />
                 </div>
-                <Select label="Preferred Language" options={languageOptions} defaultValue="English (US)" />
-                <div className="flex justify-end"><Button onClick={save}>Save Changes</Button></div>
+                <Select label="Preferred Language" options={languageOptions} value={language} onChange={(e) => setLanguage(e.target.value)} />
+                <div className="flex justify-end"><Button onClick={saveAccount} loading={savingAccount}>Save Changes</Button></div>
               </CardContent>
             </Card>
           )}
@@ -133,10 +186,14 @@ export default function SettingsPage() {
             <Card>
               <CardHeader><CardTitle>Security</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <Input label="Current Password" type="password" placeholder="••••••••" />
-                <Input label="New Password" type="password" placeholder="••••••••" />
-                <Input label="Confirm New Password" type="password" placeholder="••••••••" />
-                <div className="flex justify-end"><Button onClick={save}>Update Password</Button></div>
+                <Input label="Current Password" type="password" placeholder="••••••••" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+                <Input label="New Password" type="password" placeholder="••••••••" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                <Input label="Confirm New Password" type="password" placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                <div className="flex justify-end">
+                  <Button onClick={updatePassword} loading={changingPassword} disabled={!currentPassword || !newPassword}>
+                    Update Password
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
