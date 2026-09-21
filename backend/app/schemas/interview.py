@@ -80,6 +80,10 @@ class InterviewResultResponse(BaseModel):
     structure: float
     fluency: float
     pronunciation: float
+    # MODULE 5: pronunciation is a transcript-only proxy, never a real
+    # audio-based measurement — see speech_metrics.py::pronunciation_proxy.
+    pronunciation_reliable: bool = False
+    pronunciation_method: str = ""
     went_well: list[str]
     needs_improvement: list[str]
     recommended_exercises: list[str]

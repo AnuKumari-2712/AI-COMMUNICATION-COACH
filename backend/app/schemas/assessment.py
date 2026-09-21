@@ -86,6 +86,11 @@ class VoiceAnalysisResponse(BaseModel):
     word_count: int = 0
     reference_range_wpm: str = "130-160"
     pace_source: Literal["measured", "estimated"] = "estimated"
+    # MODULE 5: pronunciation_score is a transcript-only proxy (no audio
+    # phoneme analysis exists in this project) — always reliable=False, with
+    # method explaining exactly what it is and is not. See speech_metrics.py::pronunciation_proxy.
+    pronunciation_reliable: bool = False
+    pronunciation_method: str = ""
 
 
 class ExplainMistakeRequest(BaseModel):

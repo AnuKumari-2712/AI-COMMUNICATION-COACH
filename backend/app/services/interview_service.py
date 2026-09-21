@@ -22,7 +22,7 @@ from app.schemas.interview import (
     InterviewQuestion,
     InterviewResultResponse,
 )
-from app.speech.speech_metrics import compute_speech_metrics, detect_filler_words, text_flow_consistency
+from app.speech.speech_metrics import compute_speech_metrics, detect_filler_words, pronunciation_proxy, text_flow_consistency
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +160,21 @@ def submit_session(session_id: str) -> InterviewResultResponse:
     confidence = avg("confidence")
     clarity = avg("clarity")
     structure = avg("structure")
-    pronunciation = 78.0  # see assessment_service note on pronunciation heuristic
+
+    # MODULE 5: pronunciation used to be a flat hardcoded 78.0 for every
+    # interview, regardless of anything in the actual answers — the exact
+    # "score from the LLM's imagination" the audit flags as VERY IMPORTANT
+    # to avoid. There's no audio here at all (interview answers are text,
+    # whether typed or already-transcribed client-side), so this can only
+    # ever be a weak transcript-based proxy — never a real measurement.
+    # It's now derived from the actual answers' average word length, and
+    # always reported with reliable=False and an explicit method string,
+    # via the same pronunciation_proxy() used by voice assessment.
+    all_answer_text = " ".join(a["answer_text"] for a in answers)
+    vocab_of_answers = text_analysis.vocabulary_analysis(all_answer_text)
+    pronunciation_result = pronunciation_proxy(vocab_of_answers["average_word_length"], stt_used=False)
+    pronunciation = pronunciation_result["score"]
+
     communication = round((grammar + vocabulary + clarity + structure) / 4, 1)
     overall = round((communication + confidence + fluency + pronunciation) / 4, 1)
 
@@ -223,6 +237,8 @@ def submit_session(session_id: str) -> InterviewResultResponse:
         structure=structure,
         fluency=fluency,
         pronunciation=pronunciation,
+        pronunciation_reliable=pronunciation_result["reliable"],
+        pronunciation_method=pronunciation_result["method"],
         went_well=went_well or ["You completed the full interview — that's a strong first step."],
         needs_improvement=needs_improvement or ["No major issues detected — keep practicing to maintain this level."],
         recommended_exercises=recommended or ["Take another mock interview to build consistency."],

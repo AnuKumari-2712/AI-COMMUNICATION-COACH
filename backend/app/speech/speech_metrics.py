@@ -210,6 +210,38 @@ def detect_filler_words(transcript: str) -> dict:
     }
 
 
+_PRONUNCIATION_METHOD_NOTE = (
+    "Estimated only from transcript characteristics (whether speech-to-text recognized the audio "
+    "successfully, and average word length) — this is NOT a phoneme-level audio pronunciation "
+    "analysis. Real pronunciation/accent accuracy cannot be measured from text alone; a genuine "
+    "assessment would require a dedicated audio model (e.g. forced alignment or a phoneme "
+    "classifier), which this project does not implement. Always reported as reliable=False."
+)
+
+
+def pronunciation_proxy(average_word_length: float, stt_used: bool) -> dict:
+    """MODULE 5 (see AUDIT.md): previously this heuristic was presented as a
+    plain `pronunciation_score` with no indication it wasn't a real
+    measurement — exactly the "score generated from the LLM's imagination"
+    problem the audit calls out as VERY IMPORTANT to avoid. There is no
+    audio-based pronunciation model in this project, so rather than
+    inventing one, this proxy is now explicit and always labeled
+    reliable=False: the score is kept (so existing callers still get a
+    number to display) but every caller also gets `reliable` and `method`
+    so nothing pretends to be more certain than it is."""
+    base = 80.0 if stt_used else 70.0
+    score = round(min(96.0, max(20.0, base + (min(average_word_length, 8) - 4) * 2)), 1)
+    return {
+        "score": score,
+        "reliable": False,
+        "method": _PRONUNCIATION_METHOD_NOTE,
+        "signals_used": [
+            "speech-to-text recognition succeeded" if stt_used else "no speech-to-text signal available",
+            f"average word length ({average_word_length:.2f} chars)",
+        ],
+    }
+
+
 def _pace_score(words_per_minute: float) -> float:
     # 130-160 WPM is the commonly cited comfortable range for spoken English
     # in an interview/presentation context.

@@ -206,6 +206,53 @@ Confirmed against a live running server (port 8123, separate from the dev server
 
 ---
 
-## Modules 5-12 — Not yet started
+## Module 5 — Pronunciation Honesty — ✅ DONE
 
-See the module plan and per-module findings in the audit delivered in-conversation (pronunciation, confidence, answer relevance, answer structure, technical correctness, interview follow-ups, scoring transparency, data validation). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.
+**Current metric (before):** `pronunciation_score` (voice assessment) and `pronunciation` (interview result), both presented as plain numeric scores with no indication of method or reliability.
+
+**Accuracy problem found (flagged "VERY IMPORTANT" in the original audit):** No audio phoneme-analysis model exists anywhere in this project. Two call sites nonetheless produced confident-looking pronunciation numbers:
+1. `assessment_service.analyze_voice_upload()` computed a heuristic from STT-recognition-success + average word length — a real, if weak, transcript-based signal, but returned as an unlabeled `pronunciation_score` indistinguishable from a genuine measurement.
+2. `interview_service.submit_session()` used a flat hardcoded `78.0` for every single interview, with zero signal from the actual answers at all — exactly the "score from the LLM's imagination" the audit explicitly warns against.
+
+**Fix implemented:**
+- New `speech_metrics.pronunciation_proxy(average_word_length, stt_used)` — a single, shared, documented heuristic (STT-success + word-length proxy, scores clamped to [20, 96]) used by both call sites instead of two separate implementations (one heuristic, one fabricated constant).
+- Always returns `reliable: False` — there is no code path where this project can claim a reliable pronunciation measurement, so the flag is not conditional on anything; it's a structural admission, not a computed one.
+- Returns an explicit `method` string spelling out exactly what was and wasn't measured, and `signals_used` naming which weak signals contributed.
+- `VoiceAnalysisResponse` gains `pronunciation_reliable` and `pronunciation_method`; `InterviewResultResponse` gains the same two fields.
+- The interview's flat `78.0` is replaced with the same proxy computed from the actual joined answer transcripts' average word length (`stt_used=False`, since interview answers are text/pre-transcribed, not raw audio this service processes) — a real, if still weak, signal grounded in what the candidate actually said, not an arbitrary constant.
+
+**Files changed:**
+- `backend/app/speech/speech_metrics.py` (new `pronunciation_proxy` function)
+- `backend/app/schemas/assessment.py` (`VoiceAnalysisResponse` gains `pronunciation_reliable`, `pronunciation_method`)
+- `backend/app/schemas/interview.py` (`InterviewResultResponse` gains the same two fields)
+- `backend/app/services/assessment_service.py` (`analyze_voice_upload` uses the shared proxy instead of its own inline heuristic)
+- `backend/app/services/interview_service.py` (`submit_session` replaces the hardcoded `78.0` with the proxy computed from real answers)
+- `backend/tests/test_pronunciation_proxy.py` (new — 10 tests)
+
+**Known, honest, NOT fixed in this module:** the proxy is still just a text-based heuristic — it cannot and does not detect actual mispronunciation, accent, or articulation issues. This is the whole point of the module: rather than pretending otherwise, every caller now receives `reliable=False` and the exact method used, so nothing downstream can present this number as a real pronunciation assessment. `learner_profile`'s internal `SkillScores.pronunciation` (used for adaptive weakness detection, e.g. `create_profile()`'s neutral `55`/`75` baselines) is a separate, pre-existing internal representation shared uniformly across all 8 skill scores in the personalization loop — out of scope for this module, which targets the two response-level surfaces a user/caller directly sees.
+
+**Verification — run this yourself:**
+```bash
+cd backend
+venv\Scripts\activate
+pytest tests/ -v
+```
+
+**Actual output obtained (2026-09-21):**
+```
+64 passed, 2 warnings in 31.96s
+```
+
+**Live API proof, through the real interview submit flow:**
+```bash
+BASE=http://127.0.0.1:8124/api/v1
+# start session, answer one question, then:
+curl -X POST $BASE/interview/submit -H "Content-Type: application/json" -d '{"session_id":"<id>"}'
+```
+Result: `"pronunciation":73.8,"pronunciation_reliable":false,"pronunciation_method":"Estimated only from transcript characteristics ... this is NOT a phoneme-level audio pronunciation analysis ... Always reported as reliable=False."` — confirmed against a live running server (port 8124, separate from the dev server) that the fabricated `78.0` constant is gone and every response now honestly labels this number as unreliable.
+
+---
+
+## Modules 6-12 — Not yet started
+
+See the module plan and per-module findings in the audit delivered in-conversation (answer structure `or True` bug, answer relevance, technical correctness, interview follow-ups, scoring transparency, data validation, ground-truth benchmark). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.

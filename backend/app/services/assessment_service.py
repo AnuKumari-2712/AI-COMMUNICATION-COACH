@@ -20,7 +20,7 @@ from app.schemas.assessment import (
 from app.schemas.common import AnalysisSource, SkillScores
 from app.speech import stt
 from app.speech.audio_utils import analyze_wav_pauses
-from app.speech.speech_metrics import compute_speech_metrics, detect_filler_words, text_flow_consistency
+from app.speech.speech_metrics import compute_speech_metrics, detect_filler_words, pronunciation_proxy, text_flow_consistency
 
 logger = logging.getLogger(__name__)
 
@@ -144,12 +144,8 @@ def analyze_voice_upload(student_id: str, tmp_path: str, duration_seconds: float
     vocab_result = text_analysis.vocabulary_analysis(transcript)
     confidence_score, confidence_source = score_confidence(transcript)
 
-    # Pronunciation has no ground truth without a phoneme-alignment model;
-    # this heuristic combines STT success (recognized speech implies
-    # reasonably clear pronunciation) with word length as a rough proxy for
-    # articulation of more complex words, and is intentionally conservative.
-    pronunciation_score = 80.0 if stt_source == AnalysisSource.real else 70.0
-    pronunciation_score = round(min(96.0, pronunciation_score + (vocab_result["average_word_length"] - 4) * 2), 1)
+    pronunciation = pronunciation_proxy(vocab_result["average_word_length"], stt_used=(stt_source == AnalysisSource.real))
+    pronunciation_score = pronunciation["score"]
 
     overall_source = AnalysisSource.real if stt_source == AnalysisSource.real else AnalysisSource.mock
 
@@ -193,6 +189,8 @@ def analyze_voice_upload(student_id: str, tmp_path: str, duration_seconds: float
         word_count=metrics.word_count,
         reference_range_wpm=metrics.reference_range_wpm,
         pace_source=metrics.pace_source,
+        pronunciation_reliable=pronunciation["reliable"],
+        pronunciation_method=pronunciation["method"],
     )
 
 
