@@ -45,6 +45,14 @@ class TextAnalysisResponse(BaseModel):
     style_issue_count: int = 0
     grammar_score_formula: str = ""
     grammar_sufficient_data: bool = True
+    # MODULE 2 transparency fields — see text_analysis.py::vocabulary_analysis().
+    # lexical_diversity is Herdan's C (length-stable); sufficient_data is
+    # false for short answers where diversity measures are statistically
+    # unreliable, so the score should be treated as a low-confidence estimate.
+    lexical_diversity: float = 0.0
+    content_word_count: int = 0
+    vocabulary_score_formula: str = ""
+    vocabulary_sufficient_data: bool = True
 
 
 class VoiceAnalysisRequest(BaseModel):

@@ -59,6 +59,52 @@ Result: `grammar_issue_count: 1` (only the subject-verb-agreement error), `spell
 
 ---
 
-## Modules 2-12 — Not yet started
+## Module 2 — Vocabulary Accuracy Engine — ✅ DONE
 
-See the module plan and per-module findings in the audit delivered in-conversation (grammar, vocabulary, fluency, pace, filler words, pronunciation, confidence, answer relevance, answer structure, technical correctness, interview follow-ups, scoring transparency, data validation). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.
+**Current metric (before):** `vocabulary_score` (0-100), from raw type-token ratio (TTR = unique words / total content words).
+
+**Accuracy problem found:** Raw TTR is length-biased. A 5-word answer with zero repeated words scores a perfect TTR of 1.0 just as easily as a genuinely rich answer — the metric can't tell "diverse" from "too short to have had a chance to repeat anything." It was presented with the same confidence regardless of sample size.
+
+**Fix implemented:**
+- Diversity measure switched to Herdan's C (`log(unique)/log(total)`), a standard corpus-linguistics measure that decays more realistically as text lengthens (raw TTR is still reported alongside it for reference, not hidden).
+- New `sufficient_data` flag: below 15 content words, the score is still computed (callers always get a number) but flagged as a low-confidence estimate rather than a reliable measurement — directly fixes "don't give a vocabulary score just because the answer happens to be short and repeat-free."
+- Documented, reproducible formula returned in `vocabulary_score_formula`.
+- Empty input → `score: 0.0`, `sufficient_data: false`, not a default-high score.
+
+**Files changed:**
+- `backend/app/nlp/text_analysis.py` (`vocabulary_analysis` rewritten)
+- `backend/app/schemas/assessment.py` (`TextAnalysisResponse` gains `lexical_diversity`, `content_word_count`, `vocabulary_score_formula`, `vocabulary_sufficient_data`)
+- `backend/app/services/assessment_service.py` (maps the new fields through)
+- `backend/tests/test_vocabulary_analysis.py` (new — 11 tests)
+
+**Known, honest, NOT fixed in this module:** Herdan's C still maxes out at 1.0 for any text with zero repeats, regardless of length (mathematically unavoidable — `log(n)/log(n) = 1` for any n). This is exactly why `sufficient_data` exists as an independent signal rather than trying to make one number do both jobs — see `test_herdan_c_is_more_length_stable_than_raw_ttr`, which proves this limitation directly instead of hiding it.
+
+**Verification — run this yourself:**
+```bash
+cd backend
+venv\Scripts\activate
+pytest tests/ -v
+```
+
+**Actual output obtained (2026-09-21):**
+```
+28 passed, 1 warning in 9.94s
+```
+
+**Live API proof:**
+```bash
+# Short answer:
+curl -X POST http://localhost:8000/api/v1/assessment/text -H "Content-Type: application/json" -d '{"student_id":"demo-student","question":"Tell me about yourself","answer":"I build cool software fast."}'
+# → vocabulary_score: 89.7, lexical_diversity: 1.0, content_word_count: 4, vocabulary_sufficient_data: FALSE
+
+# Long, diverse answer:
+curl -X POST http://localhost:8000/api/v1/assessment/text -H "Content-Type: application/json" -d '{"student_id":"demo-student","question":"Tell me about yourself","answer":"I have worked on several innovative projects throughout my academic career, including a healthcare scheduling platform, a machine learning pipeline for fraud detection, and a mobile application supporting local community volunteering."}'
+# → vocabulary_score: 100.0, lexical_diversity: 1.0, content_word_count: 22, vocabulary_sufficient_data: TRUE
+```
+Both hit maximum raw diversity (neither repeats a word), but only the long answer is presented with confidence — proving the fix does what it claims, not just in unit tests but against the live running server.
+
+---
+
+## Modules 3-12 — Not yet started
+
+See the module plan and per-module findings in the audit delivered in-conversation (fluency, pace, filler words, pronunciation, confidence, answer relevance, answer structure, technical correctness, interview follow-ups, scoring transparency, data validation). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.

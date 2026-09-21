@@ -127,6 +127,10 @@ def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisRes
         style_issue_count=grammar_result["style_issue_count"],
         grammar_score_formula=grammar_result["formula"],
         grammar_sufficient_data=grammar_result["sufficient_data"],
+        lexical_diversity=vocab_result["lexical_diversity"],
+        content_word_count=vocab_result["content_word_count"],
+        vocabulary_score_formula=vocab_result["formula"],
+        vocabulary_sufficient_data=vocab_result["sufficient_data"],
     )
 
 
