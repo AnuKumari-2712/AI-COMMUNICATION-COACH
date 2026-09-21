@@ -1,14 +1,263 @@
 # AI-Powered Personalized Communication & Interview Coach
 
-An adaptive platform that evaluates a student's communication ability through voice and text, builds a dynamic learner profile, detects weaknesses, and generates a personalized (not identical-for-everyone) practice plan — including grammar, vocabulary, fluency and full interview simulations.
+An adaptive platform that evaluates a student's communication ability through voice and text, builds a dynamic learner profile, detects weaknesses, and generates a personalized (not identical-for-everyone) practice plan — grammar, vocabulary, fluency drills and full mock interviews, all adapting to the student's own history.
 
 - **Frontend:** React + TypeScript + Tailwind CSS + Framer Motion + React Three Fiber + Recharts + React Router + React Hook Form/Zod
 - **Backend:** Python + FastAPI + spaCy (NLP) + scikit-learn (adaptive difficulty) + SpeechRecognition (speech-to-text) + an optional HuggingFace Transformers model
 - **Storage:** JSON-file "database" (swap-in ready for Postgres/Mongo — see `backend/app/database/store.py`)
 
+This README is written so **someone who received this project as a ZIP file** (no git, no prior context) can get it running end to end. If you did clone it with git, skip the parts that don't apply.
+
 ---
 
-## 1. Project structure
+## 1. What you need to install first
+
+Nothing here is optional if you want the real backend (NLP/AI) running — without it the frontend still works on its own using realistic mock data, but you won't get real grammar analysis, adaptive plans, etc.
+
+| Tool | Version | Why | Where to get it |
+|---|---|---|---|
+| **Node.js** | 20 LTS or newer | Runs the React frontend and its build tools | nodejs.org — download the "LTS" installer for your OS |
+| **Python** | 3.11 or newer | Runs the FastAPI backend and all the NLP/ML code | python.org/downloads — on Windows, tick **"Add python.exe to PATH"** during install |
+| **A code editor** (optional) | — | Only needed if you want to read/edit the code, not to run it | VS Code is a common free choice |
+| **Git** (optional) | — | Only needed if you want version control; not required to run the app from a ZIP | git-scm.com |
+
+You do **not** need: Docker, a database server, a paid API key, or a GPU. Everything runs locally on a normal laptop.
+
+To check what's already installed, open a terminal (Command Prompt / PowerShell / Terminal) and run:
+
+```bash
+node --version
+python --version
+```
+
+If either command isn't found, install that tool first, then close and reopen your terminal before continuing.
+
+---
+
+## 2. If you were given this as a ZIP file
+
+1. **Extract the ZIP** anywhere you like, e.g. `C:\Users\you\Desktop\ai-comm-coach` (Windows) or `~/Desktop/ai-comm-coach` (Mac/Linux).
+2. Open a terminal **inside that extracted folder** (on Windows: open the folder in File Explorer, click the address bar, type `cmd` or `powershell`, press Enter; on Mac/Linux: `cd` into it).
+3. Follow **§3 (Frontend)** and **§4 (Backend)** below exactly as written — they don't assume git, only that you're standing inside the project folder.
+4. `node_modules/`, `dist/`, and the Python `venv/` folder are **not** included in a ZIP export (they're huge and machine-specific) — the install commands below create them fresh on your machine. This is normal and expected; don't worry if you don't see them right after extracting.
+
+---
+
+## 3. Running the frontend
+
+```bash
+npm install
+npm run dev
+```
+
+Wait for it to print a `http://localhost:5173` URL, then open that in your browser. It works standalone with realistic mock data even with **no backend running** — every page renders, every button works.
+
+To point it at the real backend once you've started that too (see §4), copy the env file (the default value already matches the backend's default port, so this step is usually a no-op unless you changed something):
+
+```bash
+cp .env.example .env
+```
+
+(On Windows without a `cp` command, just duplicate `.env.example` in File Explorer and rename the copy to `.env`, or run `copy .env.example .env` in Command Prompt.)
+
+---
+
+## 4. Running the backend
+
+Open a **second, separate terminal** (keep the frontend one running) and go into the `backend` folder:
+
+```bash
+cd backend
+python -m venv venv
+```
+
+Activate the virtual environment (this isolates the project's Python packages from the rest of your system):
+
+```bash
+venv\Scripts\activate        # Windows (Command Prompt or PowerShell)
+source venv/bin/activate     # macOS / Linux
+```
+
+You'll know it worked because your terminal prompt now starts with `(venv)`. Then install everything and start the server:
+
+```bash
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+copy .env.example .env       # or: cp .env.example .env  (macOS/Linux)
+uvicorn app.main:app --reload --port 8000
+```
+
+- `pip install -r requirements.txt` — installs FastAPI, spaCy, scikit-learn, SpeechRecognition, etc. Takes 1-3 minutes depending on your internet connection.
+- `python -m spacy download en_core_web_sm` — downloads the ~15MB English language model spaCy needs for real grammar/tense analysis. Without this step the backend still runs, but grammar analysis quietly degrades to a simpler rule set (see §7).
+- The last command starts the server. Leave this terminal open.
+
+Once it's running, open `http://localhost:8000/api/v1/health` in a browser — you should see:
+
+```json
+{"status":"ok","use_mock_ai":true,"spacy_model_loaded":true,"transformer_confidence_enabled":false}
+```
+
+`spacy_model_loaded: true` confirms the spaCy download step worked. Interactive API docs (try any endpoint directly from the browser) are at `http://localhost:8000/docs`.
+
+**Optional** — enable a real transformer-based confidence model instead of the lightweight default heuristic (downloads a ~260MB model the first time it's used):
+
+```bash
+pip install -r requirements-ml-optional.txt
+```
+
+Then set `ENABLE_TRANSFORMER_CONFIDENCE=true` in `backend/.env` and restart the server.
+
+### Now run both together
+
+With the frontend terminal (`npm run dev`) and backend terminal (`uvicorn ...`) both running, open `http://localhost:5173` again. Pages that talk to the backend will now show a green **"Live from backend"** badge instead of an outlined **"Demo data — backend offline"** badge — that badge is always visible, so you can tell at a glance which one you're looking at.
+
+---
+
+## 5. What this project actually does (feature tour)
+
+All 20 pages are fully built and clickable — there are no placeholder "coming soon" screens except a few footer marketing links (About/Careers/Blog) that intentionally show a toast since there's nothing to link them to.
+
+| Page | What it does |
+|---|---|
+| **Landing** | Marketing page: hero with a 3D orb + live waveform, how-it-works, feature grid, testimonials, FAQ |
+| **Login / Signup** | Real accounts — password hashing, JWT-style tokens, per-user profiles (see §6) |
+| **Onboarding** | 5-step flow: personal info (prefilled from your real signup), communication goals, career goal, a free-text assessment that's actually analyzed, then a "profile ready" screen with real computed scores |
+| **Dashboard** | Overall score, streak, weekly progress, skill breakdown, performance chart, today's adaptive plan, AI coach shortcut |
+| **Communication Analysis** | Deep-dive radar chart, per-skill trend, strengths/weaknesses, a specific recommendation |
+| **Voice Practice / Fluency Practice** | Real microphone recording (`MediaRecorder`), waveform visualization, sends audio to the backend for analysis |
+| **Text Practice** | Submit a written answer, get real grammar corrections, vocabulary suggestions, and a rewritten "better" version |
+| **Vocabulary Practice** | Flip-card word learning, difficulty-ordered by your own weaknesses, marks persist to your profile |
+| **Grammar Practice** | Fill-blank / multiple-choice / rewrite exercises, personalized ordering based on your actual grammar weaknesses |
+| **Interview Practice** | 7 interview types including **Resume-based** (paste/upload a resume, questions reference your actual skills) and **Job-role based** (pick a role, get role-specific questions); live per-answer metrics; full result breakdown at the end |
+| **Learning Plan** | 7-day adaptive plan + an auto-managed "Topics to Review" queue (a mistake repeated 3+ times gets added automatically, removed once it stops recurring) |
+| **Analytics** | Real trend chart and daily activity chart once you have 2+ real sessions; biggest improvement / current weakness / next-step cards |
+| **Achievements** | 8 milestones, every one computed from your real streak, session counts, and score history — not decorative |
+| **Profile** | Real profile data, editable, real (not fake) recent session history |
+| **Settings** | Account, appearance (dark/light, actually switches the whole app's color scheme), notifications/privacy/voice preferences (persisted), real password change |
+| **AI Coach** | Chat that reads your actual weakest skill and career goal to personalize its reply (not a generic canned bot) |
+| **Admin Dashboard** | Platform-wide stats and a student table — intentionally kept on rich mock data (see §8) since a fresh install only has the couple of test accounts you create |
+
+---
+
+## 6. How personalization actually works (the important part)
+
+This is what makes the app adaptive instead of a static demo:
+
+1. You submit a real session (Text Practice, Voice Practice, or an Interview).
+2. The backend runs real NLP on what you actually wrote/said and computes 8 skill scores.
+3. Those scores are blended into your profile (`app/personalization/learner_profile.py`) — recent sessions matter more than old ones, but one bad session doesn't wreck your whole average.
+4. Weakness detection re-runs on every update (a skill is "weak" if it's both below 65 **and** below your own average).
+5. A scikit-learn model (trained at startup) predicts your difficulty level from your average score, recent trend, and consistency.
+6. Your daily/weekly plan is built from your specific weaknesses at that difficulty level — two students never see the same plan.
+7. If the same weakness shows up in 3 of your last 5 sessions, it's auto-added to your "Topics to Review" queue; it's removed automatically once it stops appearing.
+
+You can watch this happen: sign up as a new user, do a couple of Text Practice sessions with deliberately bad grammar, then check the Dashboard, Learning Plan, and Analytics pages — the numbers and recommendations will have shifted to target exactly what you did wrong.
+
+---
+
+## 7. Honesty check: how accurate is the AI, really?
+
+This section exists because "adaptive AI platform" can sound like it's using a large language model to grade you. **It isn't.** No LLM scores anything in this project — every number comes from regex pattern-matching, spaCy POS tagging, and statistical formulas written by hand. That makes scores fast, free, deterministic, and explainable — but it also means the analysis is intentionally lightweight, not production-grade. Here's the honest breakdown:
+
+| Capability | How accurate | Why |
+|---|---|---|
+| Filler word detection | **Reliable** | Real regex match against the actual transcript. |
+| Speaking pace (WPM) | **Reliable, if the transcript is real** | Real math (words ÷ duration), but only as good as the transcript feeding it. |
+| Scoring consistency | **Reliable** | Same input always produces the same score — no randomness, no LLM guessing. |
+| Grammar checking | **Narrow coverage** | Catches ~7 specific patterns (double negatives, a few subject-verb agreement cases, tense-mixing, some homophones, casual contractions). Will **miss** most grammar errors outside these patterns — it is not a substitute for Grammarly/LanguageTool. |
+| Vocabulary scoring | **A real but simple proxy** | Measures lexical diversity + word length + repetition, not contextual "appropriateness." Correct, simple English scores lower than it deserves to. |
+| STAR/behavioral structure | **Keyword-based, decent for typical phrasing** | Looks for phrases like "at the time," "I decided," "as a result." Unusual phrasing can fool it either direction. |
+| Fluency scoring | **Weaker in the actual browser flow** | Real pause detection needs genuine WAV audio; browsers record webm, which this project can't decode (no ffmpeg included), so it falls back to an estimated pause pattern rather than your real speech rhythm. |
+| Pronunciation scoring | **Not a real assessment — treat as a placeholder** | No phoneme model exists. It's a rough guess based on whether speech-to-text succeeded. Documented here so it's never mistaken for real pronunciation feedback. |
+| Interview follow-up questions | **Not implemented** | The interview asks a fixed sequence of questions; it does not generate a smart follow-up based on what you actually said. |
+| Answer relevance to the question | **Not checked** | Grammar/vocabulary/structure are analyzed regardless of whether you actually answered the question asked. |
+| Technical answer correctness | **Not checked** | There's no fact-checking of technical content — a confident wrong answer can score similarly to a correct one if phrased similarly. |
+
+**What this project is good evidence of:** a working adaptive-learning *architecture* (personalization loop, weakness detection, revision queue, difficulty modeling) built on a real full-stack NLP pipeline. **What it is not:** a linguistically validated, production-accurate grammar/pronunciation grading service. Say so if you present it — it's a stronger, more credible pitch than overclaiming.
+
+---
+
+## 8. What's real vs. mock (per-module reference)
+
+Every backend response includes a `source: "real" | "mock"` field, and every page that calls it shows a matching badge — so this is always visible in the running app, not just documented here.
+
+| Capability | Real implementation | Falls back to mock when... |
+|---|---|---|
+| Grammar checking | Rule-based checker (regex + spaCy POS tags) | spaCy model not downloaded → tense-consistency check is skipped, other rules still run |
+| Vocabulary analysis | Type-token ratio, word length, repetition | Never mocked — pure Python, always real |
+| Structure / STAR analysis | Keyword + position heuristics | Never mocked |
+| Speech-to-text | `SpeechRecognition` + Google Web Speech API on WAV audio | No internet, non-WAV upload, or empty recognition → canned transcript |
+| Pause/silence detection | RMS-energy analysis on WAV/PCM (stdlib `wave`/`audioop`) | Upload isn't parseable as WAV (e.g. webm/opus) → transcript-based estimate |
+| Confidence/tone scoring | Optional HuggingFace DistilBERT pipeline | Not enabled, or `transformers`/`torch` not installed → lexical heuristic |
+| Adaptive difficulty | scikit-learn `RandomForestClassifier`, trained at startup | Always real (trained on a synthetic bootstrap dataset — see `app/ml/difficulty_model.py`) |
+| Weakness/strength detection | Rule-based thresholds | Never mocked |
+| Resume parsing | `pypdf` text extraction | Unreadable PDF → empty text, handled gracefully |
+| Admin Dashboard | — | Intentionally always mock (see §5) |
+
+---
+
+## 9. Testing paths
+
+### 9.1 Frontend only
+
+```bash
+npm install && npm run dev
+```
+
+Walk the flow: Landing → Signup → Onboarding (5 steps) → Dashboard → try Voice/Text/Grammar/Vocabulary Practice → Interview Practice → Learning Plan → Analytics → Achievements → Profile → Settings → AI Coach.
+
+Build check (should complete with zero errors):
+```bash
+npm run build
+```
+
+### 9.2 Backend only — via Swagger UI or curl
+
+```bash
+cd backend && venv\Scripts\activate && uvicorn app.main:app --reload --port 8000
+```
+
+Open `http://localhost:8000/docs` for a clickable interface, or:
+
+```bash
+curl http://localhost:8000/api/v1/health
+
+curl -X POST http://localhost:8000/api/v1/auth/signup -H "Content-Type: application/json" -d '{
+  "full_name": "Test Student", "email": "test@example.edu", "password": "Password123!",
+  "college": "VIT", "course": "CSE", "year": "3rd Year", "career_goal": "Software Engineer"
+}'
+# copy the "student_id" from the response into $SID below
+
+curl -X POST http://localhost:8000/api/v1/assessment/text -H "Content-Type: application/json" -d '{
+  "student_id": "'"$SID"'", "question": "Tell me about yourself",
+  "answer": "I dont have no experience but I am gonna work alot hard. Neither of the teams were ready."
+}'
+# expect corrections for subject_verb_agreement, spelling, formality
+
+curl -X POST http://localhost:8000/api/v1/interview/start -H "Content-Type: application/json" -d '{"student_id":"'"$SID"'","category_id":"behavioral"}'
+```
+
+### 9.3 Full stack together
+
+Run both dev servers, open the frontend, and watch the **"Live from backend"** badge on the Dashboard, Text Practice, Interview Practice, Achievements, and Learning Plan pages. Stop the backend and reload — the badge switches to "Demo data — backend offline" and every page keeps working.
+
+---
+
+## 10. Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `'node' is not recognized` / `'python' is not recognized` | The tool isn't installed or isn't on your PATH. Reinstall and make sure to check "Add to PATH" (Python installer has this checkbox), then open a **new** terminal window. |
+| `spacy_model_loaded: false` in the health check | Run `python -m spacy download en_core_web_sm` again from inside the activated `venv`. |
+| Backend port 8000 already in use | Another process is using it. Either stop that process, or run uvicorn on a different port (`--port 8001`) and update `VITE_API_BASE_URL` in the frontend's `.env` to match. |
+| Frontend shows "Demo data — backend offline" even though the backend is running | Check the backend terminal for errors, confirm `http://localhost:8000/api/v1/health` loads in a browser, and confirm `src/.env` (or the default) points at the right port. |
+| `pip install` fails partway through | Usually a flaky network — just re-run `pip install -r requirements.txt`, pip resumes from where it left off. |
+| Microphone doesn't work | Browser microphone permissions must be granted for `localhost:5173`. If you're testing inside a sandboxed preview/embedded browser (not a real browser tab), mic access may be blocked by that environment — this is a browser/sandbox limitation, not an app bug. |
+| `npm install` is slow or fails | Delete `node_modules` and `package-lock.json`-generated lock issues by re-running `npm install`; make sure you have a stable internet connection for the first install. |
+
+---
+
+## 11. Project structure
 
 ```
 ai-comm-coach/
@@ -18,18 +267,15 @@ ai-comm-coach/
 │   │   │                       #   Modal, ProgressBar, RadialProgress, Tooltip, Toaster,
 │   │   │                       #   Skeleton, EmptyState, ErrorState, Switch
 │   │   ├── layout/              # Sidebar, Topbar, MobileNav, AppShell, PublicShell
-│   │   ├── three/                # CommunicationOrb, ParticleField (React Three Fiber)
+│   │   ├── three/                # CommunicationOrb (lazy-loaded), ParticleField
 │   │   ├── charts/                # Recharts wrappers (trend, radar, donut, bar, line)
 │   │   └── shared/                 # PageHeader, StatCard, Waveform, Accordion, FlipCard...
-│   ├── pages/                       # One folder per route (landing, auth, onboarding,
-│   │                                 #   dashboard, practice/*, interview/*, plan, analytics,
-│   │                                 #   profile, settings, coach, achievements, admin)
-│   ├── services/                     # api layer — apiClient.ts (axios) + one service per
-│   │                                 #   domain; each currently mocks data and is written so
-│   │                                 #   swapping in a real backend call is a one-line change
-│   │                                 #   (see practiceService.analyzeText for a live example)
+│   ├── pages/                       # One folder per route — see §5 for the full list
+│   ├── services/                     # apiClient.ts (axios) + one service per domain;
+│   │                                 #   each tries the real backend, falls back to mock
 │   ├── hooks/                         # useAuth, useToast, useTheme, useVoiceRecorder, ...
-│   ├── data/mockData.ts                # realistic demo data used by the mock services
+│   ├── lib/auth.ts                     # decodes the stored token to get the real student id
+│   ├── data/mockData.ts                # realistic demo data used by the mock fallbacks
 │   └── types/                           # shared TypeScript interfaces
 │
 ├── backend/                               # Python + FastAPI backend
@@ -45,7 +291,8 @@ ai-comm-coach/
 │   │   ├── ml/                                     # scikit-learn adaptive-difficulty model +
 │   │   │                                           #   optional transformer confidence model
 │   │   ├── personalization/                          # learner profile, weakness detection,
-│   │   │                                             #   exercise generation, recommendations
+│   │   │                                             #   exercise generation, achievements,
+│   │   │                                             #   revision queue, recommendations
 │   │   ├── interview/                                  # question bank, resume parsing,
 │   │   │                                               #   STAR/answer-structure analysis
 │   │   ├── services/                                     # orchestrates the modules above
@@ -60,195 +307,27 @@ ai-comm-coach/
 
 ---
 
-## 2. Install & run
+## 12. Architecture notes
 
-### Frontend
-
-```bash
-npm install
-npm run dev
-```
-
-Opens at `http://localhost:5173`. It works standalone with realistic mock data even with no backend running.
-
-To point it at the real backend, copy the env file and adjust if needed (the default already matches the backend's default port):
-
-```bash
-cp .env.example .env
-```
-
-### Backend
-
-Requires Python 3.11+.
-
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # macOS/Linux
-
-pip install -r requirements.txt
-python -m spacy download en_core_web_sm
-
-cp .env.example .env
-uvicorn app.main:app --reload --port 8000
-```
-
-Opens at `http://localhost:8000`. Interactive API docs (Swagger UI) at `http://localhost:8000/docs`.
-
-Optional — enable the real transformer-based confidence model (otherwise a fast lexical heuristic is used, clearly labeled as such in every response):
-
-```bash
-pip install -r requirements-ml-optional.txt
-# then set ENABLE_TRANSFORMER_CONFIDENCE=true in backend/.env
-```
-
-Run both at once and the frontend automatically uses the real backend wherever it's wired up — see §5 for the full list (Dashboard, Text/Voice Practice, Grammar/Vocabulary Practice, Interview Practice, AI Coach). Each of those pages shows a **"Live from backend" / "Demo data — backend offline"** badge so it's always visible which path served the data on screen.
+- **Auth:** real signup/login (password hashing via PBKDF2, HMAC-signed tokens — see `backend/app/core/security.py`). A wrong password shows a real error rather than silently succeeding. No `Authorization` header sent → the backend transparently serves a fixed `demo-student` profile so the whole app is explorable with zero signup.
+- **Services layer (frontend):** every page calls a function in `src/services/*.ts`, never `fetch`/`axios` directly. Each follows the same `try backend, catch → mock` pattern (see `studentService.ts`'s `withFallback` helper).
+- **3D:** `CommunicationOrb` (React Three Fiber + drei) is lazy-loaded (`React.lazy` + `Suspense`) so its ~900KB chunk streams in after a page's initial paint instead of blocking it, and pages that never render it never fetch it at all.
 
 ---
 
-## 3. What's real vs. mock (per-module)
+## 13. Known limitations / future improvements
 
-The spec explicitly requires mock data to be used — and clearly labeled — wherever a real service isn't configured (no GPU, no internet, model not downloaded), rather than faked as real. Every backend response includes a `source: "real" | "mock"` field so the frontend (and you, testing it) can always tell which path ran.
-
-| Capability | Real implementation | Falls back to mock when... |
-|---|---|---|
-| Grammar checking | Rule-based checker (regex + spaCy POS tags) — subject-verb agreement, double negatives, tense consistency, homophones, formality | spaCy model not downloaded → tense-consistency check is skipped, other rules still run |
-| Vocabulary analysis | Type-token ratio, average word length, repeated-word detection, upgrade suggestions | Never mocked — pure Python, always real |
-| Structure / STAR analysis | Keyword + position heuristics for intro/body/example/conclusion and Situation-Task-Action-Result | Never mocked |
-| Speech-to-text | `SpeechRecognition` + Google Web Speech API on uploaded WAV audio | No internet, non-WAV upload, or empty recognition → realistic canned transcript, `source: "mock"` |
-| Pause/silence detection | Real RMS-energy analysis on WAV/PCM audio (stdlib `wave`/`audioop`) | Upload isn't parseable as WAV (e.g. raw webm/opus) → transcript-based estimate |
-| Confidence/tone scoring | Optional HuggingFace DistilBERT sentiment pipeline (opt-in, see above) | Not enabled, or `transformers`/`torch` not installed → lexical heuristic (hedging/assertive word counts) |
-| Adaptive difficulty | scikit-learn `RandomForestClassifier`, trained at startup | Always real — trained on a synthetic bootstrap dataset since there's no historical cohort data yet (see `app/ml/difficulty_model.py` docstring for the real-data upgrade path) |
-| Weakness/strength detection | Rule-based (absolute + relative thresholds against the student's own mean score) | Never mocked |
-| Resume parsing | `pypdf` text extraction + keyword/section matching | Unreadable PDF → empty text, handled gracefully |
-| Frontend pages not yet wired to the backend | — | Use `src/data/mockData.ts` via each `services/*.ts` file; each is written so swapping in a real call is localized to that one file |
+- **Pronunciation, follow-up questions, answer relevance, and technical correctness** are not implemented — see §7 for the full honest breakdown.
+- **STT** requires internet (Google's free Web Speech API) and WAV input; a production deployment should transcode browser webm/opus to WAV with ffmpeg before calling `/assessment/voice`.
+- **Adaptive difficulty model** is trained on a synthetic bootstrap dataset (no real student cohort exists yet) — see the docstring in `app/ml/difficulty_model.py` for the real-data upgrade path.
+- **Analytics trend buckets** are labeled "Session N," not calendar dates — a production version would bucket by real calendar week once usage spreads over time.
+- **Auth** is demo-grade (no refresh tokens, no revocation, no rate limiting) — swap for a real auth provider before any real deployment.
+- The **Admin Dashboard** stays on mock data until there's a real student cohort large enough to look like the intended "premium SaaS" demo.
 
 ---
 
-## 4. Testing paths — how to verify each piece
-
-### 4.1 Frontend only (no backend needed)
-
-```bash
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173` and walk the flow:
-
-1. **Landing → Start Practice → Signup** — fill the form, watch the password-strength meter, submit → success screen.
-2. **Onboarding** (5 steps) — personal info → goals (multi-select chips) → career goal → assessment (type an answer) → animated "Generating..." → **Your Personalized Learning Profile is Ready** with radial score rings.
-3. **Dashboard** — stat cards, performance chart, skill breakdown, today's plan (click a task to toggle done), 3D AI coach orb.
-4. **Voice Practice / Fluency Practice** — click the mic button; your browser will prompt for microphone permission (grant it in a real browser — the sandboxed preview pane used during development blocks mic access, which is a pane limitation, not an app bug). Record, stop, "View Detailed Feedback".
-5. **Text Practice** — submit an answer with a deliberate mistake (e.g. "alot", "gonna", "Neither of the teams were ready") and see it flagged.
-6. **Interview Practice** — pick a category, answer each question, "Finish Interview" → **Interview Result** page with went-well/needs-improvement/recommended sections.
-7. **Vocabulary / Grammar Practice, Learning Plan, Analytics, Achievements, Profile, Settings, AI Coach, Admin Dashboard** (`/app/admin`) — each is a self-contained, fully clickable page; there are no dead buttons.
-
-Build check:
-```bash
-npm run build     # tsc -b && vite build — should complete with no errors
-```
-
-### 4.2 Backend only (no frontend needed) — via Swagger UI or curl
-
-```bash
-cd backend
-venv\Scripts\activate
-uvicorn app.main:app --reload --port 8000
-```
-
-Open `http://localhost:8000/docs` for an interactive UI, or run these from a terminal:
-
-```bash
-# Health check — confirms spaCy actually loaded
-curl http://localhost:8000/api/v1/health
-
-# Sign up a student
-curl -X POST http://localhost:8000/api/v1/auth/signup -H "Content-Type: application/json" -d '{
-  "full_name": "Test Student", "email": "test@example.edu", "password": "Password123!",
-  "college": "VIT", "course": "CSE", "year": "3rd Year", "career_goal": "Software Engineer"
-}'
-# → copy the "student_id" from the response into $SID below
-
-# Analyze intentionally broken text (real spaCy + rule-based grammar engine)
-curl -X POST http://localhost:8000/api/v1/assessment/text -H "Content-Type: application/json" -d '{
-  "student_id": "'"$SID"'", "question": "Tell me about yourself",
-  "answer": "I dont have no experience but I am gonna work alot hard. Neither of the teams were ready."
-}'
-# → expect corrections for subject_verb_agreement, spelling, formality
-
-# Fetch the adaptive daily plan (built from scikit-learn difficulty + weakness detection)
-curl http://localhost:8000/api/v1/students/me/plan/today -H "Authorization: Bearer $TOKEN"
-
-# Run a full interview round
-curl -X POST http://localhost:8000/api/v1/interview/start -H "Content-Type: application/json" -d '{"student_id":"'"$SID"'","category_id":"behavioral"}'
-# → copy session_id + a question_id, then:
-curl -X POST http://localhost:8000/api/v1/interview/answer -H "Content-Type: application/json" -d '{
-  "session_id": "'"$SESSION"'", "question_id": "'"$Q0"'", "mode": "text",
-  "answer_text": "At the time, we were behind schedule and I needed to resolve a disagreement. So I organized a meeting and proposed a compromise. As a result, we shipped on time."
-}'
-curl -X POST http://localhost:8000/api/v1/interview/submit -H "Content-Type: application/json" -d '{"session_id":"'"$SESSION"'"}'
-
-# Repeat the broken-text call above 3 times, then check the revision queue and real trend/activity:
-curl http://localhost:8000/api/v1/students/me/revision-queue
-curl http://localhost:8000/api/v1/students/me/analytics/trend
-curl http://localhost:8000/api/v1/students/me/analytics/activity
-```
-
-Each call above was run during development against this exact codebase and produced real, non-mocked grammar/structure/adaptive-plan/revision-queue output — not placeholder text.
-
-### 4.3 Full stack together
-
-Run both dev servers, then open the frontend. Pages that are wired to the real backend (each shows a **"Live from backend"** / **"Demo data — backend offline"** badge, so the fallback is always visible, never silent):
-
-| Page | Real endpoint(s) it calls |
-|---|---|
-| Dashboard | `GET /students/me`, `/students/me/plan/today`, `/students/me/analytics/trend`, `/students/me/analytics/activity` |
-| Communication Analysis | `GET /students/me/weaknesses`, `/students/me/recommendation` |
-| Learning Plan | `GET /students/me/plan/week`, `/students/me/revision-queue`, `DELETE /students/me/revision-queue/{topic}` |
-| Analytics | `GET /students/me/analytics/trend`, `/students/me/analytics/activity`, `/students/me/weaknesses`, `/students/me/recommendation` |
-| Text Practice | `POST /assessment/text` |
-| Voice Practice, Fluency Practice | `POST /assessment/voice` (multipart audio upload) |
-| Grammar Practice | `GET /practice/grammar/questions` (weakness + difficulty ordered) |
-| Vocabulary Practice | `GET /practice/vocabulary/words` (weakness + difficulty ordered), `POST /students/me/vocabulary/learned/{word}` |
-| Interview Practice | `GET /interview/categories`, `POST /interview/resume-upload`, `/interview/start` (resume/job-role generated when applicable) → `/assessment/voice` (transcript) → `/interview/answer` → `/interview/submit` |
-| Achievements | `GET /students/me/achievements` — every unlock/progress value computed from real streak, session counts and score history, not a static list |
-| AI Coach | `POST /coach/chat`, `GET /coach/suggested-prompts` |
-
-Try it: stop the backend (`Ctrl+C` in its terminal) and reload the Dashboard — every card still renders, now from `src/data/mockData.ts`, with the badge switched to "Demo data — backend offline". Restart the backend and reload again — the badge flips back and the numbers change to the backend's live values. That live-vs-mock switch, visible in the UI without any frontend code change, is the "ready to swap for a real backend" requirement made concrete.
-
-The trend/activity endpoints need real session history to return anything (a brand-new student has none) — they 404 until there are 2+ sessions, and the frontend's `withFallback` treats that exactly like a backend-down case and shows demo data with the "offline" badge. Generate real history quickly via curl (§4.2's `/assessment/text` example, called 2-3 times) or by using Text/Voice Practice in the UI a couple of times, then reload Dashboard/Analytics/Learning Plan to see it switch to genuine per-session numbers, a real "Topics to Review" list, and a recommendation that reprioritizes once you clear a topic.
-
-**Still intentionally on mock data** (see §6): the Admin Dashboard — a fresh backend install has only the handful of students you've created via curl/signup, which would look sparse next to the "premium SaaS" demo that page is meant to show.
-
----
-
-## 5. Architecture notes
-
-- **Personalization loop:** `POST /assessment/text|voice` → updates `LearnerProfile.scores` via an exponential moving average → `GET /students/me/weaknesses` (rule-based) → `GET /students/me/plan/today` (scikit-learn difficulty + weakness-driven exercise selection) → practicing again updates the profile again. This loop is what makes two students' plans diverge over time instead of being identical. You can watch it happen: submit a few Text Practice answers, then reload the Dashboard — the Skill Breakdown numbers and Today's Plan both shift.
-- **Revision queue (spec §31):** every score update also re-runs weakness detection and checks it against the last 5 sessions (`app/personalization/learner_profile.py::update_scores`) — a weakness present in 3+ of them is auto-added to `revision_queue` and surfaced as "Topics to Review" on the Learning Plan page; it's auto-removed once it stops appearing, or a student can clear it manually. The recommendation engine checks this queue first, ahead of the general weakness ranking.
-- **Achievements (spec §36) and resume/job-role interviews (spec §25-26)** are genuinely data-driven, not decorative: achievements read real streak/session-count/score-history fields (`app/personalization/achievements.py`), and the Resume-based / Job-role interview categories only differ from a generic HR interview once the frontend's setup modal actually collects a resume or role — see `InterviewPracticePage.tsx`'s `setupCategory` modal and `question_bank.get_resume_based_questions` / `get_job_role_questions`.
-- **Demo student:** the frontend calls every endpoint as `demo-student` (see `src/lib/constants.ts` and `app/api/deps.py`), a fixed backend profile seeded with the same starting scores as `src/data/mockData.ts`'s "Ananya Sharma" — so the mock and real paths show consistent data and the whole app is explorable with zero signup/login. A real bearer token from `/auth/signup` or `/auth/login` switches to that student's own profile instead.
-- **Services layer (frontend):** every page calls a function in `src/services/*.ts`, never `fetch`/`axios` directly. Each service follows the same `try backend, catch → mock` pattern (see `studentService.ts`'s `withFallback` helper) — that's the seam to extend when wiring the remaining pages listed above.
-- **3D:** `CommunicationOrb` (React Three Fiber + drei, distorted sphere) and `ParticleField` are the only 3D elements, used sparingly (hero, auth pages, dashboard, AI Coach) and kept lightweight (low poly count, capped DPR, no postprocessing) per the "3D only where it improves the experience" requirement.
-
----
-
-## 6. Known limitations / future improvements
-
-- **Pronunciation scoring** has no ground-truth phoneme model — it's a documented heuristic (STT success + word complexity). A real upgrade path is a forced-alignment model (e.g. Montreal Forced Aligner) or a phoneme-level ASR confidence score.
-- **Adaptive difficulty model** is trained on a synthetic bootstrap dataset (no student cohort exists yet for this fresh project) — see the docstring in `app/ml/difficulty_model.py` for exactly where to swap in real historical data once it exists.
-- **STT** requires internet access (Google's free Web Speech API) and WAV input; browser recordings are webm/opus, so a production deployment should transcode with ffmpeg before calling `/assessment/voice` for the real STT path to engage (it degrades to a mock transcript otherwise, never silently).
-- **Auth** is demo-grade (HMAC-signed token, no refresh/revocation) — swap for a real auth provider before any real deployment.
-- **Interview voice answers** are transcribed via a reused `/assessment/voice` call purely for its transcript field before scoring — an extra round-trip that a dedicated "transcribe only" endpoint would avoid in a larger deployment.
-- **Analytics trend buckets** are labeled "Session N", not calendar dates/weeks — the backend groups by session order, not wall-clock time, since a demo student's sessions may all happen in one sitting. A production version would bucket by real calendar week once usage is spread over time.
-- The **Admin Dashboard** is intentionally still on rich mock data (see §4.3) — every other page's service follows the same `try backend, catch → mock` structure (see §2's `services/` note), so wiring it up once there's a real student cohort is mechanical, not a redesign.
-
----
-
-## 7. Tech stack (as required)
+## 14. Tech stack (as required)
 
 **Backend / AI:** Python, FastAPI, NLP (spaCy), Transformer Models (HuggingFace `transformers`, optional), scikit-learn, PyTorch (transformer backend), Speech-to-Text & Speech Processing (`SpeechRecognition`, stdlib `wave`/`audioop`)
 **Frontend:** React, TypeScript, Tailwind CSS, Framer Motion, React Three Fiber, Recharts, React Router, React Hook Form + Zod, Axios, Lucide React
-**Version control:** Git (this repo)
+**Version control:** Git
