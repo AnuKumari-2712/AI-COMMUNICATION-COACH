@@ -211,7 +211,20 @@ Build check (should complete with zero errors):
 npm run build
 ```
 
-### 9.2 Backend only — via Swagger UI or curl
+### 9.2 Automated backend tests (accuracy modules)
+
+Each analysis module (grammar, vocabulary, etc.) gets its own pytest file as it's audited and rebuilt for accuracy — see `AUDIT.md` for the full module-by-module plan and honesty findings.
+
+```bash
+cd backend
+venv\Scripts\activate
+pip install -r requirements-dev.txt
+pytest tests/ -v
+```
+
+Currently covers: `tests/test_grammar_rules.py` (Module 1 — grammar scoring, category separation, confidence levels). Every score assertion in these tests is an exact hand-computed value from the documented formula, not a range check.
+
+### 9.3 Backend only — via Swagger UI or curl
 
 ```bash
 cd backend && venv\Scripts\activate && uvicorn app.main:app --reload --port 8000
@@ -237,7 +250,7 @@ curl -X POST http://localhost:8000/api/v1/assessment/text -H "Content-Type: appl
 curl -X POST http://localhost:8000/api/v1/interview/start -H "Content-Type: application/json" -d '{"student_id":"'"$SID"'","category_id":"behavioral"}'
 ```
 
-### 9.3 Full stack together
+### 9.4 Full stack together
 
 Run both dev servers, open the frontend, and watch the **"Live from backend"** badge on the Dashboard, Text Practice, Interview Practice, Achievements, and Learning Plan pages. Stop the backend and reload — the badge switches to "Demo data — backend offline" and every page keeps working.
 

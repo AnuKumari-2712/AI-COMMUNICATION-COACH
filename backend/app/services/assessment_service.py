@@ -85,7 +85,15 @@ def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisRes
     )
 
     corrections = [
-        GrammarCorrection(original=c.original, corrected=c.corrected, reason=c.reason, rule=c.rule)
+        GrammarCorrection(
+            original=c.original,
+            corrected=c.corrected,
+            reason=c.reason,
+            rule=c.rule,
+            category=c.category,
+            confidence=c.confidence,
+            sentence=c.sentence,
+        )
         for c in grammar_result["corrections"]
     ]
 
@@ -114,6 +122,11 @@ def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisRes
         repeated_words=vocab_result["repeated_words"],
         better_alternative=alternative,
         word_count=len(answer.split()),
+        grammar_issue_count=grammar_result["grammar_issue_count"],
+        spelling_issue_count=grammar_result["spelling_issue_count"],
+        style_issue_count=grammar_result["style_issue_count"],
+        grammar_score_formula=grammar_result["formula"],
+        grammar_sufficient_data=grammar_result["sufficient_data"],
     )
 
 
