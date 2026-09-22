@@ -13,7 +13,7 @@ import uuid
 from app.interview import question_bank
 from app.interview.structure_analyzer import evaluate_star_format, evaluate_structure
 from app.ml.transformer_confidence import score_confidence
-from app.nlp import grammar_rules, text_analysis
+from app.nlp import grammar_rules, relevance_analysis, text_analysis
 from app.personalization import learner_profile
 from app.schemas.common import AnalysisSource
 from app.schemas.interview import (
@@ -62,6 +62,14 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
     vocab_result = text_analysis.vocabulary_analysis(answer_text)
     confidence_score, confidence_source = score_confidence(answer_text)
 
+    # MODULE 7: question text was already available per-question (session
+    # stores it at start_session) but was never compared against the
+    # answer at all — there was no relevance signal of any kind, so a
+    # completely off-topic answer could score well on every other metric
+    # with nothing flagging it.
+    question_text = session["questions"].get(question_id, "")
+    relevance_result = relevance_analysis.analyze_relevance(question_text, answer_text)
+
     is_behavioral = session["category_id"] in ("behavioral", "mock")
     if is_behavioral:
         structure_result = evaluate_star_format(answer_text)
@@ -99,6 +107,8 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
     clarity_result = text_analysis.clarity_analysis(answer_text)
 
     feedback_bits = []
+    if relevance_result["sufficient_data"] and relevance_result["score"] < 50:
+        feedback_bits.append("make sure you directly address what the question is asking")
     if structure_score < 60:
         feedback_bits.append("try structuring your answer with a clear beginning, middle and end")
     if filler_count > 3:
@@ -119,6 +129,8 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
             "clarity": clarity_result["score"],
             "structure": structure_score,
             "filler_count": filler_count,
+            "relevance": relevance_result["score"],
+            "relevance_sufficient_data": relevance_result["sufficient_data"],
             # NOTE: this is practice-TIME bookkeeping only (feeds streak/total
             # practice minutes), separate from fluency/pace scoring above —
             # a typed answer has no speech duration, so 90s is an honest
@@ -139,6 +151,10 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
         structure=structure,
         structure_score=structure_score,
         filler_word_count=filler_count,
+        relevance_score=relevance_result["score"],
+        relevance_addressed_keywords=relevance_result["addressed_keywords"],
+        relevance_missing_keywords=relevance_result["missing_keywords"],
+        relevance_sufficient_data=relevance_result["sufficient_data"],
         feedback=feedback,
     )
 
@@ -160,6 +176,8 @@ def submit_session(session_id: str) -> InterviewResultResponse:
     confidence = avg("confidence")
     clarity = avg("clarity")
     structure = avg("structure")
+    relevance = avg("relevance")
+    relevance_sufficient_data = all(a["relevance_sufficient_data"] for a in answers)
 
     # MODULE 5: pronunciation used to be a flat hardcoded 78.0 for every
     # interview, regardless of anything in the actual answers — the exact
@@ -193,6 +211,13 @@ def submit_session(session_id: str) -> InterviewResultResponse:
     else:
         needs_improvement.append("Answer structure could be clearer — aim for intro, point, example, conclusion.")
         recommended.append("Practice STAR-format storytelling in Fluency Practice.")
+
+    if relevance_sufficient_data:
+        if relevance >= 65:
+            went_well.append("Your answers stayed clearly on-topic and addressed what was asked.")
+        else:
+            needs_improvement.append("Some answers didn't fully address what the question was asking.")
+            recommended.append("Practice reading the question closely and directly answering each part before adding detail.")
 
     total_fillers = sum(a["filler_count"] for a in answers)
     if total_fillers <= len(answers) * 1:
@@ -239,6 +264,8 @@ def submit_session(session_id: str) -> InterviewResultResponse:
         pronunciation=pronunciation,
         pronunciation_reliable=pronunciation_result["reliable"],
         pronunciation_method=pronunciation_result["method"],
+        relevance=relevance,
+        relevance_sufficient_data=relevance_sufficient_data,
         went_well=went_well or ["You completed the full interview — that's a strong first step."],
         needs_improvement=needs_improvement or ["No major issues detected — keep practicing to maintain this level."],
         recommended_exercises=recommended or ["Take another mock interview to build consistency."],

@@ -63,6 +63,13 @@ class InterviewAnswerResponse(BaseModel):
     structure: AnswerStructureScore
     structure_score: float
     filler_word_count: int
+    # MODULE 7: keyword/lemma-overlap relevance between this question and
+    # this answer — see relevance_analysis.py::analyze_relevance. Not true
+    # semantic understanding; addressed/missing_keywords are the evidence.
+    relevance_score: float = 0.0
+    relevance_addressed_keywords: list[str] = []
+    relevance_missing_keywords: list[str] = []
+    relevance_sufficient_data: bool = True
     feedback: str
 
 
@@ -84,6 +91,11 @@ class InterviewResultResponse(BaseModel):
     # audio-based measurement — see speech_metrics.py::pronunciation_proxy.
     pronunciation_reliable: bool = False
     pronunciation_method: str = ""
+    # MODULE 7: average per-answer relevance score (see InterviewAnswerResponse
+    # above). Not yet folded into `overall`/`communication` — see Module 10
+    # (scoring transparency/reweighting) in AUDIT.md for that follow-on step.
+    relevance: float = 0.0
+    relevance_sufficient_data: bool = True
     went_well: list[str]
     needs_improvement: list[str]
     recommended_exercises: list[str]

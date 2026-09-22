@@ -9,7 +9,7 @@ import re
 import tempfile
 
 from app.ml.transformer_confidence import score_confidence
-from app.nlp import grammar_rules, text_analysis
+from app.nlp import grammar_rules, relevance_analysis, text_analysis
 from app.personalization import learner_profile
 from app.schemas.assessment import (
     ExplainMistakeResponse,
@@ -77,6 +77,12 @@ def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisRes
     clarity_result = text_analysis.clarity_analysis(answer)
     alternative = text_analysis.better_alternative(answer, question)
 
+    # MODULE 7: `question` was already accepted by this endpoint (used only
+    # to phrase `better_alternative`) but was never actually compared
+    # against the answer — there was no relevance metric at all, so a
+    # completely off-topic answer could score well on every other metric.
+    relevance_result = relevance_analysis.analyze_relevance(question, answer)
+
     overall = round(
         grammar_result["score"] * 0.3
         + vocab_result["score"] * 0.25
@@ -132,6 +138,11 @@ def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisRes
         content_word_count=vocab_result["content_word_count"],
         vocabulary_score_formula=vocab_result["formula"],
         vocabulary_sufficient_data=vocab_result["sufficient_data"],
+        relevance_score=relevance_result["score"],
+        relevance_addressed_keywords=relevance_result["addressed_keywords"],
+        relevance_missing_keywords=relevance_result["missing_keywords"],
+        relevance_score_formula=relevance_result["formula"],
+        relevance_sufficient_data=relevance_result["sufficient_data"],
     )
 
 

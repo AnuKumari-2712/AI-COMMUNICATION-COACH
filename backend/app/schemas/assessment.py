@@ -53,6 +53,15 @@ class TextAnalysisResponse(BaseModel):
     content_word_count: int = 0
     vocabulary_score_formula: str = ""
     vocabulary_sufficient_data: bool = True
+    # MODULE 7 transparency fields — see relevance_analysis.py::analyze_relevance.
+    # This is keyword/lemma-overlap between question and answer, NOT semantic
+    # understanding of whether the content actually answers the question.
+    # Not yet folded into `score` above — see Module 10 in AUDIT.md.
+    relevance_score: float = 0.0
+    relevance_addressed_keywords: list[str] = []
+    relevance_missing_keywords: list[str] = []
+    relevance_score_formula: str = ""
+    relevance_sufficient_data: bool = True
 
 
 class VoiceAnalysisRequest(BaseModel):

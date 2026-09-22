@@ -298,6 +298,55 @@ Confirmed against a live running server (port 8125, separate from the dev server
 
 ---
 
-## Modules 7-12 — Not yet started
+## Module 7 — Answer Relevance — ✅ DONE
 
-See the module plan and per-module findings in the audit delivered in-conversation (answer relevance, technical correctness, interview follow-ups, scoring transparency, data validation, ground-truth benchmark). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.
+**Current metric (before):** none. `question` text was accepted by both `POST /assessment/text` and the interview session flow (`start_session` stores `question_id -> text` per session), but neither flow ever compared the question against the answer. There was no relevance signal of any kind — a completely off-topic answer could score well on grammar/vocabulary/structure with nothing flagging it.
+
+**Accuracy problem found:** exactly the gap named in the original audit ("identify what question asks, compare answer against it, detect if important parts addressed, don't score high just for length, provide evidence") — none of this existed.
+
+**Fix implemented — new `app/nlp/relevance_analysis.py::analyze_relevance(question, answer)`:**
+- Extracts real topic keywords from the question (spaCy NOUN/PROPN/VERB lemmas when available, excluding a documented set of interview-question-template words like "tell", "describe", "experience", "time" that describe the question's format rather than its topic; falls back to plain lowercase word filtering without spaCy).
+- Computes `coverage = addressed_keyword_count / question_keyword_count`; `score = coverage * 100`. Because this is a ratio of matched key terms (not raw answer length), a long answer padded with unrelated content cannot inflate the score just by being long — verified directly by `test_long_irrelevant_answer_does_not_score_high_for_length_alone`.
+- Returns `addressed_keywords` and `missing_keywords` as concrete evidence (the audit's "provide evidence" requirement), plus a `formula` string naming the exact keywords identified.
+- `sufficient_data=False` when the question yields fewer than 2 identifiable keywords (e.g. "Why?") — returns a neutral `50.0` instead of a fabricated confident number.
+- Wired into `assessment_service.analyze_text()` (`TextAnalysisResponse` gains `relevance_score`, `relevance_addressed_keywords`, `relevance_missing_keywords`, `relevance_score_formula`, `relevance_sufficient_data`) and `interview_service.answer_question()` (fetches the real question text from `session["questions"][question_id]`, which existed but was never used for this; `InterviewAnswerResponse` gains the same fields). Low-relevance answers now also trigger real feedback ("make sure you directly address what the question is asking"). `submit_session()` averages relevance across all answers into `InterviewResultResponse.relevance`.
+
+**Files changed:**
+- `backend/app/nlp/relevance_analysis.py` (new)
+- `backend/app/schemas/assessment.py` (`TextAnalysisResponse` gains relevance fields)
+- `backend/app/schemas/interview.py` (`InterviewAnswerResponse` and `InterviewResultResponse` gain relevance fields)
+- `backend/app/services/assessment_service.py` (`analyze_text` computes and maps relevance)
+- `backend/app/services/interview_service.py` (`answer_question`/`submit_session` compute, feed back, and aggregate relevance)
+- `backend/tests/test_relevance_analysis.py` (new — 10 tests)
+
+**Known, honest, NOT fixed in this module (documented, not hidden):**
+1. This is literal keyword/lemma overlap, **not semantic understanding**. An answer that echoes the question's own wording back without actually answering it can still score well; a genuinely correct answer phrased with entirely different vocabulary than the question can score poorly. A real semantic-relevance model would need sentence embeddings — `en_core_web_sm` (the model this project uses) does not ship real word vectors, so `.similarity()` on it returns near-meaningless near-zero-similarity numbers that would look like a real measurement while being fabricated in effect; using keyword overlap instead of that is the more honest choice, not a shortcut.
+2. `relevance_score` is **not yet folded into** the `overall`/`score`/`communication` composites in either flow — it's computed, surfaced, and used for feedback, but the composite-score reweighting (grammar/vocabulary/fluency/pace/fillers/structure/relevance with shown weights) is explicitly Module 10's job per the original audit's Module 14 spec, to avoid conflating "add a new honest metric" with "redesign the overall formula" in one change.
+
+**Verification — run this yourself:**
+```bash
+cd backend
+venv\Scripts\activate
+pytest tests/ -v
+```
+
+**Actual output obtained (2026-09-22):**
+```
+83 passed, 2 warnings in 10.61s
+```
+
+**Live API proof:**
+```bash
+curl -X POST http://localhost:8000/api/v1/assessment/text -H "Content-Type: application/json" -d '{"student_id":"demo-student","question":"Tell me about a time you led a team through a difficult project.","answer":"I led a five-person team through a difficult migration project last year, and we delivered it two weeks early."}'
+# → relevance_score: 100.0, addressed: ["lead","team","project"], missing: []
+
+curl -X POST http://localhost:8000/api/v1/assessment/text -H "Content-Type: application/json" -d '{"student_id":"demo-student","question":"Tell me about a time you led a team through a difficult project.","answer":"My favorite programming language is Python and I enjoy hiking on weekends."}'
+# → relevance_score: 0.0, addressed: [], missing: ["lead","team","project"]
+```
+Also confirmed through the real interview session flow (port 8126, separate from the dev server): an off-topic answer to "Describe a time you handled conflict within a team" ("I really like pizza and video games on weekends") returned `relevance_score: 0.0`, `relevance_missing_keywords: ["handle","conflict","team"]`, and feedback including "make sure you directly address what the question is asking" — the exact evidence-backed, non-fabricated signal the audit asked for.
+
+---
+
+## Modules 8-12 — Not yet started
+
+See the module plan and per-module findings in the audit delivered in-conversation (technical correctness, interview follow-ups, scoring transparency/reweighting, data validation, ground-truth benchmark). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.
