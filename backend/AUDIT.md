@@ -397,6 +397,56 @@ Confirmed against a live running server (port 8127, separate from the dev server
 
 ---
 
-## Modules 9-12 — Not yet started
+## Module 9 — Interview Question Quality & Follow-ups — ✅ DONE
 
-See the module plan and per-module findings in the audit delivered in-conversation (interview follow-ups/question quality — including the "mock" category bug found above, scoring transparency/reweighting, data validation, ground-truth benchmark). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.
+**Current metric/behavior (before):** the interview question slate was decided entirely at `start_session` and never revisited; `answer_question` never looked at what the candidate actually said to influence future questions. Separately, `question_bank.get_fixed_questions("mock")` had no `"mock"` entry at all (found and documented as out-of-scope in Module 8), so it silently fell back to the `"hr"` list — "Full Mock Interview" (described as "End-to-end simulation across all rounds") only ever asked HR questions.
+
+**Accuracy problems found:** exactly the gaps named in the original audit — "remember previous answer, generate relevant follow-ups... stay relevant to interview type" (section 11) and "follow-up questions must reference something actually said" (section 12, with the audit's own worked example: "I built a hospital management system using MERN" → a good follow-up asks about "your hospital management system" specifically).
+
+**Fix implemented:**
+1. **"mock" category fix** (`question_bank.py`): built `_FIXED_QUESTIONS["mock"]` from real slices of `hr`/`behavioral`/`technical` (2+3+3=8, matching the category's declared `question_count`) instead of leaving it undefined. Added `get_question_stages(category_id)` so each question in a mixed category carries its own real sub-category — "mock" no longer collapses to a single stage.
+2. **Per-question structure evaluation** (`interview_service.answer_question`): previously `is_behavioral = category_id in ("behavioral", "mock")` applied STAR-format scoring to an *entire session*, which was silently wrong for the 2 HR and 3 technical questions inside a mock session's mix. Now uses the specific question's own stage (`session["question_stages"][question_id]`), so a mock session's technical questions get generic structure evaluation and its HR questions don't get graded as if they were STAR-format stories.
+3. **New `app/interview/followup_generator.py::generate_followup(answer_text, already_referenced)`:** extracts the most specific noun phrase from the answer (spaCy noun chunks, stripping leading determiners like "a"/"the"/"my" so "a hospital management system" and "hospital management system" are recognized as the same topic, and filtering out generic words like "stuff"/"thing"/"time"/"experience" so a vague answer doesn't produce a fake-specific follow-up). Builds a follow-up question that names the phrase explicitly, cycling through 3 phrasing templates. Returns `None` — no fabricated follow-up — when the answer has nothing specific enough to reference, which is the honest result for a vague answer rather than inventing a generic one.
+4. Wired into `answer_question()`: a generated follow-up is appended to the session's live question set (so it can actually be asked next) and tracked in `session["followup_phrases_used"]` so the same topic isn't followed up on twice across a session. `InterviewAnswerResponse` gains `followup_question: InterviewQuestion | None`.
+
+**Files changed:**
+- `backend/app/interview/question_bank.py` (`_FIXED_QUESTIONS["mock"]` built from real categories; new `get_question_stages`)
+- `backend/app/interview/followup_generator.py` (new)
+- `backend/app/services/interview_service.py` (`start_session` tracks per-question stage + follow-up state; `answer_question` uses per-question stage for structure evaluation and generates real follow-ups)
+- `backend/app/schemas/interview.py` (`InterviewAnswerResponse` gains `followup_question`)
+- `backend/tests/test_followup_generator.py` (new — 8 tests)
+- `backend/tests/test_question_bank_mock.py` (new — 5 tests)
+
+**Known, honest, NOT fixed in this module (documented, not hidden):**
+1. Follow-up generation is a shallow, real signal (noun-phrase specificity), not true topic understanding — it can still pick a phrase that's grammatically a noun chunk but not actually the most interesting thing the candidate said (e.g. "a final year project" over a more specific detail buried later in a long answer). A deeper version would need a real information-extraction/summarization model.
+2. "Adapt difficulty" (also named in section 11 of the original audit) is **not implemented** in this module — the question slate's difficulty is still fixed by category, not adjusted based on how well earlier answers went. This is a substantial separate feature (would need a difficulty-tagged question bank and a policy for escalating/de-escalating) left for a future module rather than bolted on here.
+3. Generated follow-ups are appended to the session's question map so they *can* be asked, but nothing currently forces the client to ask them before finishing the interview — whether/when to surface a follow-up in the flow is a frontend decision, out of scope per this project's "don't focus on UI first" instruction for the backend-accuracy audit.
+
+**Verification — run this yourself:**
+```bash
+cd backend
+venv\Scripts\activate
+pytest tests/ -v
+```
+
+**Actual output obtained (2026-09-22):**
+```
+106 passed, 2 warnings in 2.33s
+```
+
+**Live API proof, through a real mock interview session:**
+```bash
+BASE=http://127.0.0.1:8128/api/v1
+curl -X POST $BASE/interview/start -H "Content-Type: application/json" -d '{"student_id":"demo-student","category_id":"mock","job_role":null,"resume_text":null}'
+# → 8 questions: 2 stage="hr", 3 stage="behavioral", 3 stage="technical" (previously: 8 HR-only questions, all stage="mock")
+
+curl -X POST $BASE/interview/answer -H "Content-Type: application/json" -d '{"session_id":"<id>","question_id":"<qid>","answer_text":"I built a hospital management system using the MERN stack during my final year, and I am proud of how it turned out.","mode":"text","duration_seconds":null}'
+# → followup_question: {"text": "You mentioned hospital management system — what was the most challenging part of that?", ...}
+```
+Confirmed against a live running server (port 8128, separate from the dev server): the exact worked example from the original audit (a follow-up referencing "hospital management system" specifically, not a generic unrelated question) now happens for real, and the "mock" category bug named in Module 8 is fixed.
+
+---
+
+## Modules 10-12 — Not yet started
+
+See the module plan and per-module findings in the audit delivered in-conversation (scoring transparency/reweighting — including folding relevance and technical-correctness into the overall composite, data validation, ground-truth benchmark + accuracy report). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.

@@ -11,6 +11,7 @@ import logging
 import uuid
 
 from app.interview import question_bank
+from app.interview.followup_generator import generate_followup
 from app.interview.structure_analyzer import evaluate_star_format, evaluate_structure
 from app.interview.technical_knowledge import evaluate_technical_correctness
 from app.ml.transformer_confidence import score_confidence
@@ -35,21 +36,30 @@ def start_session(student_id: str, category_id: str, job_role: str | None, resum
 
     if category_id == "resume" and resume_text:
         raw_questions = question_bank.get_resume_based_questions(resume_text, profile.career_goal)
+        stages = [category_id] * len(raw_questions)
     elif category_id == "job_role" and job_role:
         raw_questions = question_bank.get_job_role_questions(job_role)
+        stages = [category_id] * len(raw_questions)
     else:
         raw_questions = question_bank.get_fixed_questions(category_id)
+        # MODULE 9: "mock" genuinely mixes hr/behavioral/technical questions
+        # now (see question_bank.py) — per-question stage lets answer_question
+        # pick the right structure evaluation (STAR vs generic) per question
+        # instead of applying one evaluation to the whole mixed session.
+        stages = question_bank.get_question_stages(category_id)
 
     session_id = str(uuid.uuid4())
     questions = [
-        InterviewQuestion(id=f"{session_id}-q{i}", text=q, stage=category_id)
+        InterviewQuestion(id=f"{session_id}-q{i}", text=q, stage=stages[i] if i < len(stages) else category_id)
         for i, q in enumerate(raw_questions)
     ]
     _sessions[session_id] = {
         "student_id": student_id,
         "category_id": category_id,
         "questions": {q.id: q.text for q in questions},
+        "question_stages": {q.id: q.stage for q in questions},
         "answers": [],
+        "followup_phrases_used": set(),
     }
     return {"session_id": session_id, "category_id": category_id, "questions": questions}
 
@@ -77,7 +87,14 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
     # a fabricated verdict. See technical_knowledge.py.
     technical_result = evaluate_technical_correctness(question_text, answer_text)
 
-    is_behavioral = session["category_id"] in ("behavioral", "mock")
+    # MODULE 9: previously this checked the whole session's category_id, so
+    # a "mock" session (which now genuinely mixes hr/behavioral/technical
+    # questions instead of silently only asking HR — see question_bank.py)
+    # would have every question evaluated with STAR format regardless of
+    # what kind of question it actually was. Now uses this specific
+    # question's own stage.
+    question_stage = session["question_stages"].get(question_id, session["category_id"])
+    is_behavioral = question_stage == "behavioral"
     if is_behavioral:
         structure_result = evaluate_star_format(answer_text)
         structure = AnswerStructureScore(
@@ -112,6 +129,22 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
         fluency_source = "text_estimated"
 
     clarity_result = text_analysis.clarity_analysis(answer_text)
+
+    # MODULE 9: previously the entire question slate was decided up-front at
+    # start_session and nothing ever looked at what the candidate actually
+    # said. This generates a real follow-up only when the answer contains a
+    # specific, not-yet-referenced noun phrase to ask about (e.g. "your
+    # hospital management system") — a vague answer honestly gets no
+    # follow-up rather than a generic, disconnected one.
+    followup_index = len(session["answers"])
+    followup = generate_followup(answer_text, session["followup_phrases_used"], template_index=followup_index)
+    followup_question = None
+    if followup is not None:
+        followup_id = f"{question_id}-followup"
+        session["questions"][followup_id] = followup["question_text"]
+        session["question_stages"][followup_id] = question_stage
+        session["followup_phrases_used"].add(followup["phrase"].lower())
+        followup_question = InterviewQuestion(id=followup_id, text=followup["question_text"], stage=question_stage)
 
     feedback_bits = []
     if technical_result["applicable"] and technical_result["verdict"] in ("incorrect", "partially_correct", "insufficient"):
@@ -171,6 +204,7 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
         technical_matched_concepts=technical_result["matched_concepts"],
         technical_missing_concepts=technical_result["missing_concepts"],
         technical_explanation=technical_result["explanation"],
+        followup_question=followup_question,
         feedback=feedback,
     )
 

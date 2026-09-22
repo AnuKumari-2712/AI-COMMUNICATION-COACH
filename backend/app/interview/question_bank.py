@@ -44,6 +44,17 @@ _FIXED_QUESTIONS = {
     ],
 }
 
+# MODULE 9 (see AUDIT.md): "mock" had no entry here at all, so
+# get_fixed_questions("mock") silently fell back to the "hr" list —
+# "Full Mock Interview" (described in CATEGORIES as "End-to-end simulation
+# across all rounds") was actually only ever asking HR questions. Built
+# from the other three real categories instead of inventing a fourth,
+# separate question list to maintain; count (2+3+3=8) matches this
+# category's declared question_count in CATEGORIES.
+_FIXED_QUESTIONS["mock"] = (
+    _FIXED_QUESTIONS["hr"][:2] + _FIXED_QUESTIONS["behavioral"][:3] + _FIXED_QUESTIONS["technical"][:3]
+)
+
 _ROLE_QUESTION_TEMPLATES = {
     "software developer": [
         "Walk me through a project where you built a full-stack feature end-to-end.",
@@ -80,6 +91,22 @@ def get_categories() -> list[dict]:
 
 def get_fixed_questions(category_id: str) -> list[str]:
     return _FIXED_QUESTIONS.get(category_id, _FIXED_QUESTIONS["hr"])
+
+
+_MOCK_STAGES = (["hr"] * 2) + (["behavioral"] * 3) + (["technical"] * 3)
+
+
+def get_question_stages(category_id: str) -> list[str]:
+    """MODULE 9: per-question sub-category for a fixed question list. Only
+    "mock" actually mixes multiple question types under one category_id —
+    every other fixed category is internally uniform, so its stage is just
+    its own category_id repeated. Used by interview_service to pick the
+    right structure-evaluation method (STAR vs generic) per QUESTION rather
+    than per session, now that "mock" genuinely contains behavioral,
+    technical and HR questions instead of only ever HR."""
+    if category_id == "mock":
+        return _MOCK_STAGES
+    return [category_id] * len(get_fixed_questions(category_id))
 
 
 def get_job_role_questions(job_role: str, limit: int = 5) -> list[str]:

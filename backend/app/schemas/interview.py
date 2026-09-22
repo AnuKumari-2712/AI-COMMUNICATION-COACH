@@ -79,6 +79,11 @@ class InterviewAnswerResponse(BaseModel):
     technical_matched_concepts: list[str] = []
     technical_missing_concepts: list[str] = []
     technical_explanation: str = ""
+    # MODULE 9: a real follow-up question generated from something specific
+    # in THIS answer (see followup_generator.py) — None when the answer had
+    # nothing specific enough to follow up on, rather than a generic,
+    # disconnected question.
+    followup_question: InterviewQuestion | None = None
     feedback: str
 
 
