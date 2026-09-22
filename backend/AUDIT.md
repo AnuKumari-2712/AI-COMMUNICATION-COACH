@@ -253,6 +253,51 @@ Result: `"pronunciation":73.8,"pronunciation_reliable":false,"pronunciation_meth
 
 ---
 
-## Modules 6-12 — Not yet started
+## Module 6 — Answer Structure Honesty (`or True` bug) — ✅ DONE
 
-See the module plan and per-module findings in the audit delivered in-conversation (answer structure `or True` bug, answer relevance, technical correctness, interview follow-ups, scoring transparency, data validation, ground-truth benchmark). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.
+**Current metric (before):** `structure_score` and its `introduction` component, from `text_analysis.structure_analysis()`, used directly by Text Practice and (via `structure_analyzer.evaluate_structure`) by non-behavioral interview answers.
+
+**Accuracy problem found (a real, working bug, exactly as flagged in the original audit):**
+```python
+intro_present = bool(sentences) and (_has_any(_STRUCTURE_KEYWORDS["introduction"]) or True)
+```
+The `or True` makes `intro_present` always true for any non-empty answer, regardless of whether the opening sentence establishes anything at all. A one-word answer ("Yes.") scored the same 100.0 on "introduction" as an answer that opened with genuine framing — the component measured nothing.
+
+**Fix implemented:**
+- Replaced the hardcoded `or True` with `_looks_like_substantive_opening(sentence)`: a real, checkable signal — the first sentence must have at least 6 words and not start with a throwaway filler/acknowledgment ("yes", "um", "okay", "sure", etc.) — in addition to the existing literal-keyword check ("my name is", "let me begin", ...).
+- This is deliberately not as strict as requiring a literal stock phrase (most real interview answers never say "let me begin") but is a genuine measurement rather than a pass-through: a trivial one-word or filler-opening answer no longer gets full introduction credit just because *some* text exists.
+- Confirmed `evaluate_star_format()` (behavioral, Situation/Task/Action/Result) and `structure_analysis()` (non-behavioral/technical, introduction/main_point/supporting_explanation/example/conclusion) are genuinely separate evaluations already wired correctly in `interview_service.answer_question()`'s `is_behavioral` branch — the audit's "don't force STAR on every question type" requirement was already satisfied by the existing branch, and is now covered by a regression test rather than just asserted.
+
+**Files changed:**
+- `backend/app/nlp/text_analysis.py` (`structure_analysis` — real `_looks_like_substantive_opening` check replaces `or True`)
+- `backend/tests/test_structure_analysis.py` (new — 9 tests)
+
+**Known, honest, NOT fixed in this module:** `_looks_like_substantive_opening` is still a shallow heuristic (word count + non-filler first word), not true discourse-structure understanding — a 6-word non-filler sentence that's actually off-topic rambling would still pass. This replaces "always true" with "a real, if imperfect, signal," which is the honest floor achievable without a much heavier NLU model (see README §13 on scope). `example_present` and `conclusion_present` were checked and are genuine keyword/position checks already (no `or True` there) — left unchanged.
+
+**Verification — run this yourself:**
+```bash
+cd backend
+venv\Scripts\activate
+pytest tests/ -v
+```
+
+**Actual output obtained (2026-09-22):**
+```
+73 passed, 2 warnings in 8.37s
+```
+
+**Live API proof:**
+```bash
+curl -X POST http://localhost:8000/api/v1/assessment/text -H "Content-Type: application/json" -d '{"student_id":"demo-student","question":"Tell me about a challenge you faced","answer":"Yes."}'
+# → structure_score: 32.0 (introduction NOT credited — under the old `or True` bug this would have been 100 on introduction alone)
+
+curl -X POST http://localhost:8000/api/v1/assessment/text -H "Content-Type: application/json" -d '{"student_id":"demo-student","question":"Tell me about a challenge you faced","answer":"I recently led a major project redesigning our checkout experience for mobile users. For example, we cut load time by half. As a result, conversions improved."}'
+# → structure_score: 100.0
+```
+Confirmed against a live running server (port 8125, separate from the dev server): the exact bug named in the audit (a one-word answer getting full introduction credit) is fixed, while a genuinely well-structured answer still scores at the top.
+
+---
+
+## Modules 7-12 — Not yet started
+
+See the module plan and per-module findings in the audit delivered in-conversation (answer relevance, technical correctness, interview follow-ups, scoring transparency, data validation, ground-truth benchmark). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.

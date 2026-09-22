@@ -137,6 +137,28 @@ def vocabulary_analysis(text: str) -> dict:
     }
 
 
+_INTRO_MIN_WORDS = 6
+_INTRO_FILLER_OPENERS = {"yes", "no", "um", "uh", "well", "okay", "ok", "so", "basically", "sure"}
+
+
+def _looks_like_substantive_opening(sentence: str) -> bool:
+    """MODULE 6 (see AUDIT.md): `intro_present` used to be `... or True`,
+    which made it always true for any non-empty answer regardless of
+    whether the opening sentence actually established anything — a
+    hardcoded pass-through disguised as a measurement. A literal keyword
+    check ("my name is", "let me begin") is too strict, since most real
+    interview answers launch straight into content without a stock
+    opening phrase. This is the middle ground: a real, checkable signal —
+    does the first sentence have enough words to plausibly frame the
+    answer, and does it not start with a throwaway filler word/acknowledgment
+    ("Yes.", "Um, so...") — rather than "any sentence exists at all"."""
+    words = sentence.split()
+    if len(words) < _INTRO_MIN_WORDS:
+        return False
+    first_word = words[0].strip(".,!?\"'").lower()
+    return first_word not in _INTRO_FILLER_OPENERS
+
+
 def structure_analysis(text: str) -> dict:
     lower = text.lower()
     sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
@@ -144,7 +166,9 @@ def structure_analysis(text: str) -> dict:
     def _has_any(keywords: list[str]) -> bool:
         return any(k in lower for k in keywords)
 
-    intro_present = bool(sentences) and (_has_any(_STRUCTURE_KEYWORDS["introduction"]) or True)  # first sentence always counts as an attempt
+    intro_present = bool(sentences) and (
+        _has_any(_STRUCTURE_KEYWORDS["introduction"]) or _looks_like_substantive_opening(sentences[0])
+    )
     example_present = _has_any(_STRUCTURE_KEYWORDS["example"])
     conclusion_present = _has_any(_STRUCTURE_KEYWORDS["conclusion"]) or (len(sentences) > 1 and sentences[-1].lower().startswith(("so", "overall", "that")))
     main_point_present = len(sentences) >= 2
