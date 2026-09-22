@@ -70,6 +70,15 @@ class InterviewAnswerResponse(BaseModel):
     relevance_addressed_keywords: list[str] = []
     relevance_missing_keywords: list[str] = []
     relevance_sufficient_data: bool = True
+    # MODULE 8: only the fixed technical-interview questions have a known
+    # concept checklist to verify against — see technical_knowledge.py.
+    # applicable=False for any question without one (dynamic resume/job-role
+    # questions, or non-technical categories), never a fabricated verdict.
+    technical_applicable: bool = False
+    technical_verdict: Literal["correct", "partially_correct", "incorrect", "insufficient"] | None = None
+    technical_matched_concepts: list[str] = []
+    technical_missing_concepts: list[str] = []
+    technical_explanation: str = ""
     feedback: str
 
 
@@ -96,6 +105,13 @@ class InterviewResultResponse(BaseModel):
     # (scoring transparency/reweighting) in AUDIT.md for that follow-on step.
     relevance: float = 0.0
     relevance_sufficient_data: bool = True
+    # MODULE 8: counts across only the answers where a verified concept
+    # checklist existed (technical_evaluated_count) — see technical_knowledge.py.
+    technical_evaluated_count: int = 0
+    technical_correct_count: int = 0
+    technical_partially_correct_count: int = 0
+    technical_incorrect_count: int = 0
+    technical_insufficient_count: int = 0
     went_well: list[str]
     needs_improvement: list[str]
     recommended_exercises: list[str]

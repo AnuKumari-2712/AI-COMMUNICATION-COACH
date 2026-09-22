@@ -347,6 +347,56 @@ Also confirmed through the real interview session flow (port 8126, separate from
 
 ---
 
-## Modules 8-12 — Not yet started
+## Module 8 — Technical Answer Correctness — ✅ DONE
 
-See the module plan and per-module findings in the audit delivered in-conversation (technical correctness, interview follow-ups, scoring transparency/reweighting, data validation, ground-truth benchmark). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.
+**Current metric (before):** none. A technical-interview answer was scored only on grammar/vocabulary/structure/fluency/relevance — nothing checked whether the answer's actual technical content was right. An answer that "sounded professional" (confident tone, correct grammar, reasonable length) could score well while containing zero correct technical content, and nothing would catch it.
+
+**Accuracy problem found:** exactly the gap named in the original audit ("verify actual technical content; distinguish correct/partially correct/incorrect/insufficient; don't score high just because it 'sounds professional'; explain what's right/wrong") — none of this existed.
+
+**Fix implemented — new `app/interview/technical_knowledge.py::evaluate_technical_correctness(question, answer)`:**
+- A small, manually-curated concept checklist for each of the 5 **fixed** technical-interview questions in `question_bank.py` (the only technical questions with a stable, known-in-advance correct-answer shape — `category_id == "technical"` always uses this fixed list, never the dynamic resume/job-role generators). Each concept lists the phrasings that indicate it was mentioned, split into `required` (must be present for "correct") and bonus (shows deeper understanding, not mandatory).
+- Verdict logic: `insufficient` if the answer is under 6 words (too short to judge either way — not the same as "wrong"); `correct` if ≥75% of required concepts are matched; `partially_correct` if some but not all required concepts are matched; `incorrect` if none are matched. This directly proves "don't score high just for sounding professional" — a long, confident, grammatically perfect answer with zero required concepts still gets `incorrect`.
+- `matched_concepts`/`missing_concepts` are returned as concrete evidence, plus a human-readable `explanation` naming exactly what was right/wrong (the audit's "explain what's right and wrong" requirement).
+- Dynamic technical-sounding questions (resume-based, job-role-based) and non-technical questions have no known-in-advance correct answer, so they honestly return `applicable: False` rather than a fabricated verdict — verified by `test_dynamic_question_with_no_checklist_is_marked_not_applicable` and `test_non_technical_question_is_marked_not_applicable`.
+- Wired into `interview_service.answer_question()` (`InterviewAnswerResponse` gains `technical_applicable`, `technical_verdict`, `technical_matched_concepts`, `technical_missing_concepts`, `technical_explanation`; low verdicts trigger real feedback) and `submit_session()` (aggregates verdict counts across the session into `InterviewResultResponse`, excluding non-applicable answers from the count rather than treating them as correct by default).
+
+**Files changed:**
+- `backend/app/interview/technical_knowledge.py` (new)
+- `backend/app/schemas/interview.py` (`InterviewAnswerResponse` gains 5 technical-correctness fields; `InterviewResultResponse` gains 5 aggregate count fields)
+- `backend/app/services/interview_service.py` (`answer_question`/`submit_session` compute, feed back, and aggregate technical correctness)
+- `backend/tests/test_technical_correctness.py` (new — 10 tests, including one that asserts all 5 fixed technical questions actually have a checklist entry, so a future question-bank edit can't silently fall through to "not applicable")
+
+**Known, honest, NOT fixed in this module (documented, not hidden):**
+1. This checks whether the right **words/phrasings** appear, not whether they're used correctly in context — a candidate who strings the right keywords together in a nonsensical sentence would still be credited, and a candidate who explains the concept correctly using entirely different vocabulary than the checklist anticipated would be missed. A truly robust version would need either a much larger curated answer bank or an LLM judge, neither of which exists in this project (see README §13).
+2. Coverage is exactly 5 questions — the entire fixed technical-interview set. It does not extend to resume-based or job-role-based "technical-sounding" questions, which have no fixed correct answer to check against by design; extending this would require either a per-role concept database or a different verification strategy entirely.
+3. **Separately discovered, out of scope for this module:** `question_bank.get_fixed_questions("mock")` has no `"mock"` entry in `_FIXED_QUESTIONS`, so it silently falls back to the HR question list — meaning "Full Mock Interview" (described as "End-to-end simulation across all rounds") currently only ever asks HR questions. This is a real, separate bug in interview *question selection*, not in *scoring accuracy*, and fits better under a future module on interview question quality/variety (the original audit's section 11) than under technical-correctness scoring. Documented here so it isn't lost, not fixed in this commit.
+
+**Verification — run this yourself:**
+```bash
+cd backend
+venv\Scripts\activate
+pytest tests/ -v
+```
+
+**Actual output obtained (2026-09-22):**
+```
+93 passed, 2 warnings in 2.98s
+```
+
+**Live API proof, through a real technical interview session:**
+```bash
+BASE=http://127.0.0.1:8127/api/v1
+# start a "technical" session, then answer question 0 ("Explain how a hash map works and its average time complexity."):
+curl -X POST $BASE/interview/answer -H "Content-Type: application/json" -d '{"session_id":"<id>","question_id":"<qid>","answer_text":"A hash map uses a hash function to convert each key into an index into buckets, storing key-value pairs there, giving average O(1) lookups.","mode":"text","duration_seconds":null}'
+# → technical_verdict: "correct", matched: [hash function / hashing, key-value storage in buckets/array, average O(1) time complexity]
+
+curl -X POST $BASE/interview/answer -H "Content-Type: application/json" -d '{"session_id":"<id>","question_id":"<qid2>","answer_text":"That is a great question, and in my extensive professional experience this topic is extremely important for building robust and scalable software systems.","mode":"text","duration_seconds":null}'
+# → technical_verdict: "incorrect", feedback includes "review the core technical concepts this question is testing"
+```
+Confirmed against a live running server (port 8127, separate from the dev server): a genuinely correct answer is credited, and a confident, well-formed, "professional-sounding" answer with zero actual technical content is correctly flagged `incorrect` — proving the exact failure mode the audit named ("don't score high just because it sounds professional") no longer happens.
+
+---
+
+## Modules 9-12 — Not yet started
+
+See the module plan and per-module findings in the audit delivered in-conversation (interview follow-ups/question quality — including the "mock" category bug found above, scoring transparency/reweighting, data validation, ground-truth benchmark). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.

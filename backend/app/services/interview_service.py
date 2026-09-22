@@ -12,6 +12,7 @@ import uuid
 
 from app.interview import question_bank
 from app.interview.structure_analyzer import evaluate_star_format, evaluate_structure
+from app.interview.technical_knowledge import evaluate_technical_correctness
 from app.ml.transformer_confidence import score_confidence
 from app.nlp import grammar_rules, relevance_analysis, text_analysis
 from app.personalization import learner_profile
@@ -70,6 +71,12 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
     question_text = session["questions"].get(question_id, "")
     relevance_result = relevance_analysis.analyze_relevance(question_text, answer_text)
 
+    # MODULE 8: only the FIXED technical-interview questions (question_bank.py)
+    # have a known-in-advance correct-answer shape to check against; dynamic
+    # resume/job-role questions honestly report applicable=False rather than
+    # a fabricated verdict. See technical_knowledge.py.
+    technical_result = evaluate_technical_correctness(question_text, answer_text)
+
     is_behavioral = session["category_id"] in ("behavioral", "mock")
     if is_behavioral:
         structure_result = evaluate_star_format(answer_text)
@@ -107,6 +114,8 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
     clarity_result = text_analysis.clarity_analysis(answer_text)
 
     feedback_bits = []
+    if technical_result["applicable"] and technical_result["verdict"] in ("incorrect", "partially_correct", "insufficient"):
+        feedback_bits.append("review the core technical concepts this question is testing")
     if relevance_result["sufficient_data"] and relevance_result["score"] < 50:
         feedback_bits.append("make sure you directly address what the question is asking")
     if structure_score < 60:
@@ -131,6 +140,8 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
             "filler_count": filler_count,
             "relevance": relevance_result["score"],
             "relevance_sufficient_data": relevance_result["sufficient_data"],
+            "technical_applicable": technical_result["applicable"],
+            "technical_verdict": technical_result["verdict"],
             # NOTE: this is practice-TIME bookkeeping only (feeds streak/total
             # practice minutes), separate from fluency/pace scoring above —
             # a typed answer has no speech duration, so 90s is an honest
@@ -155,6 +166,11 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
         relevance_addressed_keywords=relevance_result["addressed_keywords"],
         relevance_missing_keywords=relevance_result["missing_keywords"],
         relevance_sufficient_data=relevance_result["sufficient_data"],
+        technical_applicable=technical_result["applicable"],
+        technical_verdict=technical_result["verdict"],
+        technical_matched_concepts=technical_result["matched_concepts"],
+        technical_missing_concepts=technical_result["missing_concepts"],
+        technical_explanation=technical_result["explanation"],
         feedback=feedback,
     )
 
@@ -178,6 +194,17 @@ def submit_session(session_id: str) -> InterviewResultResponse:
     structure = avg("structure")
     relevance = avg("relevance")
     relevance_sufficient_data = all(a["relevance_sufficient_data"] for a in answers)
+
+    # MODULE 8: aggregate per-answer technical-correctness verdicts across
+    # the session. Only counts answers where a verified concept checklist
+    # existed at all (technical_applicable) — dynamic/non-technical
+    # questions are excluded rather than silently counted as "correct".
+    technical_verdicts = [a["technical_verdict"] for a in answers if a["technical_applicable"]]
+    technical_evaluated_count = len(technical_verdicts)
+    technical_correct_count = technical_verdicts.count("correct")
+    technical_partially_correct_count = technical_verdicts.count("partially_correct")
+    technical_incorrect_count = technical_verdicts.count("incorrect")
+    technical_insufficient_count = technical_verdicts.count("insufficient")
 
     # MODULE 5: pronunciation used to be a flat hardcoded 78.0 for every
     # interview, regardless of anything in the actual answers — the exact
@@ -211,6 +238,13 @@ def submit_session(session_id: str) -> InterviewResultResponse:
     else:
         needs_improvement.append("Answer structure could be clearer — aim for intro, point, example, conclusion.")
         recommended.append("Practice STAR-format storytelling in Fluency Practice.")
+
+    if technical_evaluated_count > 0:
+        if technical_correct_count == technical_evaluated_count:
+            went_well.append("Strong technical accuracy — your answers covered the core concepts being tested.")
+        elif technical_incorrect_count + technical_insufficient_count > technical_evaluated_count // 2:
+            needs_improvement.append("Several technical answers missed the core concepts the question was testing.")
+            recommended.append("Review the fundamentals covered in this Technical Interview category before retrying.")
 
     if relevance_sufficient_data:
         if relevance >= 65:
@@ -266,6 +300,11 @@ def submit_session(session_id: str) -> InterviewResultResponse:
         pronunciation_method=pronunciation_result["method"],
         relevance=relevance,
         relevance_sufficient_data=relevance_sufficient_data,
+        technical_evaluated_count=technical_evaluated_count,
+        technical_correct_count=technical_correct_count,
+        technical_partially_correct_count=technical_partially_correct_count,
+        technical_incorrect_count=technical_incorrect_count,
+        technical_insufficient_count=technical_insufficient_count,
         went_well=went_well or ["You completed the full interview — that's a strong first step."],
         needs_improvement=needs_improvement or ["No major issues detected — keep practicing to maintain this level."],
         recommended_exercises=recommended or ["Take another mock interview to build consistency."],
