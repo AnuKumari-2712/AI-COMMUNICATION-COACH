@@ -494,6 +494,54 @@ Also confirmed through a real interview session (port 8129, separate from the de
 
 ---
 
-## Modules 11-12 — Not yet started
+## Module 11 — Data Validation — ✅ DONE
 
-See the module plan and per-module findings in the audit delivered in-conversation (data validation across all schemas — NaN/impossible-percentage/negative-count guards, ground-truth benchmark + formal accuracy report). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.
+**Current state (before):** most score-like response fields were bare `float`/`int` with no bounds — only `TextAnalysisResponse.grammar_score` had a `Field(ge=0, le=100)` constraint (from Module 1); every other score, count, and composite in `assessment.py`/`interview.py` had no schema-level guard against an impossible value ever reaching a caller.
+
+**Audit performed:** a systematic pass over every division operation in the backend (`grep -rn " / "`) to check for zero-division/NaN risk, covering `grammar_rules.py`, `text_analysis.py`, `relevance_analysis.py`, `technical_knowledge.py`, `speech_metrics.py`, `audio_utils.py`, `scoring_engine.py`, and the personalization modules (`exercise_generator.py`, `weakness_detector.py`, `admin_service.py`, `student_service.py`).
+
+**Findings:**
+1. **One real bug found:** `scoring_engine.compute_weighted_score()` divided by `total_weight` (the sum of reliable components' weights) with no guard — if every reliable component happened to carry weight `0.0`, this would raise `ZeroDivisionError` and crash the request instead of degrading gracefully. No current caller triggers this, but this is the shared engine behind both headline `overall` scores, so it must not be able to crash regardless of what a future caller passes in.
+2. **Everything else already had a real, working guard** — this is worth stating plainly rather than inventing problems to fix: `grammar_rules.analyze()`'s `sentence_count = max(len(sentences), 1 if word_count else 0)` already prevents its division by zero (a Module 1 safeguard); `vocabulary_analysis`/`structure_analysis`/`clarity_analysis` all early-return before their divisions when the input is empty; `relevance_analysis` and `technical_knowledge` guard identically; `speech_metrics.compute_speech_metrics` requires a validated positive `duration_seconds` (Module 4's `InvalidDurationError`); `audio_utils.analyze_wav_pauses` already guards `frame_rate == 0` and uses `max(pause_count, 1)`; every personalization-module average is guarded by a `len(...) >= 2` or truthiness check before dividing. `SkillScores` (in `schemas/common.py`) already had `Field(ge=0, le=100)` on every skill score from before this audit.
+3. **Missing schema-level bounds (the main gap):** `TextAnalysisResponse`, `VoiceAnalysisResponse`, `AnswerStructureScore`, `InterviewAnswerResponse`, and `InterviewResultResponse` mostly lacked `Field(ge=0, le=100)`/`Field(ge=0)` constraints — meaning even though the *current* computation code doesn't produce out-of-range values, nothing at the API boundary would catch it if a future change ever introduced a bug that did. The original audit's own wording ("no NaN scores, impossible percentages, negative counts...") is a boundary-level guarantee, not just an internal-computation trust exercise.
+
+**Fix implemented:**
+- `scoring_engine.compute_weighted_score()`: added a `total_weight <= 0` guard (returns a safe `0.0` with an explanatory message instead of dividing by zero), and clamps the final score to `[0, 100]` as defense in depth.
+- Added explicit `Field(ge=0, le=100)` (scores/percentages) or `Field(ge=0)` (counts) constraints across `TextAnalysisResponse`, `VoiceAnalysisResponse`, `AnswerStructureScore`, `InterviewAnswerResponse`, and `InterviewResultResponse` — every score-like float and every count-like int now rejects an impossible value at construction time rather than silently serializing it to a client.
+
+**Files changed:**
+- `backend/app/services/scoring_engine.py` (zero-weight guard, score clamp)
+- `backend/app/schemas/assessment.py` (bounds on `TextAnalysisResponse`, `VoiceAnalysisResponse`)
+- `backend/app/schemas/interview.py` (bounds on `AnswerStructureScore`, `InterviewAnswerResponse`, `InterviewResultResponse`)
+- `backend/tests/test_data_validation.py` (new — 75 tests: 8 parametrized adversarial-input sweeps × ~10 pathological inputs each across grammar/vocabulary/structure/clarity/relevance/speech-metrics/technical-correctness, plus direct pydantic-rejection tests for each schema, plus a real-session invariant check)
+- `backend/tests/test_scoring_engine.py` (2 new tests for the zero-weight guard and the `[0, 100]` clamp)
+
+**Known, honest, NOT fixed in this module (documented, not hidden):** these are defense-in-depth boundary checks, not a claim that the underlying computations were ever actually producing bad values in production — the audit above found the computation logic already sound (with the one exception fixed). A schema-level bound is only as good as the range chosen; `lexical_diversity`'s `[0, 1]` bound, for instance, is a real mathematical property of Herdan's C, not an arbitrary guess, but a future new metric would need its own bound chosen with the same care, not copy-pasted blindly.
+
+**Verification — run this yourself:**
+```bash
+cd backend
+venv\Scripts\activate
+pytest tests/ -v
+```
+
+**Actual output obtained (2026-09-23):**
+```
+190 passed, 2 warnings in 9.40s
+```
+
+**Live API proof:**
+```bash
+curl -X POST http://localhost:8000/api/v1/assessment/text -H "Content-Type: application/json" -d '{"student_id":"demo-student","question":"Tell me about yourself.","answer":"!!! ??? ... 🙂🙂🙂"}'
+# → 200 OK — punctuation/emoji-only input degrades gracefully to low/zero scores, not a crash or an out-of-range value
+
+curl -X POST http://localhost:8000/api/v1/assessment/text -H "Content-Type: application/json" -d '{"student_id":"demo-student","question":"Tell me about a time you led a team.","answer":"I led a five-person team through a difficult migration project last year, and we delivered it two weeks early."}'
+# → 200 OK, score: 85.1, grammar_score: 100.0 — normal scoring is unaffected by the new bounds
+```
+Confirmed against a live running server (port 8130, separate from the dev server) that adversarial input (punctuation-only, emoji-only) still returns a clean `200` with in-range scores rather than a crash, and that ordinary answers score exactly as before — the new validation is a safety net, not a behavior change for valid input.
+
+---
+
+## Module 12 — Not yet started
+
+See the module plan and per-module findings in the audit delivered in-conversation (ground-truth benchmark with manually verified examples + a formal accuracy report per the original audit's sections 18-19 — Metric/Method/Input/Expected/Actual/Accuracy-error/Known limitations, never claiming 100% accuracy unless a benchmark demonstrates it). Will get its own entry here, in this same format, once implemented.

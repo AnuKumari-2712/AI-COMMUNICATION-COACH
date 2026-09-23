@@ -72,6 +72,25 @@ def test_formula_names_excluded_components():
     assert "pronunciation" in result["formula"]
 
 
+def test_zero_total_weight_among_reliable_components_does_not_crash():
+    # MODULE 11: a pathological all-zero-weight set must return a safe
+    # score instead of raising ZeroDivisionError.
+    components = [
+        {"name": "a", "score": 90.0, "weight": 0.0, "reliable": True},
+        {"name": "b", "score": 10.0, "weight": 0.0, "reliable": True},
+    ]
+    result = compute_weighted_score(components)
+    assert result["score"] == 0.0
+
+
+def test_score_is_always_within_zero_to_hundred():
+    components = [
+        {"name": "a", "score": 100.0, "weight": 1.0, "reliable": True},
+    ]
+    result = compute_weighted_score(components)
+    assert 0.0 <= result["score"] <= 100.0
+
+
 def test_deterministic_across_repeated_calls():
     components = [
         {"name": "grammar", "score": 82.5, "weight": 0.5, "reliable": True},

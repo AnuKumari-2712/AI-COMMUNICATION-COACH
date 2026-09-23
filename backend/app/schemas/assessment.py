@@ -28,36 +28,39 @@ class GrammarCorrection(BaseModel):
 
 class TextAnalysisResponse(BaseModel):
     source: AnalysisSource
-    score: float
+    # MODULE 11 (see AUDIT.md): score-like fields below carry explicit
+    # ge=0/le=100 bounds (and counts carry ge=0) so a computation bug that
+    # ever produced an impossible value (negative, >100, NaN) is rejected
+    # by pydantic at the API boundary instead of being silently served.
+    score: float = Field(ge=0, le=100)
     grammar_score: float = Field(ge=0, le=100)
-    vocabulary_score: float
-    structure_score: float
-    clarity_score: float
+    vocabulary_score: float = Field(ge=0, le=100)
+    structure_score: float = Field(ge=0, le=100)
+    clarity_score: float = Field(ge=0, le=100)
     corrections: list[GrammarCorrection]
     vocabulary_suggestions: list[str]
     repeated_words: list[str]
     better_alternative: str
-    word_count: int
+    word_count: int = Field(ge=0)
     # MODULE 1 transparency fields — lets a caller verify grammar_score by
     # hand instead of trusting it blindly. See grammar_rules.py::analyze().
-    grammar_issue_count: int = 0
-    spelling_issue_count: int = 0
-    style_issue_count: int = 0
+    grammar_issue_count: int = Field(default=0, ge=0)
+    spelling_issue_count: int = Field(default=0, ge=0)
+    style_issue_count: int = Field(default=0, ge=0)
     grammar_score_formula: str = ""
     grammar_sufficient_data: bool = True
     # MODULE 2 transparency fields — see text_analysis.py::vocabulary_analysis().
     # lexical_diversity is Herdan's C (length-stable); sufficient_data is
     # false for short answers where diversity measures are statistically
     # unreliable, so the score should be treated as a low-confidence estimate.
-    lexical_diversity: float = 0.0
-    content_word_count: int = 0
+    lexical_diversity: float = Field(default=0.0, ge=0, le=1)
+    content_word_count: int = Field(default=0, ge=0)
     vocabulary_score_formula: str = ""
     vocabulary_sufficient_data: bool = True
     # MODULE 7 transparency fields — see relevance_analysis.py::analyze_relevance.
     # This is keyword/lemma-overlap between question and answer, NOT semantic
     # understanding of whether the content actually answers the question.
-    # Not yet folded into `score` above — see Module 10 in AUDIT.md.
-    relevance_score: float = 0.0
+    relevance_score: float = Field(default=0.0, ge=0, le=100)
     relevance_addressed_keywords: list[str] = []
     relevance_missing_keywords: list[str] = []
     relevance_score_formula: str = ""
@@ -79,27 +82,29 @@ class VoiceAnalysisRequest(BaseModel):
 class VoiceAnalysisResponse(BaseModel):
     source: AnalysisSource
     transcript: str
-    grammar_score: float
-    vocabulary_score: float
-    fluency_score: float
-    pronunciation_score: float
-    confidence_score: float
-    words_per_minute: float
-    pace_score: float
-    pace_consistency: float
-    filler_word_count: int
-    filler_words_per_minute: float
+    # MODULE 11: see the equivalent note on TextAnalysisResponse above —
+    # explicit bounds reject an impossible score/count at the API boundary.
+    grammar_score: float = Field(ge=0, le=100)
+    vocabulary_score: float = Field(ge=0, le=100)
+    fluency_score: float = Field(ge=0, le=100)
+    pronunciation_score: float = Field(ge=0, le=100)
+    confidence_score: float = Field(ge=0, le=100)
+    words_per_minute: float = Field(ge=0)
+    pace_score: float = Field(ge=0, le=100)
+    pace_consistency: float = Field(ge=0, le=100)
+    filler_word_count: int = Field(ge=0)
+    filler_words_per_minute: float = Field(ge=0)
     most_frequent_filler: str | None
-    pause_count: int
-    average_pause_seconds: float
+    pause_count: int = Field(ge=0)
+    average_pause_seconds: float = Field(ge=0)
     # MODULE 3 transparency (see grammar/vocabulary equivalents above)
-    high_confidence_filler_count: int = 0
-    ambiguous_filler_count: int = 0
+    high_confidence_filler_count: int = Field(default=0, ge=0)
+    ambiguous_filler_count: int = Field(default=0, ge=0)
     filler_excluded_examples: list[str] = []
     # MODULE 4 transparency: raw measurements behind words_per_minute/pace,
     # and whether pause data is real (measured from WAV audio) or a
     # transcript-based estimate. See speech_metrics.py::compute_speech_metrics.
-    word_count: int = 0
+    word_count: int = Field(default=0, ge=0)
     reference_range_wpm: str = "130-160"
     pace_source: Literal["measured", "estimated"] = "estimated"
     # MODULE 5: pronunciation_score is a transcript-only proxy (no audio

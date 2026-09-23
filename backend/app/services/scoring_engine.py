@@ -45,8 +45,23 @@ def compute_weighted_score(components: list[dict]) -> dict:
             "excluded_components": excluded,
         }
 
+    # MODULE 11 (see AUDIT.md): a total_weight of 0 (every reliable
+    # component happening to carry weight 0.0) would otherwise divide by
+    # zero here and crash the request instead of returning a score. No
+    # current caller passes an all-zero-weight set, but this is the shared
+    # engine behind both headline `overall` scores, so it must not be able
+    # to produce a NaN/crash regardless of what future callers pass in.
     total_weight = sum(c["weight"] for c in included)
+    if total_weight <= 0:
+        return {
+            "score": 0.0,
+            "formula": "All reliable components had zero total weight — no meaningful composite could be computed.",
+            "included_components": [],
+            "excluded_components": [c["name"] for c in components],
+        }
+
     score = round(sum(c["score"] * (c["weight"] / total_weight) for c in included), 1)
+    score = max(0.0, min(100.0, score))
 
     parts = ", ".join(
         f"{c['name']}={c['score']}*{round(c['weight'] / total_weight * 100, 1)}%" for c in included
