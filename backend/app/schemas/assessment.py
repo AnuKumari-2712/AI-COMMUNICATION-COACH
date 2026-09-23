@@ -62,6 +62,13 @@ class TextAnalysisResponse(BaseModel):
     relevance_missing_keywords: list[str] = []
     relevance_score_formula: str = ""
     relevance_sufficient_data: bool = True
+    # MODULE 10 transparency — see scoring_engine.py::compute_weighted_score.
+    # `score` above is now a documented, reproducible weighted blend of
+    # grammar/vocabulary/structure/clarity/relevance; any component whose
+    # own analysis flagged insufficient data is excluded here (weight
+    # redistributed among the rest) rather than silently included.
+    overall_score_formula: str = ""
+    overall_excluded_components: list[str] = []
 
 
 class VoiceAnalysisRequest(BaseModel):

@@ -18,6 +18,7 @@ from app.schemas.assessment import (
     VoiceAnalysisResponse,
 )
 from app.schemas.common import AnalysisSource, SkillScores
+from app.services.scoring_engine import compute_weighted_score
 from app.speech import stt
 from app.speech.audio_utils import analyze_wav_pauses
 from app.speech.speech_metrics import compute_speech_metrics, detect_filler_words, pronunciation_proxy, text_flow_consistency
@@ -83,13 +84,24 @@ def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisRes
     # completely off-topic answer could score well on every other metric.
     relevance_result = relevance_analysis.analyze_relevance(question, answer)
 
-    overall = round(
-        grammar_result["score"] * 0.3
-        + vocab_result["score"] * 0.25
-        + structure_result["score"] * 0.25
-        + clarity_result["score"] * 0.2,
-        1,
+    # MODULE 10: `overall` used to be a fixed grammar/vocabulary/structure/
+    # clarity blend with no formula shown, and never included
+    # relevance_score at all — a completely off-topic answer with clean
+    # grammar could still score well overall. Now uses the shared, documented
+    # weighting engine, and automatically excludes (with renormalization,
+    # not silent inclusion) any component whose own analysis flagged
+    # insufficient data rather than pretending a low-confidence signal is
+    # as trustworthy as the others.
+    overall_result = compute_weighted_score(
+        [
+            {"name": "grammar", "score": grammar_result["score"], "weight": 0.25, "reliable": grammar_result["sufficient_data"]},
+            {"name": "vocabulary", "score": vocab_result["score"], "weight": 0.20, "reliable": vocab_result["sufficient_data"]},
+            {"name": "structure", "score": structure_result["score"], "weight": 0.20, "reliable": True},
+            {"name": "clarity", "score": clarity_result["score"], "weight": 0.15, "reliable": True},
+            {"name": "relevance", "score": relevance_result["score"], "weight": 0.20, "reliable": relevance_result["sufficient_data"]},
+        ]
     )
+    overall = overall_result["score"]
 
     corrections = [
         GrammarCorrection(
@@ -143,6 +155,8 @@ def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisRes
         relevance_missing_keywords=relevance_result["missing_keywords"],
         relevance_score_formula=relevance_result["formula"],
         relevance_sufficient_data=relevance_result["sufficient_data"],
+        overall_score_formula=overall_result["formula"],
+        overall_excluded_components=overall_result["excluded_components"],
     )
 
 

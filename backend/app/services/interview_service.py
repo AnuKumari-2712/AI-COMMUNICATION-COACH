@@ -24,6 +24,7 @@ from app.schemas.interview import (
     InterviewQuestion,
     InterviewResultResponse,
 )
+from app.services.scoring_engine import compute_weighted_score
 from app.speech.speech_metrics import compute_speech_metrics, detect_filler_words, pronunciation_proxy, text_flow_consistency
 
 logger = logging.getLogger(__name__)
@@ -254,8 +255,37 @@ def submit_session(session_id: str) -> InterviewResultResponse:
     pronunciation_result = pronunciation_proxy(vocab_of_answers["average_word_length"], stt_used=False)
     pronunciation = pronunciation_result["score"]
 
-    communication = round((grammar + vocabulary + clarity + structure) / 4, 1)
-    overall = round((communication + confidence + fluency + pronunciation) / 4, 1)
+    # MODULE 10: `communication` used to be a bare unweighted average, and
+    # `overall` blended it with confidence/fluency/**pronunciation** — even
+    # though Module 5 established pronunciation is never reliably measured
+    # here (`pronunciation_reliable` is always False). An admittedly-
+    # unreliable number was still shaping the headline score at full
+    # weight, and `relevance` (added in Module 7) was never included at
+    # all. Both composites now use the shared, documented weighting engine.
+    communication_result = compute_weighted_score(
+        [
+            {"name": "grammar", "score": grammar, "weight": 0.30, "reliable": True},
+            {"name": "vocabulary", "score": vocabulary, "weight": 0.25, "reliable": True},
+            {"name": "clarity", "score": clarity, "weight": 0.20, "reliable": True},
+            {"name": "structure", "score": structure, "weight": 0.25, "reliable": True},
+        ]
+    )
+    communication = communication_result["score"]
+
+    # pronunciation is deliberately NOT a candidate component here at all
+    # (not just excluded for low confidence this one time) — Module 5
+    # established there is no code path in this project where pronunciation
+    # is reliably measured, so it never contributes to `overall`, by design,
+    # not by chance. It's still reported separately for informational value.
+    overall_result = compute_weighted_score(
+        [
+            {"name": "communication", "score": communication, "weight": 0.40, "reliable": True},
+            {"name": "fluency", "score": fluency, "weight": 0.25, "reliable": True},
+            {"name": "confidence", "score": confidence, "weight": 0.15, "reliable": True},
+            {"name": "relevance", "score": relevance, "weight": 0.20, "reliable": relevance_sufficient_data},
+        ]
+    )
+    overall = overall_result["score"]
 
     went_well = []
     needs_improvement = []
@@ -339,6 +369,9 @@ def submit_session(session_id: str) -> InterviewResultResponse:
         technical_partially_correct_count=technical_partially_correct_count,
         technical_incorrect_count=technical_incorrect_count,
         technical_insufficient_count=technical_insufficient_count,
+        overall_score_formula=overall_result["formula"],
+        overall_excluded_components=overall_result["excluded_components"],
+        communication_score_formula=communication_result["formula"],
         went_well=went_well or ["You completed the full interview — that's a strong first step."],
         needs_improvement=needs_improvement or ["No major issues detected — keep practicing to maintain this level."],
         recommended_exercises=recommended or ["Take another mock interview to build consistency."],

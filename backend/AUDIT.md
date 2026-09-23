@@ -447,6 +447,53 @@ Confirmed against a live running server (port 8128, separate from the dev server
 
 ---
 
-## Modules 10-12 — Not yet started
+## Module 10 — Scoring Transparency & Reweighting — ✅ DONE
 
-See the module plan and per-module findings in the audit delivered in-conversation (scoring transparency/reweighting — including folding relevance and technical-correctness into the overall composite, data validation, ground-truth benchmark + accuracy report). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.
+**Current metric (before):** `score` (text assessment) and `overall`/`communication` (interview result), each computed with hardcoded, unexplained weights baked directly into the service code.
+
+**Accuracy problems found:**
+1. Text assessment's `overall = grammar*0.3 + vocabulary*0.25 + structure*0.25 + clarity*0.2` never included `relevance_score` at all, even after Module 7 added it — a completely off-topic answer with clean grammar could still get a high `overall`, and no formula was shown to the caller.
+2. The interview's `overall = (communication + confidence + fluency + pronunciation) / 4` blended in **pronunciation** at full weight — despite Module 5 establishing that `pronunciation_reliable` is *always* `False` in this project. An admittedly-unreliable, proxy-only number was silently shaping the headline interview score. `relevance` (Module 7) and the technical-correctness verdicts (Module 8) were never folded in either.
+3. Neither composite was documented or reproducible by hand — "no freely-invented LLM numbers, consistent scoring" per the original audit's scoring-system requirement needed an actual shown formula, not just consistent code.
+
+**Fix implemented — new `app/services/scoring_engine.py::compute_weighted_score(components)`:** a single, shared, documented weighting function used by both flows. Each component carries its own `reliable` flag; anything unreliable (or flagged `sufficient_data=False` by its own analysis) is **excluded from the weighted average and the remaining weights are renormalized to sum to 1.0** — not silently included at full weight, and not silently dropped with no explanation. Returns a `formula` string naming every component, its score, and its actual (renormalized) weight percentage, plus which components were excluded and why.
+
+- **Text assessment** (`assessment_service.analyze_text`): `overall` now = grammar (25%) + vocabulary (20%) + structure (20%) + clarity (15%) + relevance (20%), with grammar/vocabulary/relevance excluded automatically when their own `sufficient_data` flag is `False` (e.g. a short answer with too few content words to trust the vocabulary score). `TextAnalysisResponse` gains `overall_score_formula` and `overall_excluded_components`.
+- **Interview result** (`interview_service.submit_session`): `communication` now = grammar (30%) + vocabulary (25%) + clarity (20%) + structure (25%); `overall` now = communication (40%) + fluency (25%) + confidence (15%) + relevance (20%, excluded when the session's relevance data was insufficient). **Pronunciation is not a candidate component in `overall` at all** — by design, not by chance, since Module 5 established there is no code path where it's reliably measured; it's still reported separately (`pronunciation`, `pronunciation_reliable`, `pronunciation_method`) for informational value. `InterviewResultResponse` gains `overall_score_formula`, `overall_excluded_components`, `communication_score_formula`.
+- Technical-correctness verdicts (Module 8) are deliberately **not** folded into `overall` — they're categorical (`correct`/`partially_correct`/`incorrect`/`insufficient`) and only apply to the subset of questions with a verified checklist, so diluting a composite meant to apply uniformly across HR/behavioral/technical/mock sessions with a technical-only signal would be the wrong fix; they remain reported as their own aggregate counts.
+
+**Files changed:**
+- `backend/app/services/scoring_engine.py` (new)
+- `backend/app/services/assessment_service.py` (`analyze_text` uses the engine, includes relevance)
+- `backend/app/services/interview_service.py` (`submit_session` uses the engine for both composites, excludes pronunciation by design)
+- `backend/app/schemas/assessment.py` (`TextAnalysisResponse` gains `overall_score_formula`, `overall_excluded_components`)
+- `backend/app/schemas/interview.py` (`InterviewResultResponse` gains the same plus `communication_score_formula`)
+- `backend/tests/test_scoring_engine.py` (new — 7 tests)
+
+**Known, honest, NOT fixed in this module (documented, not hidden):** the specific weight percentages (e.g. grammar=25% vs 20%) are still a reasonable, documented judgment call rather than empirically derived from a labeled dataset — exactly the "appropriate weights per interview type" language in the original audit's example, not a claim that these particular numbers are the one true correct weighting. What this module guarantees is that the weights are *shown*, *reproducible by hand*, and that unreliable components can never silently influence the headline score — not that the specific percentages are empirically optimal.
+
+**Verification — run this yourself:**
+```bash
+cd backend
+venv\Scripts\activate
+pytest tests/ -v
+```
+
+**Actual output obtained (2026-09-23):**
+```
+113 passed, 2 warnings in 3.82s
+```
+
+**Live API proof:**
+```bash
+curl -X POST http://localhost:8000/api/v1/assessment/text -H "Content-Type: application/json" -d '{"student_id":"demo-student","question":"Tell me about a time you led a team through a difficult project.","answer":"I led a five-person team through a difficult migration project last year, and we delivered it two weeks early."}'
+# → overall_score_formula: "overall = grammar=100.0*31.2%, structure=44.0*25.0%, clarity=95.0*18.7%, relevance=100.0*25.0% (excluded ...: vocabulary)"
+# → overall_excluded_components: ["vocabulary"]  (short answer -> vocabulary sufficient_data=False -> excluded, weight redistributed)
+```
+Also confirmed through a real interview session (port 8129, separate from the dev server): submitting a session returned `pronunciation: 74.8, pronunciation_reliable: false` alongside `overall_score_formula: "overall = communication=75.5*40.0%, fluency=75.0*25.0%, confidence=74.0*15.0%, relevance=66.7*20.0%"` — pronunciation does not appear anywhere in the formula despite being reported, and relevance (previously computed but unused) now genuinely shapes the headline score.
+
+---
+
+## Modules 11-12 — Not yet started
+
+See the module plan and per-module findings in the audit delivered in-conversation (data validation across all schemas — NaN/impossible-percentage/negative-count guards, ground-truth benchmark + formal accuracy report). Each will get its own entry here, in this same format, as it's implemented — one module at a time, tests run and shown before moving to the next.

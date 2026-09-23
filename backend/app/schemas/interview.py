@@ -106,8 +106,7 @@ class InterviewResultResponse(BaseModel):
     pronunciation_reliable: bool = False
     pronunciation_method: str = ""
     # MODULE 7: average per-answer relevance score (see InterviewAnswerResponse
-    # above). Not yet folded into `overall`/`communication` — see Module 10
-    # (scoring transparency/reweighting) in AUDIT.md for that follow-on step.
+    # above). MODULE 10 folds this into `overall` (see below).
     relevance: float = 0.0
     relevance_sufficient_data: bool = True
     # MODULE 8: counts across only the answers where a verified concept
@@ -117,6 +116,16 @@ class InterviewResultResponse(BaseModel):
     technical_partially_correct_count: int = 0
     technical_incorrect_count: int = 0
     technical_insufficient_count: int = 0
+    # MODULE 10 transparency — see scoring_engine.py::compute_weighted_score.
+    # `overall`/`communication` are now documented, reproducible weighted
+    # blends; pronunciation is never a candidate component (see
+    # interview_service.py — Module 5 established it's never reliably
+    # measured here), and relevance is excluded from `overall` (weight
+    # redistributed) when the session's questions had too few identifiable
+    # keywords to judge relevance confidently.
+    overall_score_formula: str = ""
+    overall_excluded_components: list[str] = []
+    communication_score_formula: str = ""
     went_well: list[str]
     needs_improvement: list[str]
     recommended_exercises: list[str]
