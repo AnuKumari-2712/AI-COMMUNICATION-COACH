@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { ArrowRight, RotateCcw, Sparkles, CheckCircle2, Lightbulb } from 'lucide-react';
+import { ArrowRight, RotateCcw, Sparkles, CheckCircle2, Lightbulb, Target } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
 import { ScoreDonutChart } from '@/components/charts/ScoreDonutChart';
 import { practiceService, type TextAnalysisResult } from '@/services/practiceService';
 import { chartColors } from '@/lib/chartTheme';
+import { scoreTone } from '@/lib/utils';
 
 const question = 'Tell me about yourself and why you are interested in this role.';
 
@@ -69,6 +70,9 @@ export default function TextPracticePage() {
               <Badge variant={result.source === 'real' ? 'success' : 'outline'} size="sm" className="mt-4">
                 {result.source === 'real' ? 'Analyzed by NLP backend' : 'Demo data — backend offline'}
               </Badge>
+              {result.overallScoreFormula && (
+                <p className="mt-3 text-center text-[11px] leading-relaxed text-base-500">{result.overallScoreFormula}</p>
+              )}
             </Card>
 
             <Card className="lg:col-span-2">
@@ -89,6 +93,60 @@ export default function TextPracticePage() {
               </CardContent>
             </Card>
           </div>
+
+          <Card className="p-5">
+            <h3 className="mb-4 font-display text-base font-semibold text-base-50">Score Breakdown</h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {([
+                { label: 'Grammar', value: result.grammarScore, sufficientData: result.grammarSufficientData },
+                { label: 'Vocabulary', value: result.vocabularyScore, sufficientData: result.vocabularySufficientData },
+                { label: 'Structure', value: result.structureScore, sufficientData: true },
+                { label: 'Clarity', value: result.clarityScore, sufficientData: true },
+              ] as const).map((m) => (
+                <div key={m.label} className="rounded-xl border border-white/5 bg-base-800/60 p-3.5 text-center">
+                  <p className={`font-display text-2xl font-semibold text-${scoreTone(m.value)}-400`}>{Math.round(m.value)}</p>
+                  <p className="mt-1 text-xs text-base-400">{m.label}</p>
+                  {!m.sufficientData && (
+                    <Badge variant="outline" size="sm" className="mt-2">
+                      Low confidence — short answer
+                    </Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-accent-400">
+                <Target className="size-5" />
+                <h3 className="font-display text-base font-semibold text-base-50">Answer Relevance</h3>
+              </div>
+              <span className={`font-display text-xl font-semibold text-${scoreTone(result.relevanceScore)}-400`}>
+                {Math.round(result.relevanceScore)}
+              </span>
+            </div>
+            <p className="mb-3 text-xs text-base-400">
+              Measures whether your answer actually addresses the question (keyword overlap), not full language understanding.
+              {!result.relevanceSufficientData && ' This question had too few identifiable keywords to judge relevance confidently.'}
+            </p>
+            {result.relevanceAddressedKeywords.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                <span className="text-xs text-base-400">Addressed:</span>
+                {result.relevanceAddressedKeywords.map((k) => (
+                  <Badge key={k} variant="success" size="sm">{k}</Badge>
+                ))}
+              </div>
+            )}
+            {result.relevanceMissingKeywords.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                <span className="text-xs text-base-400">Missing:</span>
+                {result.relevanceMissingKeywords.map((k) => (
+                  <Badge key={k} variant="warning" size="sm">{k}</Badge>
+                ))}
+              </div>
+            )}
+          </Card>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card className="p-5">

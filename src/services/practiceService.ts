@@ -6,12 +6,26 @@ import type { GrammarQuestion, SkillScores, VocabWord } from '@/types';
 
 export interface VoiceAnalysisResult {
   grammar: number;
+  vocabulary: number;
   fluency: number;
   pronunciation: number;
   pace: number;
   fillerWordCount: number;
   confidence: number;
   transcript: string;
+  /** 'real' = backend analysis ran, 'mock' = backend unreachable, local demo data shown instead. */
+  source: 'real' | 'mock';
+  /** Pronunciation is a transcript-only proxy in this project — never a real audio measurement. Always false. */
+  pronunciationReliable: boolean;
+  pronunciationMethod: string;
+  wordsPerMinute: number;
+  /** "measured" = real WAV pause analysis; "estimated" = transcript-based approximation. */
+  paceSource: 'measured' | 'estimated';
+  referenceRangeWpm: string;
+  highConfidenceFillerCount: number;
+  ambiguousFillerCount: number;
+  fillerExcludedExamples: string[];
+  mostFrequentFiller: string | null;
 }
 
 export interface TextAnalysisResult {
@@ -21,11 +35,25 @@ export interface TextAnalysisResult {
   betterAlternative: string;
   /** 'real' = analyzed by the FastAPI backend's NLP pipeline, 'mock' = local demo data (backend not running). */
   source: 'real' | 'mock';
+  grammarScore: number;
+  vocabularyScore: number;
+  structureScore: number;
+  clarityScore: number;
+  /** false = too little text for this component's own measure to be a confident reading, not an error. */
+  grammarSufficientData: boolean;
+  vocabularySufficientData: boolean;
+  relevanceScore: number;
+  relevanceAddressedKeywords: string[];
+  relevanceMissingKeywords: string[];
+  relevanceSufficientData: boolean;
+  overallScoreFormula: string;
+  overallExcludedComponents: string[];
 }
 
 function mockTextAnalysis(text: string): TextAnalysisResult {
+  const score = Math.max(45, Math.min(96, 60 + Math.round(text.length / 12)));
   return {
-    score: Math.max(45, Math.min(96, 60 + Math.round(text.length / 12))),
+    score,
     corrections: [
       { original: 'their going to the interview', corrected: "they're going to the interview", reason: "Use \"they're\" (they are) instead of the possessive \"their\"." },
       { original: 'i has experience', corrected: 'I have experience', reason: 'Subject-verb agreement: use "have" with "I".' },
@@ -34,6 +62,18 @@ function mockTextAnalysis(text: string): TextAnalysisResult {
     betterAlternative:
       'I have hands-on experience leading cross-functional teams, which helped me deliver the project two weeks ahead of schedule.',
     source: 'mock',
+    grammarScore: score,
+    vocabularyScore: score,
+    structureScore: score,
+    clarityScore: score,
+    grammarSufficientData: true,
+    vocabularySufficientData: true,
+    relevanceScore: score,
+    relevanceAddressedKeywords: [],
+    relevanceMissingKeywords: [],
+    relevanceSufficientData: true,
+    overallScoreFormula: 'Demo data — backend offline, no real formula to show.',
+    overallExcludedComponents: [],
   };
 }
 
@@ -42,6 +82,18 @@ interface BackendTextAnalysisResponse {
   corrections: { original: string; corrected: string; reason: string; rule: string }[];
   vocabulary_suggestions: string[];
   better_alternative: string;
+  grammar_score: number;
+  vocabulary_score: number;
+  structure_score: number;
+  clarity_score: number;
+  grammar_sufficient_data: boolean;
+  vocabulary_sufficient_data: boolean;
+  relevance_score: number;
+  relevance_addressed_keywords: string[];
+  relevance_missing_keywords: string[];
+  relevance_sufficient_data: boolean;
+  overall_score_formula: string;
+  overall_excluded_components: string[];
 }
 
 interface BackendVocabWord {
@@ -75,13 +127,24 @@ interface BackendSkillScores {
 }
 
 interface BackendVoiceAnalysisResponse {
+  source: 'real' | 'mock';
   transcript: string;
   grammar_score: number;
+  vocabulary_score: number;
   fluency_score: number;
   pronunciation_score: number;
   confidence_score: number;
   pace_score: number;
   filler_word_count: number;
+  words_per_minute: number;
+  pace_source: 'measured' | 'estimated';
+  reference_range_wpm: string;
+  pronunciation_reliable: boolean;
+  pronunciation_method: string;
+  high_confidence_filler_count: number;
+  ambiguous_filler_count: number;
+  filler_excluded_examples: string[];
+  most_frequent_filler: string | null;
 }
 
 export const practiceService = {
@@ -158,12 +221,23 @@ export const practiceService = {
         });
         return {
           grammar: data.grammar_score,
+          vocabulary: data.vocabulary_score,
           fluency: data.fluency_score,
           pronunciation: data.pronunciation_score,
           pace: data.pace_score,
           fillerWordCount: data.filler_word_count,
           confidence: data.confidence_score,
           transcript: data.transcript,
+          source: data.source,
+          pronunciationReliable: data.pronunciation_reliable,
+          pronunciationMethod: data.pronunciation_method,
+          wordsPerMinute: data.words_per_minute,
+          paceSource: data.pace_source,
+          referenceRangeWpm: data.reference_range_wpm,
+          highConfidenceFillerCount: data.high_confidence_filler_count,
+          ambiguousFillerCount: data.ambiguous_filler_count,
+          fillerExcludedExamples: data.filler_excluded_examples,
+          mostFrequentFiller: data.most_frequent_filler,
         };
       } catch {
         // fall through to mock below
@@ -172,6 +246,7 @@ export const practiceService = {
     return mockDelay(
       {
         grammar: 68 + Math.round(Math.random() * 10),
+        vocabulary: 65 + Math.round(Math.random() * 15),
         fluency: 60 + Math.round(Math.random() * 15),
         pronunciation: 75 + Math.round(Math.random() * 10),
         pace: 58 + Math.round(Math.random() * 15),
@@ -179,6 +254,16 @@ export const practiceService = {
         confidence: 62 + Math.round(Math.random() * 15),
         transcript:
           "So, um, I think the biggest challenge in my last project was, like, coordinating between the frontend and backend teams because we didn't have, um, a shared timeline initially.",
+        source: 'mock' as const,
+        pronunciationReliable: false,
+        pronunciationMethod: 'Demo data — backend offline, no real analysis performed.',
+        wordsPerMinute: 110 + Math.round(Math.random() * 30),
+        paceSource: 'estimated' as const,
+        referenceRangeWpm: '130-160',
+        highConfidenceFillerCount: 2,
+        ambiguousFillerCount: 1,
+        fillerExcludedExamples: [],
+        mostFrequentFiller: 'um',
       },
       1400,
     );
@@ -203,6 +288,18 @@ export const practiceService = {
         vocabularySuggestions: data.vocabulary_suggestions,
         betterAlternative: data.better_alternative,
         source: 'real',
+        grammarScore: data.grammar_score,
+        vocabularyScore: data.vocabulary_score,
+        structureScore: data.structure_score,
+        clarityScore: data.clarity_score,
+        grammarSufficientData: data.grammar_sufficient_data,
+        vocabularySufficientData: data.vocabulary_sufficient_data,
+        relevanceScore: data.relevance_score,
+        relevanceAddressedKeywords: data.relevance_addressed_keywords,
+        relevanceMissingKeywords: data.relevance_missing_keywords,
+        relevanceSufficientData: data.relevance_sufficient_data,
+        overallScoreFormula: data.overall_score_formula,
+        overallExcludedComponents: data.overall_excluded_components,
       };
     } catch {
       return mockDelay(mockTextAnalysis(answer), 900);

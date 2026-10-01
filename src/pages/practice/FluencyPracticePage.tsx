@@ -128,10 +128,18 @@ export default function FluencyPracticePage() {
                   <span className="text-xs text-base-300">Filler Words</span>
                 </div>
                 <div className="flex flex-col items-center justify-center gap-1">
-                  <span className="font-display text-2xl font-semibold text-accent-300">{Math.round(140 - result.pace)}</span>
-                  <span className="text-xs text-base-300">Words / min est.</span>
+                  <span className="font-display text-2xl font-semibold text-accent-300">{Math.round(result.wordsPerMinute)}</span>
+                  <span className="text-xs text-base-300">
+                    Words / min {result.paceSource === 'measured' ? '(measured)' : '(estimated)'}
+                  </span>
                 </div>
               </div>
+              <p className="mt-3 text-center text-xs text-base-500">
+                Comfortable range: {result.referenceRangeWpm} wpm.{' '}
+                {result.paceSource === 'measured'
+                  ? 'Measured from real pause/silence analysis of your recording.'
+                  : 'Estimated from your transcript — upload real WAV audio for a measured pace.'}
+              </p>
               <div className="mt-5 flex justify-end">
                 <Button variant="outline" size="sm" onClick={handleReset}>
                   <RotateCcw className="size-4" /> Practice Another
