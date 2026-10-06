@@ -46,7 +46,8 @@ async def upload_resume(resume: UploadFile = File(...)):
 def answer(payload: InterviewAnswerRequest):
     try:
         return interview_service.answer_question(
-            payload.session_id, payload.question_id, payload.answer_text, payload.mode, payload.duration_seconds
+            payload.session_id, payload.question_id, payload.answer_text, payload.mode, payload.duration_seconds,
+            payload.speech_fluency_score, payload.speech_pause_count,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

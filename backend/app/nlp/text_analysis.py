@@ -185,6 +185,15 @@ def structure_analysis(text: str) -> dict:
     return {"score": structure_score, "components": weights, "sentence_count": len(sentences)}
 
 
+def _clarity_from_average_length(avg_len: float) -> float:
+    # Ideal spoken/written clarity sits around 10-22 words per sentence (or
+    # per spoken phrase); very short or very long units reduce the score.
+    if 10 <= avg_len <= 22:
+        return 95.0
+    distance = min(abs(avg_len - 16), 20)
+    return max(40.0, 95.0 - distance * 3)
+
+
 def clarity_analysis(text: str) -> dict:
     sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
     words = _tokenize(text)
@@ -192,14 +201,24 @@ def clarity_analysis(text: str) -> dict:
         return {"score": 0.0, "average_sentence_length": 0.0}
 
     avg_len = len(words) / len(sentences)
-    # Ideal spoken/written clarity sits around 12-20 words per sentence;
-    # very short or very long sentences reduce the clarity score.
-    if 10 <= avg_len <= 22:
-        score = 95.0
-    else:
-        distance = min(abs(avg_len - 16), 20)
-        score = max(40.0, 95.0 - distance * 3)
-    return {"score": round(score, 1), "average_sentence_length": round(avg_len, 1)}
+    return {"score": round(_clarity_from_average_length(avg_len), 1), "average_sentence_length": round(avg_len, 1)}
+
+
+def spoken_clarity(text: str, pause_count: int) -> dict:
+    """Clarity for a speech-to-text transcript.
+
+    STT output has no punctuation, so sentence length can't be measured: any
+    spoken answer would count as ONE huge sentence and always score the
+    minimum (40). The audio gives a real substitute: pauses split speech into
+    phrases, so average phrase length = words / (pauses + 1), scored with the
+    same band as written clarity (10-22 words per phrase is ideal; a long
+    unbroken run of speech is harder to follow).
+    """
+    words = _tokenize(text)
+    if not words:
+        return {"score": 0.0, "average_phrase_length": 0.0}
+    avg_len = len(words) / (max(pause_count, 0) + 1)
+    return {"score": round(_clarity_from_average_length(avg_len), 1), "average_phrase_length": round(avg_len, 1)}
 
 
 def better_alternative(text: str, question: str) -> str:

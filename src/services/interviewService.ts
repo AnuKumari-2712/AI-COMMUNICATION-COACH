@@ -155,7 +155,7 @@ export const interviewService = {
         const form = new FormData();
         form.append('duration_seconds', String(durationSeconds));
         form.append('audio', audioBlob, audioFileName(audioBlob, 'answer'));
-        const { data: voice } = await apiClient.post<{ transcript: string; source: 'real' | 'mock' }>('/assessment/voice', form, {
+        const { data: voice } = await apiClient.post<{ transcript: string; source: 'real' | 'mock'; fluency_score: number; pause_count: number; pace_source: string }>('/assessment/voice', form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
         // A mock transcript is canned text the student never said. Scoring it
@@ -169,6 +169,11 @@ export const interviewService = {
           answer_text: voice.transcript,
           mode: 'voice',
           duration_seconds: durationSeconds,
+          // Real measurements from this recording, so fluency and clarity are
+          // computed from the audio rather than guessed from unpunctuated text.
+          ...(voice.pace_source === 'measured'
+            ? { speech_fluency_score: voice.fluency_score, speech_pause_count: voice.pause_count }
+            : {}),
         });
         return {
           grammar: data.grammar_score,

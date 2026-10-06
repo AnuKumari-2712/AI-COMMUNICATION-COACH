@@ -39,6 +39,11 @@ class InterviewAnswerRequest(BaseModel):
     answer_text: str
     mode: str = "voice"  # "voice" | "text"
     duration_seconds: float | None = None
+    # Real measurements from the audio itself, returned by /assessment/voice for
+    # this same recording. Optional: absent for typed answers or when the audio
+    # couldn't be analysed (then fluency/clarity are honestly labelled estimates).
+    speech_fluency_score: float | None = Field(default=None, ge=0, le=100)
+    speech_pause_count: int | None = Field(default=None, ge=0)
 
 
 class AnswerStructureScore(BaseModel):

@@ -25,7 +25,7 @@ from app.schemas.interview import (
     InterviewResultResponse,
 )
 from app.services.scoring_engine import compute_weighted_score
-from app.speech.speech_metrics import compute_speech_metrics, detect_filler_words, pronunciation_proxy, text_flow_consistency
+from app.speech.speech_metrics import detect_filler_words, pronunciation_proxy, text_flow_consistency
 
 logger = logging.getLogger(__name__)
 
@@ -65,12 +65,23 @@ def start_session(student_id: str, category_id: str, job_role: str | None, resum
     return {"session_id": session_id, "category_id": category_id, "questions": questions}
 
 
-def answer_question(session_id: str, question_id: str, answer_text: str, mode: str, duration_seconds: float | None) -> InterviewAnswerResponse:
+def answer_question(
+    session_id: str,
+    question_id: str,
+    answer_text: str,
+    mode: str,
+    duration_seconds: float | None,
+    speech_fluency_score: float | None = None,
+    speech_pause_count: int | None = None,
+) -> InterviewAnswerResponse:
     session = _sessions.get(session_id)
     if session is None:
         raise ValueError(f"Unknown interview session_id={session_id}")
 
-    grammar_result = grammar_rules.analyze(answer_text)
+    is_voice = mode == "voice"
+    # Voice answers are speech-to-text transcripts with no punctuation, so the
+    # grammar sentence count must be estimated (see grammar_rules.analyze).
+    grammar_result = grammar_rules.analyze(answer_text, assume_unpunctuated=is_voice)
     vocab_result = text_analysis.vocabulary_analysis(answer_text)
     confidence_score, confidence_source = score_confidence(answer_text)
 
@@ -119,17 +130,26 @@ def answer_question(session_id: str, question_id: str, answer_text: str, mode: s
     # instead of a made-up constant. filler_count now always goes through
     # the same context-aware detector from Module 3, instead of a separate,
     # cruder presence-check re-implementation that lived here before.
-    if mode == "voice" and duration_seconds and duration_seconds > 0:
-        metrics = compute_speech_metrics(answer_text, duration_seconds)
-        fluency_score = metrics.pace_consistency
-        filler_count = metrics.filler_word_count
+    has_measured_audio = is_voice and speech_fluency_score is not None and speech_pause_count is not None
+    if has_measured_audio:
+        # Real audio measurements computed from this very recording.
+        fluency_score = speech_fluency_score
+        filler_count = detect_filler_words(answer_text)["count"]
         fluency_source = "speech_measured"
+        clarity_result = text_analysis.spoken_clarity(answer_text, speech_pause_count)
+    elif is_voice:
+        # Spoken, but no audio measurements reached us: be honest that fluency is
+        # only a text proxy, and don't score clarity from sentence length (an
+        # unpunctuated transcript always looks like one giant sentence).
+        filler_count = detect_filler_words(answer_text)["count"]
+        fluency_score = text_flow_consistency(answer_text)
+        fluency_source = "text_estimated"
+        clarity_result = {"score": 75.0, "average_sentence_length": 0.0}  # neutral, documented default
     else:
         fluency_score = text_flow_consistency(answer_text)
         filler_count = detect_filler_words(answer_text)["count"]
         fluency_source = "text_estimated"
-
-    clarity_result = text_analysis.clarity_analysis(answer_text)
+        clarity_result = text_analysis.clarity_analysis(answer_text)
 
     # MODULE 9: previously the entire question slate was decided up-front at
     # start_session and nothing ever looked at what the candidate actually
