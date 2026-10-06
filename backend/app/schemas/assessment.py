@@ -112,6 +112,7 @@ class VoiceAnalysisResponse(BaseModel):
     # method explaining exactly what it is and is not. See speech_metrics.py::pronunciation_proxy.
     pronunciation_reliable: bool = False
     pronunciation_method: str = ""
+    fluency_formula: str = ""
 
 
 class ExplainMistakeRequest(BaseModel):

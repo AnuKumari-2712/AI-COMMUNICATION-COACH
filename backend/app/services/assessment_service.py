@@ -62,6 +62,42 @@ _RULE_EXPLANATIONS = {
         "improve": "Expand casual contractions (gonna, wanna, kinda) to their full form.",
         "practice": "Rewrite formally: \"I'm gonna finish it by Friday.\"",
     },
+    "modal_of": {
+        "wrong": "'of' was used after a modal verb (should/could/would/must) instead of 'have'.",
+        "why": "'Should of' comes from how 'should've' sounds when spoken, but the written form is always 'should have'.",
+        "improve": "Whenever you hear 'should've / could've / would've', write 'have' in full.",
+        "practice": "Correct this: \"I could of finished earlier.\"",
+    },
+    "double_comparative": {
+        "wrong": "'more' was added in front of a word that is already a comparative.",
+        "why": "Words like 'better', 'easier' and 'faster' already mean 'more good / more easy / more fast', so adding 'more' repeats the idea.",
+        "improve": "Use either the -er form (easier) or 'more' + the base word (more useful) — never both.",
+        "practice": "Correct this: \"This method is more easier to maintain.\"",
+    },
+    "verb_form": {
+        "wrong": "The verb form after 'didn't' (or after 'I am') is not the one standard English expects.",
+        "why": "After 'did/didn't' the main verb stays in its base form because 'did' already carries the past tense. 'Agree' is itself a verb, so it doesn't need 'am' in front of it.",
+        "improve": "Use 'didn't + base verb' (didn't go), and say 'I agree' instead of 'I am agree'.",
+        "practice": "Correct this: \"I didn't saw the message.\"",
+    },
+    "preposition": {
+        "wrong": "An unnecessary preposition was added after the verb.",
+        "why": "Some verbs, like 'discuss', already include the meaning of 'about', so the extra word is redundant.",
+        "improve": "Say 'discuss the plan', not 'discuss about the plan'.",
+        "practice": "Correct this: \"We will discuss about the schedule tomorrow.\"",
+    },
+    "article_usage": {
+        "wrong": "The wrong article ('a' / 'an') was used before this word.",
+        "why": "'A' or 'an' depends on the first SOUND of the next word, not its first letter: 'an interview' but 'a university', 'an hour' but 'a house'.",
+        "improve": "Say the next word aloud: if it starts with a vowel sound use 'an', otherwise use 'a'.",
+        "practice": "Fill in: \"I attended ___ (a/an) interview at ___ (a/an) university.\"",
+    },
+    "capitalization": {
+        "wrong": "The pronoun 'I' was written in lowercase.",
+        "why": "'I' is always capitalized in English, including in contractions like I'm and I've.",
+        "improve": "Proofread once specifically for lowercase 'i' before you submit.",
+        "practice": "Correct this: \"i think i'm ready for the interview.\"",
+    },
     "tense_consistency": {
         "wrong": "The sentence mixed past and present tense verbs.",
         "why": "Switching tense mid-sentence (or mid-story) makes the timeline of events unclear to the listener.",
@@ -165,7 +201,7 @@ def analyze_voice_upload(student_id: str, tmp_path: str, duration_seconds: float
     pause_analysis = analyze_wav_pauses(tmp_path)
 
     metrics = compute_speech_metrics(transcript, duration_seconds, real_pause_analysis=pause_analysis)
-    grammar_result = grammar_rules.analyze(transcript)
+    grammar_result = grammar_rules.analyze(transcript, assume_unpunctuated=True)
     vocab_result = text_analysis.vocabulary_analysis(transcript)
     confidence_score, confidence_source = score_confidence(transcript)
 
@@ -180,7 +216,7 @@ def analyze_voice_upload(student_id: str, tmp_path: str, duration_seconds: float
             {
                 "grammar": grammar_result["score"],
                 "vocabulary": vocab_result["score"],
-                "fluency": metrics.pace_consistency,
+                "fluency": metrics.fluency_score,
                 "speaking_pace": metrics.pace_score,
                 "filler_words": max(0.0, 100.0 - metrics.filler_words_per_minute * 8),
                 "confidence": confidence_score,
@@ -197,7 +233,7 @@ def analyze_voice_upload(student_id: str, tmp_path: str, duration_seconds: float
         transcript=transcript,
         grammar_score=grammar_result["score"],
         vocabulary_score=vocab_result["score"],
-        fluency_score=metrics.pace_consistency,
+        fluency_score=metrics.fluency_score,
         pronunciation_score=pronunciation_score,
         confidence_score=confidence_score,
         words_per_minute=metrics.words_per_minute,
@@ -216,6 +252,7 @@ def analyze_voice_upload(student_id: str, tmp_path: str, duration_seconds: float
         pace_source=metrics.pace_source,
         pronunciation_reliable=pronunciation["reliable"],
         pronunciation_method=pronunciation["method"],
+        fluency_formula=metrics.fluency_formula,
     )
 
 

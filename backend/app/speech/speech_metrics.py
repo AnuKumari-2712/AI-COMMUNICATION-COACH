@@ -77,6 +77,13 @@ class SpeechMetrics:
     duration_seconds: float = 0.0
     reference_range_wpm: str = "130-160"
     pace_source: str = "estimated"  # "measured" (real WAV pause analysis) | "estimated" (transcript-based)
+    # Fluency: when real pause data exists it is computed from the audio (see
+    # measured_fluency_score); otherwise it falls back to pace_consistency. The
+    # old behaviour (always pace_consistency) returned a constant 75 for any
+    # real speech-to-text transcript, because STT output has no punctuation and
+    # text_flow_consistency needs >= 2 sentences to measure anything.
+    fluency_score: float = 75.0
+    fluency_formula: str = ""
 
 
 def _clause_boundary_fillers(transcript: str) -> tuple[list[str], list[str]]:
@@ -267,6 +274,30 @@ def text_flow_consistency(text: str) -> float:
     return round(max(0.0, 100.0 - min(variance, 100.0)), 1)
 
 
+def measured_fluency_score(pauses: PauseAnalysis, filler_per_minute: float) -> tuple[float, str]:
+    """Fluency from measured audio, as a transparent formula.
+
+    fluency = 100 - hesitation_penalty - filler_penalty - silence_penalty
+      hesitation_penalty = min(40, long_pauses_per_minute * 8)   (pauses >= 0.7s between speech;
+                                                                  rate uses at least 30s of audio so short clips aren't over-penalised)
+      filler_penalty     = min(30, filler_words_per_minute * 4)
+      silence_penalty    = min(30, max(0, 0.6 - voiced_ratio) * 100)  (voiced_ratio = speech time / total time)
+    """
+    minutes = max(pauses.total_seconds, 30.0) / 60.0
+    long_pauses_per_minute = pauses.long_pause_count / minutes
+    voiced_ratio = (pauses.voiced_seconds / pauses.total_seconds) if pauses.total_seconds else 0.0
+    hesitation = min(40.0, long_pauses_per_minute * 8.0)
+    filler = min(30.0, filler_per_minute * 4.0)
+    silence = min(30.0, max(0.0, 0.6 - voiced_ratio) * 100.0)
+    score = round(max(0.0, min(100.0, 100.0 - hesitation - filler - silence)), 1)
+    formula = (
+        f"fluency = 100 - {hesitation:.1f} (hesitation: {pauses.long_pause_count} long pauses, "
+        f"{long_pauses_per_minute:.1f}/min over max(duration, 30s) x 8, max 40) - {filler:.1f} (fillers: {filler_per_minute:.1f}/min x 4, max 30) "
+        f"- {silence:.1f} (silence: voiced ratio {voiced_ratio:.2f}, penalty below 0.60, max 30) = {score}"
+    )
+    return score, formula
+
+
 def compute_speech_metrics(
     transcript: str,
     duration_seconds: float,
@@ -299,6 +330,12 @@ def compute_speech_metrics(
         average_pause = 0.6
         pace_source = "estimated"
 
+    if real_pause_analysis is not None:
+        fluency_score, fluency_formula = measured_fluency_score(real_pause_analysis, filler_per_minute)
+    else:
+        fluency_score = round(pace_consistency, 1)
+        fluency_formula = "No audio pause data available — fluency approximated from sentence-length consistency of the transcript."
+
     counts = Counter(w.lower() for w in words if len(w) > 3)
     repeated = [w for w, c in counts.items() if c >= 3]
 
@@ -318,4 +355,6 @@ def compute_speech_metrics(
         word_count=word_count,
         duration_seconds=duration_seconds,
         pace_source=pace_source,
+        fluency_score=fluency_score,
+        fluency_formula=fluency_formula,
     )

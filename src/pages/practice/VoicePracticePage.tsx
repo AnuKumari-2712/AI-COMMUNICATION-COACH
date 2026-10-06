@@ -28,7 +28,8 @@ export default function VoicePracticePage() {
 
   const handleAnalyze = async () => {
     setAnalyzing(true);
-    const analysis = await practiceService.analyzeVoiceRecording(recorder.duration, recorder.audioBlob ?? undefined);
+    const audioBlob = await recorder.getAudioBlob();
+    const analysis = await practiceService.analyzeVoiceRecording(recorder.duration, audioBlob ?? undefined);
     setResult(analysis);
     setAnalyzing(false);
   };

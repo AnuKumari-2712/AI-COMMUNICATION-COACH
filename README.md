@@ -164,14 +164,14 @@ This section exists because "adaptive AI platform" can sound like it's using a l
 | Filler word detection | **Reliable** | Real regex match against the actual transcript. |
 | Speaking pace (WPM) | **Reliable, if the transcript is real** | Real math (words ÷ duration), but only as good as the transcript feeding it. |
 | Scoring consistency | **Reliable** | Same input always produces the same score — no randomness, no LLM guessing. |
-| Grammar checking | **Narrow coverage** | Catches ~7 specific patterns (double negatives, a few subject-verb agreement cases, tense-mixing, some homophones, casual contractions). Will **miss** most grammar errors outside these patterns — it is not a substitute for Grammarly/LanguageTool. |
+| Grammar checking | **Wider, but still rule-based** | Catches ~25 exact patterns: double negatives, pronoun/verb agreement ("he don't", "they was", "she have"), "should of", a/an, double comparatives ("more better"), "didn't went", "I am agree", "discuss about", tense-mixing, homophones, casual contractions — plus lowercase "i" and ~60 commonly misspelled words (reported as spelling, never lowering the grammar score). It will still **miss** errors outside these patterns; it is not a substitute for Grammarly/LanguageTool. Voice transcripts have no punctuation, so their sentence count is estimated (see the score's formula string). |
 | Vocabulary scoring | **A real but simple proxy** | Measures lexical diversity + word length + repetition, not contextual "appropriateness." Correct, simple English scores lower than it deserves to. |
 | STAR/behavioral structure | **Keyword-based, decent for typical phrasing** | Looks for phrases like "at the time," "I decided," "as a result." Unusual phrasing can fool it either direction. |
-| Fluency scoring | **Weaker in the actual browser flow** | Real pause detection needs genuine WAV audio; browsers record webm, which this project can't decode (no ffmpeg included), so it falls back to an estimated pause pattern rather than your real speech rhythm. |
+| Fluency scoring | **Measured from your audio** | The browser recording is converted to 16 kHz WAV in the frontend before upload, so pauses are measured from the real signal (adaptive silence threshold; leading/trailing silence ignored). Fluency = 100 − hesitation (long pauses/min) − fillers/min − excess silence; the exact numbers are returned as `fluency_formula`. If conversion is impossible it falls back to an estimate and says so (`pace_source = "estimated"`). |
 | Pronunciation scoring | **Not a real assessment — treat as a placeholder** | No phoneme model exists. It's a rough guess based on whether speech-to-text succeeded. Documented here so it's never mistaken for real pronunciation feedback. |
-| Interview follow-up questions | **Not implemented** | The interview asks a fixed sequence of questions; it does not generate a smart follow-up based on what you actually said. |
-| Answer relevance to the question | **Not checked** | Grammar/vocabulary/structure are analyzed regardless of whether you actually answered the question asked. |
-| Technical answer correctness | **Not checked** | There's no fact-checking of technical content — a confident wrong answer can score similarly to a correct one if phrased similarly. |
+| Interview follow-up questions | **Implemented, rule-based** | `interview/followup_generator.py` builds a follow-up from specifics in your answer; it is template-driven, not an LLM. |
+| Answer relevance to the question | **Keyword-based** | `nlp/relevance_analysis.py` compares the question's key terms with your answer and reports addressed/missing keywords. It can't judge meaning, so a relevant answer in very different words can score low. |
+| Technical answer correctness | **Only for the 5 fixed technical questions** | `interview/technical_knowledge.py` checks keyword coverage against a hand-written concept checklist. Resume-based and job-role questions have no answer key, so they return `applicable=False` instead of a guessed verdict. Right words in a wrong sentence still get credit. |
 
 **What this project is good evidence of:** a working adaptive-learning *architecture* (personalization loop, weakness detection, revision queue, difficulty modeling) built on a real full-stack NLP pipeline. **What it is not:** a linguistically validated, production-accurate grammar/pronunciation grading service. Say so if you present it — it's a stronger, more credible pitch than overclaiming.
 
@@ -186,8 +186,8 @@ Every backend response includes a `source: "real" | "mock"` field, and every pag
 | Grammar checking | Rule-based checker (regex + spaCy POS tags) | spaCy model not downloaded → tense-consistency check is skipped, other rules still run |
 | Vocabulary analysis | Type-token ratio, word length, repetition | Never mocked — pure Python, always real |
 | Structure / STAR analysis | Keyword + position heuristics | Never mocked |
-| Speech-to-text | `SpeechRecognition` + Google Web Speech API on WAV audio | No internet, non-WAV upload, or empty recognition → canned transcript |
-| Pause/silence detection | RMS-energy analysis on WAV/PCM (stdlib `wave`/`audioop`) | Upload isn't parseable as WAV (e.g. webm/opus) → transcript-based estimate |
+| Speech-to-text | `SpeechRecognition` + Google Web Speech API on WAV audio, sent in ≤25 s chunks | No internet, non-WAV upload, or no recognizable speech → canned transcript, labeled `source: mock` (the interview flow refuses to score a canned transcript) |
+| Pause/silence detection | Adaptive RMS-energy analysis on WAV/PCM (stdlib `wave`/`audioop`) | Upload isn't parseable as WAV → transcript-based estimate |
 | Confidence/tone scoring | Optional HuggingFace DistilBERT pipeline | Not enabled, or `transformers`/`torch` not installed → lexical heuristic |
 | Adaptive difficulty | scikit-learn `RandomForestClassifier`, trained at startup | Always real (trained on a synthetic bootstrap dataset — see `app/ml/difficulty_model.py`) |
 | Weakness/strength detection | Rule-based thresholds | Never mocked |
@@ -330,8 +330,8 @@ ai-comm-coach/
 
 ## 13. Known limitations / future improvements
 
-- **Pronunciation, follow-up questions, answer relevance, and technical correctness** are not implemented — see §7 for the full honest breakdown.
-- **STT** requires internet (Google's free Web Speech API) and WAV input; a production deployment should transcode browser webm/opus to WAV with ffmpeg before calling `/assessment/voice`.
+- **Pronunciation** is a placeholder; follow-up questions, answer relevance and technical correctness exist but are rule/keyword-based — see §7 for the full honest breakdown.
+- **STT** requires internet (Google's free Web Speech API). The frontend converts browser webm/opus to WAV (`src/lib/audioToWav.ts`), so no server-side ffmpeg is needed. Possible next steps: a local Whisper model (works offline, returns word timestamps and confidence) and LanguageTool for far broader grammar coverage (needs a JVM, which is why it isn't included).
 - **Adaptive difficulty model** is trained on a synthetic bootstrap dataset (no real student cohort exists yet) — see the docstring in `app/ml/difficulty_model.py` for the real-data upgrade path.
 - **Analytics trend buckets** are labeled "Session N," not calendar dates — a production version would bucket by real calendar week once usage spreads over time.
 - **Auth** is demo-grade (no refresh tokens, no revocation, no rate limiting) — swap for a real auth provider before any real deployment.

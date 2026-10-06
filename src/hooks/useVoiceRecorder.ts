@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { blobToWav } from '@/lib/audioToWav';
 
 export type RecorderStatus = 'idle' | 'recording' | 'paused' | 'stopped' | 'error';
 
@@ -12,6 +13,12 @@ export function useVoiceRecorder() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  // Resolves with the WAV (or, if conversion fails, the raw recording) once the
+  // recorder has stopped and conversion has finished. Callers must await this
+  // instead of reading audioBlob immediately after stop(), or they can upload
+  // nothing and silently fall back to demo data.
+  const finalBlobRef = useRef<Promise<Blob | null>>(Promise.resolve(null));
+  const resolveFinalBlobRef = useRef<((blob: Blob | null) => void) | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearTimer = () => {
@@ -33,10 +40,16 @@ export function useVoiceRecorder() {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        setAudioUrl(URL.createObjectURL(blob));
-        setAudioBlob(blob);
+        const raw = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        setAudioUrl(URL.createObjectURL(raw)); // playback uses the original recording
         streamRef.current?.getTracks().forEach((t) => t.stop());
+        // Upload uses 16 kHz mono WAV so the backend can really transcribe it.
+        blobToWav(raw)
+          .catch(() => raw) // can't decode here -> send the original; the backend will label its fallback
+          .then((finalBlob) => {
+            setAudioBlob(finalBlob);
+            resolveFinalBlobRef.current?.(finalBlob);
+          });
       };
       recorder.start();
       setStatus('recording');
@@ -65,6 +78,9 @@ export function useVoiceRecorder() {
   }, []);
 
   const stop = useCallback(() => {
+    finalBlobRef.current = new Promise<Blob | null>((resolve) => {
+      resolveFinalBlobRef.current = resolve;
+    });
     mediaRecorderRef.current?.stop();
     clearTimer();
     setStatus('stopped');
@@ -76,13 +92,16 @@ export function useVoiceRecorder() {
     setAudioUrl(null);
     setAudioBlob(null);
     setError(null);
+    finalBlobRef.current = Promise.resolve(null);
     clearTimer();
   }, []);
+
+  const getAudioBlob = useCallback(() => finalBlobRef.current, []);
 
   useEffect(() => () => {
     clearTimer();
     streamRef.current?.getTracks().forEach((t) => t.stop());
   }, []);
 
-  return { status, duration, audioUrl, audioBlob, error, start, pause, resume, stop, reset };
+  return { status, duration, audioUrl, audioBlob, getAudioBlob, error, start, pause, resume, stop, reset };
 }

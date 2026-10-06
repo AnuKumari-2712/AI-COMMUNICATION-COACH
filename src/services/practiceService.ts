@@ -2,6 +2,7 @@ import { apiClient } from './apiClient';
 import { mockDelay } from './mockDelay';
 import { vocabWords, grammarQuestions, currentStudent } from '@/data/mockData';
 import { getCurrentStudentId } from '@/lib/auth';
+import { audioFileName } from '@/lib/audioToWav';
 import type { GrammarQuestion, SkillScores, VocabWord } from '@/types';
 
 export interface VoiceAnalysisResult {
@@ -204,18 +205,17 @@ export const practiceService = {
 
   /**
    * Uploads the actual recorded audio to the backend for real speech-to-text
-   * + speech-metrics analysis. Browsers record webm/opus, which the
-   * backend's pause/silence analyzer can't parse as WAV (no ffmpeg
-   * dependency here — see README §6), so the STT step itself typically
-   * falls back to a labeled mock transcript; the grammar/vocabulary/
-   * confidence scoring that runs on top of it is still real.
+   * + speech-metrics analysis. The recorder converts the browser's webm/opus
+   * recording to 16 kHz mono WAV first (see lib/audioToWav.ts), which the
+   * backend can transcribe and measure pauses on without ffmpeg. Only if that
+   * conversion is impossible does the backend fall back to a labeled mock.
    */
   analyzeVoiceRecording: async (durationSec: number, audioBlob?: Blob): Promise<VoiceAnalysisResult> => {
     if (audioBlob) {
       try {
         const form = new FormData();
         form.append('duration_seconds', String(durationSec));
-        form.append('audio', audioBlob, 'recording.webm');
+        form.append('audio', audioBlob, audioFileName(audioBlob, 'recording'));
         const { data } = await apiClient.post<BackendVoiceAnalysisResponse>('/assessment/voice', form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });

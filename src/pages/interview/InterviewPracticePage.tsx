@@ -93,7 +93,8 @@ export default function InterviewPracticePage() {
     const question = session.questions[qIndex];
 
     setScoring(true);
-    const feedback = await interviewService.answerQuestion(session, question.id, recorder.audioBlob ?? undefined, recorder.duration);
+    const audioBlob = await recorder.getAudioBlob();
+    const feedback = await interviewService.answerQuestion(session, question.id, audioBlob ?? undefined, recorder.duration);
     setLastMetrics(feedback);
     setScoring(false);
     recorder.reset();

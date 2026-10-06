@@ -2,6 +2,7 @@ import { apiClient } from './apiClient';
 import { mockDelay } from './mockDelay';
 import { interviewCategories } from '@/data/mockData';
 import { getCurrentStudentId } from '@/lib/auth';
+import { audioFileName } from '@/lib/audioToWav';
 import type { InterviewCategory } from '@/types';
 
 export interface InterviewResult {
@@ -153,10 +154,14 @@ export const interviewService = {
       try {
         const form = new FormData();
         form.append('duration_seconds', String(durationSeconds));
-        form.append('audio', audioBlob, 'answer.webm');
-        const { data: voice } = await apiClient.post<{ transcript: string }>('/assessment/voice', form, {
+        form.append('audio', audioBlob, audioFileName(audioBlob, 'answer'));
+        const { data: voice } = await apiClient.post<{ transcript: string; source: 'real' | 'mock' }>('/assessment/voice', form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
+        // A mock transcript is canned text the student never said. Scoring it
+        // would present feedback about someone else's words as if it were theirs,
+        // so treat it as a failed transcription and use the demo fallback below.
+        if (voice.source !== 'real') throw new Error('Speech-to-text unavailable — refusing to score a placeholder transcript.');
 
         const { data } = await apiClient.post<BackendAnswerResponse>('/interview/answer', {
           session_id: session.sessionId,
