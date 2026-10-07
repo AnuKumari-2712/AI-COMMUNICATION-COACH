@@ -19,10 +19,19 @@ export function VoiceAnalysisResults({ result }: { result: VoiceAnalysisResult }
 
   return (
     <div>
-      {result.source === 'mock' && (
+      {result.offline && (
         <Badge variant="outline" size="sm" className="mb-3">
           Demo data — backend offline
         </Badge>
+      )}
+      {!result.offline && result.source === 'mock' && (
+        <Card className="mb-3 border-warning-500/20 bg-warning-500/5 p-4">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warning-400">Speech recognition couldn't transcribe this recording</p>
+          <p className="text-xs leading-relaxed text-base-300">
+            The transcript below is a sample sentence, not what you said, so this feedback is not about your actual answer.
+            Try again closer to the microphone, in a quiet place, speaking for at least a few seconds.
+          </p>
+        </Card>
       )}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {rows.map((r) => (

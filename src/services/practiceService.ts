@@ -14,8 +14,14 @@ export interface VoiceAnalysisResult {
   fillerWordCount: number;
   confidence: number;
   transcript: string;
-  /** 'real' = backend analysis ran, 'mock' = backend unreachable, local demo data shown instead. */
+  /**
+   * 'real' = the backend's speech-to-text transcribed the recording.
+   * 'mock' = the transcript is a sample sentence, not what the user said
+   * (either speech recognition failed, or the backend was unreachable — see `offline`).
+   */
   source: 'real' | 'mock';
+  /** true only when the backend could not be reached at all and everything is local demo data. */
+  offline: boolean;
   /** Pronunciation is a transcript-only proxy in this project — never a real audio measurement. Always false. */
   pronunciationReliable: boolean;
   pronunciationMethod: string;
@@ -229,6 +235,7 @@ export const practiceService = {
           confidence: data.confidence_score,
           transcript: data.transcript,
           source: data.source,
+          offline: false,
           pronunciationReliable: data.pronunciation_reliable,
           pronunciationMethod: data.pronunciation_method,
           wordsPerMinute: data.words_per_minute,
@@ -255,6 +262,7 @@ export const practiceService = {
         transcript:
           "So, um, I think the biggest challenge in my last project was, like, coordinating between the frontend and backend teams because we didn't have, um, a shared timeline initially.",
         source: 'mock' as const,
+        offline: true,
         pronunciationReliable: false,
         pronunciationMethod: 'Demo data — backend offline, no real analysis performed.',
         wordsPerMinute: 110 + Math.round(Math.random() * 30),

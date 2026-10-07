@@ -115,6 +115,13 @@ export default function FluencyPracticePage() {
           {result && (
             <Card className="mt-6 p-6">
               <h3 className="mb-4 font-display text-base font-semibold text-base-50">Fluency Report</h3>
+              {result.source === 'mock' && (
+                <p className="mb-4 rounded-lg border border-warning-500/20 bg-warning-500/5 p-3 text-xs text-base-300">
+                  {result.offline
+                    ? 'Demo data — backend offline.'
+                    : "Speech recognition couldn't transcribe this recording, so these numbers are based on a sample sentence, not what you said. Try again closer to the microphone."}
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <div className="flex flex-col items-center gap-2">
                   <RadialProgress value={result.fluency} size={72} tone={scoreTone(result.fluency)} />
