@@ -132,21 +132,66 @@ def _fake_speech_recognition(monkeypatch, outcomes):
     return calls
 
 
-def test_stt_sends_long_audio_in_chunks_and_skips_silent_chunk(tmp_path, monkeypatch):
+def _read_frames(path):
+    with wave.open(path, "rb") as w:
+        return w.readframes(w.getnframes()), w.getframerate(), w.getsampwidth()
+
+
+def test_stt_chunk_cuts_land_in_silence_not_inside_speech(tmp_path):
+    # speech 0-5.5, gap 5.5-5.9, speech 5.9-11.4, gap 11.4-11.8, speech 11.8-17.3
+    segments = [("speech", 5.5), ("silence", 0.4), ("speech", 5.5), ("silence", 0.4), ("speech", 5.5)]
+    frames, rate, width = _read_frames(_write_wav(tmp_path / "gaps.wav", segments))
+    cuts = [c / rate for c in stt._chunk_boundaries(frames, rate, width)]
+    assert len(cuts) == 2
+    assert 5.5 <= cuts[0] <= 5.9
+    assert 11.4 <= cuts[1] <= 11.8
+
+
+def test_stt_pieces_stay_short_enough_for_googles_free_endpoint(tmp_path):
+    frames, rate, width = _read_frames(_write_wav(tmp_path / "long.wav", [("speech", 60.0)], amplitude=2000))
+    edges = [0, *stt._chunk_boundaries(frames, rate, width), len(frames) // width]
+    longest = max(b - a for a, b in zip(edges, edges[1:])) / rate
+    assert longest <= stt.TARGET_CHUNK_SECONDS + stt.BOUNDARY_SEARCH_SECONDS + 0.1
+    assert len(edges) - 1 > 5  # 60 s is many pieces, not one or two
+
+
+def test_stt_short_clip_is_a_single_google_call(tmp_path, monkeypatch):
+    path = _write_wav(tmp_path / "short.wav", [("speech", 5.0)], amplitude=2000)
+    calls = _fake_speech_recognition(monkeypatch, ["hello there"])
+    assert stt.transcribe_wav(path) == ("hello there", AnalysisSource.real)
+    assert calls["n"] == 1
+
+
+def test_stt_joins_every_piece_and_skips_a_silent_one(tmp_path, monkeypatch):
     import speech_recognition as sr
 
-    path = _write_wav(tmp_path / "long.wav", [("speech", 60.0)], amplitude=2000)  # 60s -> 3 chunks (25+25+10)
-    calls = _fake_speech_recognition(monkeypatch, ["first part", sr.UnknownValueError(), "last part"])
+    path = _write_wav(tmp_path / "long.wav", [("speech", 20.0)], amplitude=2000)
+    frames, rate, width = _read_frames(path)
+    pieces = len(stt._chunk_boundaries(frames, rate, width)) + 1
+    assert pieces >= 3
+    outcomes = [f"part{i}" for i in range(pieces)]
+    outcomes[1] = sr.UnknownValueError()
+    calls = _fake_speech_recognition(monkeypatch, outcomes)
     text, source = stt.transcribe_wav(path)
-    assert calls["n"] == 3
-    assert (text, source) == ("first part last part", AnalysisSource.real)
+    assert calls["n"] == pieces
+    assert source == AnalysisSource.real
+    assert text == " ".join(o for o in outcomes if isinstance(o, str))
+
+
+def test_stt_retries_a_dropped_request_once(tmp_path, monkeypatch):
+    import speech_recognition as sr
+
+    path = _write_wav(tmp_path / "short.wav", [("speech", 3.0)], amplitude=2000)
+    calls = _fake_speech_recognition(monkeypatch, [sr.RequestError("dropped"), "recovered"])
+    assert stt.transcribe_wav(path) == ("recovered", AnalysisSource.real)
+    assert calls["n"] == 2
 
 
 def test_stt_network_failure_still_degrades_to_labeled_mock(tmp_path, monkeypatch):
     import speech_recognition as sr
 
     path = _write_wav(tmp_path / "short.wav", [("speech", 3.0)], amplitude=2000)
-    _fake_speech_recognition(monkeypatch, [sr.RequestError("no internet")])
+    _fake_speech_recognition(monkeypatch, [sr.RequestError("no internet"), sr.RequestError("no internet")])
     text, source = stt.transcribe_wav(path)
     assert source == AnalysisSource.mock and text
 

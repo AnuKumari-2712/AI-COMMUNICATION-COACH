@@ -14,6 +14,7 @@ mark the result `AnalysisSource.mock` so the frontend can label it honestly,
 per the project's requirement to never present mock output as real AI
 analysis.
 """
+import audioop
 import logging
 import random
 
@@ -31,11 +32,44 @@ _MOCK_TRANSCRIPTS = [
 ]
 
 
-# Google's free Web Speech endpoint rejects or truncates long clips, so audio is
-# sent in consecutive chunks of at most this many seconds and the pieces are
-# joined. A chunk with no recognizable speech (a long pause) is skipped rather
-# than failing the whole recording.
-CHUNK_SECONDS = 25
+# Google's free Web Speech endpoint handles long continuous speech badly: it can
+# split the transcript into several segments and the SpeechRecognition library
+# keeps only one of them, so a ~9 s answer came back as just its last 4 words
+# (seen on the deployed backend; short clips were fine). Audio is therefore sent
+# in pieces of about TARGET_CHUNK_SECONDS and the pieces are joined. Each cut is
+# placed at the quietest 50 ms within BOUNDARY_SEARCH_SECONDS of the target so a
+# word is not sliced in half. A piece with no recognizable speech is skipped
+# rather than failing the whole recording.
+TARGET_CHUNK_SECONDS = 6.0
+BOUNDARY_SEARCH_SECONDS = 1.5
+_PROBE_SECONDS = 0.05
+
+
+def _chunk_boundaries(frame_data: bytes, sample_rate: int, sample_width: int) -> list[int]:
+    """Frame indexes (mono PCM) at which to cut the recording, quietest point near each target."""
+    total = len(frame_data) // sample_width
+    target = int(TARGET_CHUNK_SECONDS * sample_rate)
+    search = int(BOUNDARY_SEARCH_SECONDS * sample_rate)
+    probe = max(1, int(_PROBE_SECONDS * sample_rate))
+    cuts: list[int] = []
+    pos = 0
+    while total - pos > target + search:
+        best_frame, best_rms = pos + target - search, None
+        for start in range(pos + target - search, pos + target + search - probe, probe):
+            rms = audioop.rms(frame_data[start * sample_width : (start + probe) * sample_width], sample_width)
+            if best_rms is None or rms < best_rms:
+                best_rms, best_frame = rms, start + probe // 2
+        cuts.append(best_frame)
+        pos = best_frame
+    return cuts
+
+
+def _recognize(recognizer, sr, audio, language: str) -> str:
+    """One Google call, retried once because the free endpoint drops requests occasionally."""
+    try:
+        return recognizer.recognize_google(audio, language=language)
+    except sr.RequestError:
+        return recognizer.recognize_google(audio, language=language)
 
 
 def transcribe_wav(file_path: str, language: str = "en-IN") -> tuple[str, AnalysisSource]:
@@ -49,17 +83,18 @@ def transcribe_wav(file_path: str, language: str = "en-IN") -> tuple[str, Analys
     try:
         pieces: list[str] = []
         with sr.AudioFile(file_path) as source:
-            total_seconds = float(source.DURATION or 0)
-            elapsed = 0.0
-            while elapsed < total_seconds:
-                audio = recognizer.record(source, duration=CHUNK_SECONDS)
-                elapsed += CHUNK_SECONDS
-                try:
-                    piece = recognizer.recognize_google(audio, language=language)
-                except sr.UnknownValueError:
-                    continue  # this chunk had no intelligible speech — keep going
-                if piece.strip():
-                    pieces.append(piece.strip())
+            whole = recognizer.record(source)
+        edges = [0, *_chunk_boundaries(whole.frame_data, whole.sample_rate, whole.sample_width), len(whole.frame_data) // whole.sample_width]
+        for start, end in zip(edges, edges[1:]):
+            chunk = sr.AudioData(
+                whole.frame_data[start * whole.sample_width : end * whole.sample_width], whole.sample_rate, whole.sample_width
+            )
+            try:
+                piece = _recognize(recognizer, sr, chunk, language)
+            except sr.UnknownValueError:
+                continue  # this piece had no intelligible speech — keep going
+            if piece.strip():
+                pieces.append(piece.strip())
         text = " ".join(pieces)
         if not text.strip():
             raise ValueError("empty transcript")
