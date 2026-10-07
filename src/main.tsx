@@ -6,6 +6,9 @@ import App from './App.tsx';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ToastProvider } from '@/hooks/useToast';
 import { Toaster } from '@/components/ui/Toaster';
+import { wakeBackend } from '@/services/apiClient';
+
+wakeBackend();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
