@@ -29,7 +29,8 @@ export default function VoicePracticePage() {
   const handleAnalyze = async () => {
     setAnalyzing(true);
     const audioBlob = await recorder.getAudioBlob();
-    const analysis = await practiceService.analyzeVoiceRecording(recorder.duration, audioBlob ?? undefined);
+    const transcript = await recorder.getTranscript();
+    const analysis = await practiceService.analyzeVoiceRecording(recorder.duration, audioBlob ?? undefined, transcript);
     setResult(analysis);
     setAnalyzing(false);
   };
@@ -61,6 +62,12 @@ export default function VoicePracticePage() {
           <div className="flex items-center gap-2 rounded-xl border border-danger-500/30 bg-danger-500/10 px-4 py-3 text-sm text-danger-300">
             <AlertCircle className="size-4.5 shrink-0" />
             {recorder.error}
+          </div>
+        )}
+        {!recorder.speechSupported && (
+          <div className="rounded-xl border border-warning-500/30 bg-warning-500/10 px-4 py-3 text-xs text-warning-300">
+            This browser can't recognize speech while you talk. Your recording will still be analyzed, but transcription is less
+            reliable — for the most accurate feedback use Chrome or Edge.
           </div>
         )}
 

@@ -113,6 +113,10 @@ class VoiceAnalysisResponse(BaseModel):
     pronunciation_reliable: bool = False
     pronunciation_method: str = ""
     fluency_formula: str = ""
+    # Where the transcript came from: "browser" = recognized by the user's
+    # browser, "server" = recognized by the backend, "sample" = recognition
+    # failed and this is a canned sentence, not the user's words.
+    transcript_source: Literal["browser", "server", "sample"] = "server"
 
 
 class ExplainMistakeRequest(BaseModel):

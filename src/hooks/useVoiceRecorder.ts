@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { blobToWav } from '@/lib/audioToWav';
+import { LiveTranscriber } from '@/lib/liveTranscriber';
 
 export type RecorderStatus = 'idle' | 'recording' | 'paused' | 'stopped' | 'error';
 
 export function useVoiceRecorder() {
+  // Recognizes the speech in the browser while recording; the text is sent to
+  // the backend with the audio (see lib/liveTranscriber.ts for why).
+  const [transcriber] = useState(() => new LiveTranscriber());
+  const finalTranscriptRef = useRef<Promise<string>>(Promise.resolve(''));
+  const speechSupported = LiveTranscriber.isSupported();
+
   const [status, setStatus] = useState<RecorderStatus>('idle');
   const [duration, setDuration] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -52,6 +59,8 @@ export function useVoiceRecorder() {
           });
       };
       recorder.start();
+      transcriber.reset();
+      transcriber.start();
       setStatus('recording');
       setDuration(0);
       intervalRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
@@ -59,34 +68,39 @@ export function useVoiceRecorder() {
       setStatus('error');
       setError('Microphone access was denied or is unavailable. Please allow microphone permissions.');
     }
-  }, []);
+  }, [transcriber]);
 
   const pause = useCallback(() => {
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.pause();
+      transcriber.pause();
       setStatus('paused');
       clearTimer();
     }
-  }, []);
+  }, [transcriber]);
 
   const resume = useCallback(() => {
     if (mediaRecorderRef.current?.state === 'paused') {
       mediaRecorderRef.current.resume();
+      transcriber.start();
       setStatus('recording');
       intervalRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
     }
-  }, []);
+  }, [transcriber]);
 
   const stop = useCallback(() => {
     finalBlobRef.current = new Promise<Blob | null>((resolve) => {
       resolveFinalBlobRef.current = resolve;
     });
+    finalTranscriptRef.current = transcriber.stop();
     mediaRecorderRef.current?.stop();
     clearTimer();
     setStatus('stopped');
-  }, []);
+  }, [transcriber]);
 
   const reset = useCallback(() => {
+    transcriber.reset();
+    finalTranscriptRef.current = Promise.resolve('');
     setStatus('idle');
     setDuration(0);
     setAudioUrl(null);
@@ -94,14 +108,17 @@ export function useVoiceRecorder() {
     setError(null);
     finalBlobRef.current = Promise.resolve(null);
     clearTimer();
-  }, []);
+  }, [transcriber]);
 
   const getAudioBlob = useCallback(() => finalBlobRef.current, []);
+  /** Resolves with what the browser recognized (empty if unsupported or nothing was heard). */
+  const getTranscript = useCallback(() => finalTranscriptRef.current, []);
 
   useEffect(() => () => {
     clearTimer();
+    transcriber.reset();
     streamRef.current?.getTracks().forEach((t) => t.stop());
-  }, []);
+  }, [transcriber]);
 
-  return { status, duration, audioUrl, audioBlob, getAudioBlob, error, start, pause, resume, stop, reset };
+  return { status, duration, audioUrl, audioBlob, getAudioBlob, getTranscript, speechSupported, error, start, pause, resume, stop, reset };
 }

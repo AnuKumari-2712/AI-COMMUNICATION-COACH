@@ -94,7 +94,8 @@ export default function InterviewPracticePage() {
 
     setScoring(true);
     const audioBlob = await recorder.getAudioBlob();
-    const feedback = await interviewService.answerQuestion(session, question.id, audioBlob ?? undefined, recorder.duration);
+    const transcript = await recorder.getTranscript();
+    const feedback = await interviewService.answerQuestion(session, question.id, audioBlob ?? undefined, recorder.duration, transcript);
     setLastMetrics(feedback);
     setScoring(false);
     recorder.reset();

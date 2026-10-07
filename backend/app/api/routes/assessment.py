@@ -44,9 +44,12 @@ async def analyze_voice(
     student_id: str = Depends(get_current_student_id),
     duration_seconds: float = Form(...),
     audio: UploadFile = File(...),
+    transcript: str | None = Form(None),
 ):
     if duration_seconds <= 0:
         raise HTTPException(status_code=422, detail="duration_seconds must be positive — a real recording duration is required to compute pace/fluency metrics.")
+    if transcript is not None and len(transcript) > 20000:
+        raise HTTPException(status_code=422, detail="transcript is too long.")
 
     content = await audio.read()
     if not content:
@@ -56,7 +59,9 @@ async def analyze_voice(
     tmp_path = assessment_service.save_upload_to_tempfile(content, suffix=suffix)
     try:
         settings = get_settings()
-        return assessment_service.analyze_voice_upload(student_id, tmp_path, duration_seconds, settings.stt_language)
+        return assessment_service.analyze_voice_upload(
+            student_id, tmp_path, duration_seconds, settings.stt_language, client_transcript=transcript
+        )
     finally:
         os.remove(tmp_path)
 

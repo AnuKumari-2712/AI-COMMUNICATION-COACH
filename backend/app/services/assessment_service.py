@@ -196,8 +196,24 @@ def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisRes
     )
 
 
-def analyze_voice_upload(student_id: str, tmp_path: str, duration_seconds: float, language: str) -> VoiceAnalysisResponse:
-    transcript, stt_source = stt.transcribe_wav(tmp_path, language=language)
+def analyze_voice_upload(
+    student_id: str,
+    tmp_path: str,
+    duration_seconds: float,
+    language: str,
+    client_transcript: str | None = None,
+) -> VoiceAnalysisResponse:
+    # The server-side Google call proved unreliable from the deployed host (it
+    # returned only the tail of longer clips for the same audio that transcribed
+    # completely elsewhere). When the browser already recognized the speech on
+    # the user's own connection, use that; pace, pauses and fluency are still
+    # measured from the uploaded audio.
+    client_text = (client_transcript or "").strip()
+    if client_text:
+        transcript, stt_source, transcript_source = client_text, AnalysisSource.real, "browser"
+    else:
+        transcript, stt_source = stt.transcribe_wav(tmp_path, language=language)
+        transcript_source = "server" if stt_source == AnalysisSource.real else "sample"
     pause_analysis = analyze_wav_pauses(tmp_path)
 
     metrics = compute_speech_metrics(transcript, duration_seconds, real_pause_analysis=pause_analysis)
@@ -253,6 +269,7 @@ def analyze_voice_upload(student_id: str, tmp_path: str, duration_seconds: float
         pronunciation_reliable=pronunciation["reliable"],
         pronunciation_method=pronunciation["method"],
         fluency_formula=metrics.fluency_formula,
+        transcript_source=transcript_source,
     )
 
 

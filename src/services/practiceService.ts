@@ -20,6 +20,8 @@ export interface VoiceAnalysisResult {
    * (either speech recognition failed, or the backend was unreachable — see `offline`).
    */
   source: 'real' | 'mock';
+  /** Who produced the transcript: the user's browser, the backend, or a canned sample sentence. */
+  transcriptSource: 'browser' | 'server' | 'sample';
   /** true only when the backend could not be reached at all and everything is local demo data. */
   offline: boolean;
   /** Pronunciation is a transcript-only proxy in this project — never a real audio measurement. Always false. */
@@ -135,6 +137,7 @@ interface BackendSkillScores {
 
 interface BackendVoiceAnalysisResponse {
   source: 'real' | 'mock';
+  transcript_source: 'browser' | 'server' | 'sample';
   transcript: string;
   grammar_score: number;
   vocabulary_score: number;
@@ -216,12 +219,13 @@ export const practiceService = {
    * backend can transcribe and measure pauses on without ffmpeg. Only if that
    * conversion is impossible does the backend fall back to a labeled mock.
    */
-  analyzeVoiceRecording: async (durationSec: number, audioBlob?: Blob): Promise<VoiceAnalysisResult> => {
+  analyzeVoiceRecording: async (durationSec: number, audioBlob?: Blob, browserTranscript?: string): Promise<VoiceAnalysisResult> => {
     if (audioBlob) {
       try {
         const form = new FormData();
         form.append('duration_seconds', String(durationSec));
         form.append('audio', audioBlob, audioFileName(audioBlob, 'recording'));
+        if (browserTranscript?.trim()) form.append('transcript', browserTranscript.trim());
         const { data } = await apiClient.post<BackendVoiceAnalysisResponse>('/assessment/voice', form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -235,6 +239,7 @@ export const practiceService = {
           confidence: data.confidence_score,
           transcript: data.transcript,
           source: data.source,
+          transcriptSource: data.transcript_source,
           offline: false,
           pronunciationReliable: data.pronunciation_reliable,
           pronunciationMethod: data.pronunciation_method,
@@ -262,6 +267,7 @@ export const practiceService = {
         transcript:
           "So, um, I think the biggest challenge in my last project was, like, coordinating between the frontend and backend teams because we didn't have, um, a shared timeline initially.",
         source: 'mock' as const,
+        transcriptSource: 'sample' as const,
         offline: true,
         pronunciationReliable: false,
         pronunciationMethod: 'Demo data — backend offline, no real analysis performed.',

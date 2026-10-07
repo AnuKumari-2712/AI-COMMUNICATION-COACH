@@ -31,7 +31,8 @@ export default function FluencyPracticePage() {
   const handleAnalyze = async () => {
     setAnalyzing(true);
     const audioBlob = await recorder.getAudioBlob();
-    const analysis = await practiceService.analyzeVoiceRecording(recorder.duration, audioBlob ?? undefined);
+    const transcript = await recorder.getTranscript();
+    const analysis = await practiceService.analyzeVoiceRecording(recorder.duration, audioBlob ?? undefined, transcript);
     setResult(analysis);
     setAnalyzing(false);
   };

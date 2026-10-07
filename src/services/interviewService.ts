@@ -149,12 +149,19 @@ export const interviewService = {
    * feedback if the backend or STT isn't available — the session still
    * completes either way.
    */
-  answerQuestion: async (session: InterviewSession, questionId: string, audioBlob: Blob | undefined, durationSeconds: number): Promise<AnswerFeedback> => {
+  answerQuestion: async (
+    session: InterviewSession,
+    questionId: string,
+    audioBlob: Blob | undefined,
+    durationSeconds: number,
+    browserTranscript?: string,
+  ): Promise<AnswerFeedback> => {
     if (session.source === 'real' && audioBlob) {
       try {
         const form = new FormData();
         form.append('duration_seconds', String(durationSeconds));
         form.append('audio', audioBlob, audioFileName(audioBlob, 'answer'));
+        if (browserTranscript?.trim()) form.append('transcript', browserTranscript.trim());
         const { data: voice } = await apiClient.post<{ transcript: string; source: 'real' | 'mock'; fluency_score: number; pause_count: number; pace_source: string }>('/assessment/voice', form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });

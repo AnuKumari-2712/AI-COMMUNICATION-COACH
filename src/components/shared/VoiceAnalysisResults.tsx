@@ -75,6 +75,11 @@ export function VoiceAnalysisResults({ result }: { result: VoiceAnalysisResult }
       <Card className="mt-4 p-4">
         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-base-400">Transcript</p>
         <p className="text-sm leading-relaxed text-base-300">{result.transcript}</p>
+        {result.transcriptSource === 'browser' && (
+          <p className="mt-2 text-[11px] text-base-500">
+            Recognized by your browser's speech recognition. Recognition can mishear words; feedback is based on this text.
+          </p>
+        )}
       </Card>
     </div>
   );
