@@ -25,6 +25,9 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
+    # Optional pattern for origins that can't be listed ahead of time, e.g. a
+    # host's per-deployment preview URLs. Must match the whole origin.
+    cors_origin_regex: str | None = None
 
     # Feature flags
     use_mock_ai: bool = True

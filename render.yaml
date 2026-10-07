@@ -10,7 +10,12 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.9"
       - key: CORS_ORIGINS
-        value: '["http://localhost:5173"]'
+        value: '["http://localhost:5173", "https://ai-communication-coach-nova-0a34.vercel.app"]'
+      # Vercel also serves every deployment and branch from its own URL
+      # (ai-communication-coach-<hash>-nova-0a34.vercel.app, ...-git-main-...).
+      # Only URLs of this project in this Vercel team match.
+      - key: CORS_ORIGIN_REGEX
+        value: 'https://ai-communication-coach(-[a-z0-9]+)*-nova-0a34\.vercel\.app'
       - key: USE_MOCK_AI
         value: "true"
       - key: JWT_SECRET
