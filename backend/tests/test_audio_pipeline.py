@@ -138,13 +138,13 @@ def _read_frames(path):
 
 
 def test_stt_chunk_cuts_land_in_silence_not_inside_speech(tmp_path):
-    # speech 0-5.5, gap 5.5-5.9, speech 5.9-11.4, gap 11.4-11.8, speech 11.8-17.3
-    segments = [("speech", 5.5), ("silence", 0.4), ("speech", 5.5), ("silence", 0.4), ("speech", 5.5)]
+    # speech 0-2.3, gap 2.3-2.6, speech 2.6-4.9, gap 4.9-5.2, speech 5.2-7.5
+    segments = [("speech", 2.3), ("silence", 0.3), ("speech", 2.3), ("silence", 0.3), ("speech", 2.3)]
     frames, rate, width = _read_frames(_write_wav(tmp_path / "gaps.wav", segments))
     cuts = [c / rate for c in stt._chunk_boundaries(frames, rate, width)]
     assert len(cuts) == 2
-    assert 5.5 <= cuts[0] <= 5.9
-    assert 11.4 <= cuts[1] <= 11.8
+    assert 2.3 <= cuts[0] <= 2.6
+    assert 4.9 <= cuts[1] <= 5.2
 
 
 def test_stt_pieces_stay_short_enough_for_googles_free_endpoint(tmp_path):
@@ -156,7 +156,7 @@ def test_stt_pieces_stay_short_enough_for_googles_free_endpoint(tmp_path):
 
 
 def test_stt_short_clip_is_a_single_google_call(tmp_path, monkeypatch):
-    path = _write_wav(tmp_path / "short.wav", [("speech", 5.0)], amplitude=2000)
+    path = _write_wav(tmp_path / "short.wav", [("speech", 2.5)], amplitude=2000)
     calls = _fake_speech_recognition(monkeypatch, ["hello there"])
     assert stt.transcribe_wav(path) == ("hello there", AnalysisSource.real)
     assert calls["n"] == 1

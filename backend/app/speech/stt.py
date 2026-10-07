@@ -32,16 +32,16 @@ _MOCK_TRANSCRIPTS = [
 ]
 
 
-# Google's free Web Speech endpoint handles long continuous speech badly: it can
-# split the transcript into several segments and the SpeechRecognition library
-# keeps only one of them, so a ~9 s answer came back as just its last 4 words
-# (seen on the deployed backend; short clips were fine). Audio is therefore sent
-# in pieces of about TARGET_CHUNK_SECONDS and the pieces are joined. Each cut is
-# placed at the quietest 50 ms within BOUNDARY_SEARCH_SECONDS of the target so a
-# word is not sliced in half. A piece with no recognizable speech is skipped
-# rather than failing the whole recording.
-TARGET_CHUNK_SECONDS = 6.0
-BOUNDARY_SEARCH_SECONDS = 1.5
+# Google's free Web Speech endpoint loses most of a continuous clip when it is
+# called from the deployed server: measured on Render with the same audio, clips
+# up to ~3 s came back complete, a 4 s clip returned only its last word and a
+# 6 s clip only its last 6 words, while the same files were complete when run
+# locally. Audio is therefore sent in pieces of at most ~3 s and the pieces are
+# joined. Each cut is placed at the quietest 50 ms within BOUNDARY_SEARCH_SECONDS
+# of the target so a word is not sliced in half. A piece with no recognizable
+# speech is skipped rather than failing the whole recording.
+TARGET_CHUNK_SECONDS = 2.5
+BOUNDARY_SEARCH_SECONDS = 0.5
 _PROBE_SECONDS = 0.05
 
 
