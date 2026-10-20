@@ -80,16 +80,23 @@ export default function TextPracticePage() {
                 <CardTitle>Grammar Corrections</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {result.corrections.map((c, i) => (
-                  <div key={i} className="rounded-xl border border-white/5 bg-base-800/60 p-3.5">
-                    <p className="text-sm">
-                      <span className="rounded bg-danger-500/15 px-1.5 py-0.5 text-danger-300 line-through">{c.original}</span>
-                      {' → '}
-                      <span className="rounded bg-success-500/15 px-1.5 py-0.5 text-success-300">{c.corrected}</span>
-                    </p>
-                    <p className="mt-1.5 text-xs text-base-400">{c.reason}</p>
+                {result.corrections.length > 0 ? (
+                  result.corrections.map((c, i) => (
+                    <div key={i} className="rounded-xl border border-white/5 bg-base-800/60 p-3.5">
+                      <p className="text-sm">
+                        <span className="rounded bg-danger-500/15 px-1.5 py-0.5 text-danger-300 line-through">{c.original}</span>
+                        {' → '}
+                        <span className="rounded bg-success-500/15 px-1.5 py-0.5 text-success-300">{c.corrected}</span>
+                      </p>
+                      <p className="mt-1.5 text-xs text-base-400">{c.reason}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex items-center gap-3 rounded-xl border border-success-500/20 bg-success-500/10 p-4 text-sm text-success-300">
+                    <CheckCircle2 className="size-5 shrink-0" />
+                    <span>No grammar issues found! Your response has strong grammatical structure.</span>
                   </div>
-                ))}
+                )}
               </CardContent>
             </Card>
           </div>

@@ -14,22 +14,17 @@ mark the result `AnalysisSource.mock` so the frontend can label it honestly,
 per the project's requirement to never present mock output as real AI
 analysis.
 """
-import audioop
+try:
+    import audioop
+except ImportError:
+    audioop = None
 import logging
-import random
 
 from app.schemas.common import AnalysisSource
 
 logger = logging.getLogger(__name__)
 
-_MOCK_TRANSCRIPTS = [
-    "So, um, I think the biggest challenge in my last project was, like, coordinating between the "
-    "frontend and backend teams because we didn't have, um, a shared timeline initially.",
-    "I would say my greatest strength is, uh, being able to break down a complex problem into "
-    "smaller pieces and, basically, communicate that plan clearly to the rest of the team.",
-    "For this question, actually, I want to talk about a time when I had to learn a new framework "
-    "very quickly, um, under a tight deadline for a client project.",
-]
+EMPTY_TRANSCRIPT_FALLBACK = "(No speech detected in audio recording)"
 
 
 # Google's free Web Speech endpoint loses most of a continuous clip when it is
@@ -47,6 +42,8 @@ _PROBE_SECONDS = 0.05
 
 def _chunk_boundaries(frame_data: bytes, sample_rate: int, sample_width: int) -> list[int]:
     """Frame indexes (mono PCM) at which to cut the recording, quietest point near each target."""
+    if audioop is None:
+        return []
     total = len(frame_data) // sample_width
     target = int(TARGET_CHUNK_SECONDS * sample_rate)
     search = int(BOUNDARY_SEARCH_SECONDS * sample_rate)
@@ -76,8 +73,8 @@ def transcribe_wav(file_path: str, language: str = "en-IN") -> tuple[str, Analys
     try:
         import speech_recognition as sr
     except ImportError:
-        logger.warning("speech_recognition not installed — returning mock transcript.")
-        return random.choice(_MOCK_TRANSCRIPTS), AnalysisSource.mock
+        logger.warning("speech_recognition not installed — returning empty transcript.")
+        return EMPTY_TRANSCRIPT_FALLBACK, AnalysisSource.mock
 
     recognizer = sr.Recognizer()
     try:
@@ -100,5 +97,5 @@ def transcribe_wav(file_path: str, language: str = "en-IN") -> tuple[str, Analys
             raise ValueError("empty transcript")
         return text, AnalysisSource.real
     except Exception as exc:  # noqa: BLE001 - any STT failure should degrade gracefully
-        logger.warning("Speech-to-text failed (%s) — returning mock transcript.", exc)
-        return random.choice(_MOCK_TRANSCRIPTS), AnalysisSource.mock
+        logger.warning("Speech-to-text failed (%s) — returning empty transcript.", exc)
+        return EMPTY_TRANSCRIPT_FALLBACK, AnalysisSource.mock

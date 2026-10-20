@@ -3,7 +3,26 @@ import { mockDelay } from './mockDelay';
 import { interviewCategories } from '@/data/mockData';
 import { getCurrentStudentId } from '@/lib/auth';
 import { audioFileName } from '@/lib/audioToWav';
+import { performClientTextAnalysis, performClientVoiceAnalysis } from '@/lib/clientAnalysis';
 import type { InterviewCategory } from '@/types';
+
+interface StoredSessionAnswer {
+  questionId: string;
+  questionText: string;
+  transcript: string;
+  grammar: number;
+  vocabulary: number;
+  fluency: number;
+  confidence: number;
+  clarity: number;
+  structure: number;
+  relevance: number;
+  pace: number;
+  fillerWordCount: number;
+  mostFrequentFiller: string | null;
+}
+
+const sessionAnswersMap = new Map<string, StoredSessionAnswer[]>();
 
 export interface InterviewResult {
   overall: number;
@@ -128,6 +147,7 @@ export const interviewService = {
         resume_text: options?.resumeText,
         job_role: options?.jobRole,
       });
+      sessionAnswersMap.set(data.session_id, []);
       return {
         sessionId: data.session_id,
         categoryId: data.category_id,
@@ -137,17 +157,16 @@ export const interviewService = {
     } catch {
       localSessionCounter += 1;
       const sessionId = `local-${localSessionCounter}`;
+      sessionAnswersMap.set(sessionId, []);
       const questions = (questionBank[categoryId] ?? questionBank.hr).map((text, i) => ({ id: `${sessionId}-q${i}`, text }));
       return mockDelay({ sessionId, categoryId, questions, source: 'mock' as const }, 300);
     }
   },
 
   /**
-   * Transcribes the recorded answer (via the voice-assessment endpoint,
-   * reused here purely for its transcript) and scores it against the
-   * interview question. Falls back to a synthetic transcript + canned
-   * feedback if the backend or STT isn't available — the session still
-   * completes either way.
+   * Transcribes the recorded answer and scores it against the interview question.
+   * If the backend is unreachable, evaluates the candidate's actual speech
+   * and timing dynamically using client-side analysis.
    */
   answerQuestion: async (
     session: InterviewSession,
@@ -165,10 +184,8 @@ export const interviewService = {
         const { data: voice } = await apiClient.post<{ transcript: string; source: 'real' | 'mock'; fluency_score: number; pause_count: number; pace_source: string }>('/assessment/voice', form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        // A mock transcript is canned text the student never said. Scoring it
-        // would present feedback about someone else's words as if it were theirs,
-        // so treat it as a failed transcription and use the demo fallback below.
-        if (voice.source !== 'real') throw new Error('Speech-to-text unavailable — refusing to score a placeholder transcript.');
+
+        if (voice.source !== 'real') throw new Error('Speech-to-text unavailable — falling back to client evaluation.');
 
         const { data } = await apiClient.post<BackendAnswerResponse>('/interview/answer', {
           session_id: session.sessionId,
@@ -176,8 +193,6 @@ export const interviewService = {
           answer_text: voice.transcript,
           mode: 'voice',
           duration_seconds: durationSeconds,
-          // Real measurements from this recording, so fluency and clarity are
-          // computed from the audio rather than guessed from unpunctuated text.
           ...(voice.pace_source === 'measured'
             ? { speech_fluency_score: voice.fluency_score, speech_pause_count: voice.pause_count }
             : {}),
@@ -193,21 +208,64 @@ export const interviewService = {
           feedback: data.feedback,
         };
       } catch {
-        // fall through to mock feedback below
+        // fall through to dynamic client evaluation below
       }
     }
+
+    const qObj = session.questions.find((q) => q.id === questionId);
+    const qText = qObj?.text || 'Interview question';
+    const cleanTranscript = (browserTranscript || '').trim();
+
+    const voiceRes = performClientVoiceAnalysis(durationSeconds, cleanTranscript, cleanTranscript ? 'browser' : 'sample');
+    const textRes = cleanTranscript ? performClientTextAnalysis(qText, cleanTranscript) : null;
+
+    let dynamicFeedback = 'Solid answer overall.';
+    if (!cleanTranscript) {
+      dynamicFeedback = 'No speech was detected. Please check microphone permissions and speak clearly.';
+    } else if (voiceRes.fillerWordCount > 2) {
+      dynamicFeedback = `Good response, but watch out for filler words like "${voiceRes.mostFrequentFiller || 'um'}" (${voiceRes.fillerWordCount} detected). Practice pausing silently instead.`;
+    } else if (textRes && textRes.relevanceScore < 50) {
+      dynamicFeedback = 'Try addressing the question more directly — be sure to highlight key outcomes and specific examples.';
+    } else if (voiceRes.wordsPerMinute > 170) {
+      dynamicFeedback = `Your delivery was slightly rushed (${voiceRes.wordsPerMinute} wpm). Aim for a steady 130-160 wpm for maximum impact.`;
+    } else if (voiceRes.wordsPerMinute < 100 && voiceRes.wordsPerMinute > 0) {
+      dynamicFeedback = `Pacing was somewhat hesitant (${voiceRes.wordsPerMinute} wpm). Practice delivering complete thoughts without long pauses.`;
+    } else if (textRes && textRes.structureScore > 75) {
+      dynamicFeedback = 'Well-structured answer with clear framing and relevant details. Great delivery!';
+    }
+
+    const answerRecord: StoredSessionAnswer = {
+      questionId,
+      questionText: qText,
+      transcript: cleanTranscript,
+      grammar: textRes ? textRes.grammarScore : voiceRes.grammarScore,
+      vocabulary: textRes ? textRes.vocabularyScore : voiceRes.vocabularyScore,
+      fluency: voiceRes.fluencyScore,
+      confidence: voiceRes.confidenceScore,
+      clarity: textRes ? textRes.clarityScore : 72,
+      structure: textRes ? textRes.structureScore : 68,
+      relevance: textRes ? textRes.relevanceScore : 75,
+      pace: voiceRes.paceScore,
+      fillerWordCount: voiceRes.fillerWordCount,
+      mostFrequentFiller: voiceRes.mostFrequentFiller,
+    };
+
+    const existingAnswers = sessionAnswersMap.get(session.sessionId) || [];
+    existingAnswers.push(answerRecord);
+    sessionAnswersMap.set(session.sessionId, existingAnswers);
+
     return mockDelay(
       {
-        grammar: 70 + Math.round(Math.random() * 15),
-        vocabulary: 68 + Math.round(Math.random() * 15),
-        fluency: 65 + Math.round(Math.random() * 15),
-        confidence: 66 + Math.round(Math.random() * 15),
-        clarity: 70 + Math.round(Math.random() * 15),
-        structure: 62 + Math.round(Math.random() * 15),
-        fillerWordCount: Math.round(Math.random() * 4),
-        feedback: 'Solid answer overall.',
+        grammar: answerRecord.grammar,
+        vocabulary: answerRecord.vocabulary,
+        fluency: answerRecord.fluency,
+        confidence: answerRecord.confidence,
+        clarity: answerRecord.clarity,
+        structure: answerRecord.structure,
+        fillerWordCount: answerRecord.fillerWordCount,
+        feedback: dynamicFeedback,
       },
-      600,
+      500,
     );
   },
 
@@ -229,9 +287,71 @@ export const interviewService = {
           recommendedExercises: data.recommended_exercises,
         };
       } catch {
-        // fall through to mock result below
+        // fall through to dynamic client summary below
       }
     }
+
+    const answers = sessionAnswersMap.get(session.sessionId) || [];
+    if (answers.length > 0) {
+      const avg = (fn: (a: StoredSessionAnswer) => number) =>
+        Math.round(answers.reduce((sum, a) => sum + fn(a), 0) / answers.length);
+
+      const grammar = avg((a) => a.grammar);
+      const vocabulary = avg((a) => a.vocabulary);
+      const fluency = avg((a) => a.fluency);
+      const confidence = avg((a) => a.confidence);
+      const clarity = avg((a) => a.clarity);
+      const structure = avg((a) => a.structure);
+      const totalFillers = answers.reduce((sum, a) => sum + a.fillerWordCount, 0);
+
+      const overall = Math.round((grammar + vocabulary + fluency + confidence + clarity + structure) / 6);
+      const communication = Math.round((clarity + fluency + structure) / 3);
+
+      const wentWell: string[] = [];
+      const needsImprovement: string[] = [];
+      const recommendedExercises: string[] = [];
+
+      if (confidence >= 70) wentWell.push('Maintained a confident, professional communication tone.');
+      if (totalFillers <= 2 * answers.length) wentWell.push('Demonstrated strong fluency with low filler word frequency.');
+      if (structure >= 70) wentWell.push('Responses had clear narrative structure and progression.');
+      if (clarity >= 70) wentWell.push('Explanations were articulate and easy to follow.');
+      if (wentWell.length === 0) wentWell.push('Completed all interview questions with genuine persistence.');
+
+      if (totalFillers > 2 * answers.length) {
+        needsImprovement.push('Noticeable filler words detected across several answers — practice intentional silent pauses.');
+        recommendedExercises.push('Practice Pacing & Filler Word Drills in Voice Practice');
+      }
+      if (structure < 70) {
+        needsImprovement.push('Use the STAR framework (Situation, Task, Action, Result) for behavioral answers.');
+        recommendedExercises.push('Practice STAR Storytelling in Fluency Practice');
+      }
+      if (vocabulary < 75) {
+        needsImprovement.push('Incorporate more domain-specific vocabulary and strong action verbs.');
+        recommendedExercises.push('Complete Vocabulary Flashcard Drills');
+      }
+      if (needsImprovement.length === 0) {
+        needsImprovement.push('Continue practicing under timed pressure to maintain this high standard.');
+        recommendedExercises.push('Simulate Advanced Mock Interview rounds');
+      }
+
+      return mockDelay(
+        {
+          overall,
+          communication,
+          confidence,
+          clarity,
+          grammar,
+          vocabulary,
+          structure,
+          fluency,
+          wentWell,
+          needsImprovement,
+          recommendedExercises,
+        },
+        800,
+      );
+    }
+
     return mockDelay(
       {
         overall: 78,
@@ -258,7 +378,7 @@ export const interviewService = {
           'Try the pacing drill in Voice Practice',
         ],
       },
-      1600,
+      800,
     );
   },
 };

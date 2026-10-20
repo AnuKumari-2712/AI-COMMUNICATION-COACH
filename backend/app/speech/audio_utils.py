@@ -20,7 +20,10 @@ Pause definition (documented so the numbers can be verified by hand):
   pause in speech and is excluded.
 - A "long pause" is one lasting at least `long_pause_ms` (hesitation-length).
 """
-import audioop
+try:
+    import audioop
+except ImportError:
+    audioop = None
 import contextlib
 import wave
 from dataclasses import dataclass
@@ -79,7 +82,7 @@ def analyze_wav_pauses(
     except (wave.Error, EOFError, OSError):
         return None
 
-    if not raw_audio or frame_rate == 0:
+    if not raw_audio or frame_rate == 0 or audioop is None:
         return None
 
     if n_channels > 1:

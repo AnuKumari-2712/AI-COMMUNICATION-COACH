@@ -26,10 +26,9 @@ export function VoiceAnalysisResults({ result }: { result: VoiceAnalysisResult }
       )}
       {!result.offline && result.source === 'mock' && (
         <Card className="mb-3 border-warning-500/20 bg-warning-500/5 p-4">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warning-400">Speech recognition couldn't transcribe this recording</p>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warning-400">No speech detected in this recording</p>
           <p className="text-xs leading-relaxed text-base-300">
-            The transcript below is a sample sentence, not what you said, so this feedback is not about your actual answer.
-            Try again closer to the microphone, in a quiet place, speaking for at least a few seconds.
+            We couldn't clearly detect speech in your audio. Please check that your microphone is unmuted, speak closer to the mic, and try recording again.
           </p>
         </Card>
       )}

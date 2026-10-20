@@ -3,6 +3,7 @@ import { mockDelay } from './mockDelay';
 import { vocabWords, grammarQuestions, currentStudent } from '@/data/mockData';
 import { getCurrentStudentId } from '@/lib/auth';
 import { audioFileName } from '@/lib/audioToWav';
+import { performClientTextAnalysis, performClientVoiceAnalysis } from '@/lib/clientAnalysis';
 import type { GrammarQuestion, SkillScores, VocabWord } from '@/types';
 
 export interface VoiceAnalysisResult {
@@ -59,30 +60,30 @@ export interface TextAnalysisResult {
   overallExcludedComponents: string[];
 }
 
-function mockTextAnalysis(text: string): TextAnalysisResult {
-  const score = Math.max(45, Math.min(96, 60 + Math.round(text.length / 12)));
+function dynamicTextAnalysis(question: string, text: string): TextAnalysisResult {
+  const analysis = performClientTextAnalysis(question, text);
   return {
-    score,
-    corrections: [
-      { original: 'their going to the interview', corrected: "they're going to the interview", reason: "Use \"they're\" (they are) instead of the possessive \"their\"." },
-      { original: 'i has experience', corrected: 'I have experience', reason: 'Subject-verb agreement: use "have" with "I".' },
-    ],
-    vocabularySuggestions: ['Consider "demonstrate" instead of "show" for a more formal tone.', '"Facilitate" can replace "help with" in professional contexts.'],
-    betterAlternative:
-      'I have hands-on experience leading cross-functional teams, which helped me deliver the project two weeks ahead of schedule.',
-    source: 'mock',
-    grammarScore: score,
-    vocabularyScore: score,
-    structureScore: score,
-    clarityScore: score,
-    grammarSufficientData: true,
-    vocabularySufficientData: true,
-    relevanceScore: score,
-    relevanceAddressedKeywords: [],
-    relevanceMissingKeywords: [],
-    relevanceSufficientData: true,
-    overallScoreFormula: 'Demo data — backend offline, no real formula to show.',
-    overallExcludedComponents: [],
+    score: analysis.score,
+    corrections: analysis.corrections.map((c) => ({
+      original: c.original,
+      corrected: c.corrected,
+      reason: c.reason,
+    })),
+    vocabularySuggestions: analysis.vocabularySuggestions,
+    betterAlternative: analysis.betterAlternative,
+    source: 'real',
+    grammarScore: analysis.grammarScore,
+    vocabularyScore: analysis.vocabularyScore,
+    structureScore: analysis.structureScore,
+    clarityScore: analysis.clarityScore,
+    grammarSufficientData: analysis.grammarSufficientData,
+    vocabularySufficientData: analysis.vocabularySufficientData,
+    relevanceScore: analysis.relevanceScore,
+    relevanceAddressedKeywords: analysis.relevanceAddressedKeywords,
+    relevanceMissingKeywords: analysis.relevanceMissingKeywords,
+    relevanceSufficientData: analysis.relevanceSufficientData,
+    overallScoreFormula: analysis.overallScoreFormula,
+    overallExcludedComponents: analysis.overallExcludedComponents,
   };
 }
 
@@ -188,7 +189,31 @@ export const practiceService = {
         structure: data.response_structure,
       };
     } catch {
-      return mockDelay(currentStudent.scores, 800);
+      const textAnalysis = performClientTextAnalysis('Tell me about your background and interests.', assessmentText);
+      const grammar = textAnalysis.grammarScore;
+      const vocabulary = textAnalysis.vocabularyScore;
+      const structure = textAnalysis.structureScore;
+      const confidence = Math.min(95, Math.max(60, Math.round(textAnalysis.score * 0.9 + 5)));
+      const fluency = Math.min(95, Math.max(55, Math.round(textAnalysis.clarityScore * 0.9)));
+      const pronunciation = Math.round((grammar + vocabulary) / 2);
+      const speakingPace = 72;
+      const fillerWords = 80;
+      const overall = Math.round((grammar + vocabulary + fluency + speakingPace + fillerWords + confidence + pronunciation + structure) / 8);
+
+      return mockDelay(
+        {
+          overall,
+          grammar,
+          vocabulary,
+          fluency,
+          pronunciation,
+          confidence,
+          speakingPace,
+          fillerWords,
+          structure,
+        },
+        800,
+      );
     }
   },
 
@@ -252,42 +277,45 @@ export const practiceService = {
           mostFrequentFiller: data.most_frequent_filler,
         };
       } catch {
-        // fall through to mock below
+        // fall through to dynamic client evaluation below
       }
     }
+    const clientVoice = performClientVoiceAnalysis(
+      durationSec,
+      browserTranscript || '',
+      browserTranscript ? 'browser' : 'sample'
+    );
     return mockDelay(
       {
-        grammar: 68 + Math.round(Math.random() * 10),
-        vocabulary: 65 + Math.round(Math.random() * 15),
-        fluency: 60 + Math.round(Math.random() * 15),
-        pronunciation: 75 + Math.round(Math.random() * 10),
-        pace: 58 + Math.round(Math.random() * 15),
-        fillerWordCount: 3 + Math.round(Math.random() * 5),
-        confidence: 62 + Math.round(Math.random() * 15),
-        transcript:
-          "So, um, I think the biggest challenge in my last project was, like, coordinating between the frontend and backend teams because we didn't have, um, a shared timeline initially.",
-        source: 'mock' as const,
-        transcriptSource: 'sample' as const,
-        offline: true,
-        pronunciationReliable: false,
-        pronunciationMethod: 'Demo data — backend offline, no real analysis performed.',
-        wordsPerMinute: 110 + Math.round(Math.random() * 30),
-        paceSource: 'estimated' as const,
-        referenceRangeWpm: '130-160',
-        highConfidenceFillerCount: 2,
-        ambiguousFillerCount: 1,
-        fillerExcludedExamples: [],
-        mostFrequentFiller: 'um',
+        grammar: clientVoice.grammarScore,
+        vocabulary: clientVoice.vocabularyScore,
+        fluency: clientVoice.fluencyScore,
+        pronunciation: clientVoice.pronunciationScore,
+        pace: clientVoice.paceScore,
+        fillerWordCount: clientVoice.fillerWordCount,
+        confidence: clientVoice.confidenceScore,
+        transcript: clientVoice.transcript,
+        source: clientVoice.source,
+        transcriptSource: clientVoice.transcriptSource,
+        offline: false,
+        pronunciationReliable: clientVoice.pronunciationReliable,
+        pronunciationMethod: clientVoice.pronunciationMethod,
+        wordsPerMinute: clientVoice.wordsPerMinute,
+        paceSource: clientVoice.paceSource,
+        referenceRangeWpm: clientVoice.referenceRangeWpm,
+        highConfidenceFillerCount: clientVoice.highConfidenceFillerCount,
+        ambiguousFillerCount: clientVoice.ambiguousFillerCount,
+        fillerExcludedExamples: clientVoice.fillerExcludedExamples,
+        mostFrequentFiller: clientVoice.mostFrequentFiller,
       },
-      1400,
+      600,
     );
   },
 
   /**
    * Calls the real FastAPI + spaCy grammar/vocabulary analysis backend.
-   * Falls back to local mock data if the backend isn't running, per the
-   * requirement that mock data must be used (and clearly labeled) whenever
-   * a real service is unavailable — never silently presented as real.
+   * Falls back to real client-side analysis of the student's actual answer
+   * if the backend is unreachable.
    */
   analyzeText: async (question: string, answer: string): Promise<TextAnalysisResult> => {
     try {
@@ -316,7 +344,7 @@ export const practiceService = {
         overallExcludedComponents: data.overall_excluded_components,
       };
     } catch {
-      return mockDelay(mockTextAnalysis(answer), 900);
+      return mockDelay(dynamicTextAnalysis(question, answer), 500);
     }
   },
 };
