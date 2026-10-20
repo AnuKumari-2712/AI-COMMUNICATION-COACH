@@ -68,7 +68,6 @@ const STOPWORDS = new Set([
 
 // 350+ common spelling errors in English, technical communication, and student writing
 const COMMON_MISSPELLINGS: Record<string, string> = {
-  // Common Typos & User Misspellings
   grammer: 'grammar',
   gramer: 'grammar',
   gramar: 'grammar',
@@ -296,6 +295,71 @@ const PAST_TO_BASE: Record<string, string> = {
   ran: 'run', spoke: 'speak', chose: 'choose', fell: 'fall', bought: 'buy', brought: 'bring'
 };
 
+const HAVE_BASE_TO_PP: Record<string, string> = {
+  complete: 'completed',
+  learn: 'learned',
+  create: 'created',
+  develop: 'developed',
+  build: 'built',
+  work: 'worked',
+  design: 'designed',
+  start: 'started',
+  finish: 'finished',
+  manage: 'managed',
+  solve: 'solved',
+  make: 'made',
+  take: 'taken',
+  write: 'written',
+  give: 'given',
+  achieve: 'achieved',
+  attend: 'attended',
+  participate: 'participated',
+  submit: 'submitted',
+  improve: 'improved',
+  prepare: 'prepared',
+  gain: 'gained',
+  face: 'faced',
+  lead: 'led',
+  handle: 'handled',
+  do: 'done',
+  see: 'seen',
+  know: 'known',
+};
+
+const HAVE_PAST_TO_PP: Record<string, string> = {
+  went: 'gone',
+  saw: 'seen',
+  took: 'taken',
+  wrote: 'written',
+  did: 'done',
+  gave: 'given',
+  spoke: 'spoken',
+  ate: 'eaten',
+  chose: 'chosen',
+  ran: 'run',
+  fell: 'fallen',
+  broke: 'broken',
+};
+
+const BE_BASE_TO_ING: Record<string, string> = {
+  study: 'studying',
+  work: 'working',
+  learn: 'learning',
+  prepare: 'preparing',
+  look: 'looking',
+  try: 'trying',
+  do: 'doing',
+  live: 'living',
+  teach: 'teaching',
+  code: 'coding',
+  program: 'programming',
+  test: 'testing',
+  develop: 'developing',
+  manage: 'managing',
+  play: 'playing',
+  go: 'going',
+};
+
 const UPGRADE_VOCAB: Record<string, string> = {
   good: 'effective / exemplary / high-performing',
   bad: 'suboptimal / disadvantageous / problematic',
@@ -355,9 +419,6 @@ function matchCase(original: string, replacement: string): string {
   return replacement;
 }
 
-/**
- * Stem helper to match singular/plural and verb endings
- */
 function stemWord(w: string): string {
   return w.toLowerCase()
     .replace(/(?:ing|tion|ment|ness|less|ed|es|s)$/, '')
@@ -410,25 +471,17 @@ export function analyzeGrammar(text: string): {
     add(word, capitalized, 'Sentences must begin with a capital letter.', 'capitalization', 'spelling', 'high');
   }
 
-  // 3. Missing Terminal Punctuation
-  if (/[a-zA-Z0-9]$/.test(trimmed)) {
-    const lastWordMatch = trimmed.match(/[a-zA-Z0-9]+$/);
-    const lastWord = lastWordMatch ? lastWordMatch[0] : '';
-    add(
-      lastWord,
-      lastWord + '.',
-      'Sentences should conclude with terminal punctuation (period or question mark).',
-      'punctuation',
-      'style',
-      'medium'
-    );
-  }
-
-  // 4. Missing space after comma/period (e.g. "team,working" -> "team, working")
+  // 3. Missing space after comma/period (Protecting acronyms like B.Tech, M.Tech, Ph.D, e.g., i.e.)
   const missingSpacePattern = /([a-zA-Z0-9])([,.:;?!])([a-zA-Z0-9])/g;
   while ((match = missingSpacePattern.exec(text)) !== null) {
-    // Avoid URLs or decimals
     if (match[2] === '.' && !isNaN(Number(match[1])) && !isNaN(Number(match[3]))) continue;
+    
+    // Check if this is part of an academic degree or common abbreviation
+    const surrounding = text.slice(Math.max(0, match.index - 4), match.index + 10);
+    if (/\b(B\.Tech|M\.Tech|B\.Sc|M\.Sc|Ph\.D|B\.E|M\.E|B\.Com|M\.Com|B\.A|M\.A|BCA|MCA|e\.g\.|i\.e\.|U\.S\.|etc\.)/i.test(surrounding)) {
+      continue;
+    }
+
     add(
       match[0],
       `${match[1]}${match[2]} ${match[3]}`,
@@ -439,7 +492,7 @@ export function analyzeGrammar(text: string): {
     );
   }
 
-  // 5. Space before comma/period (e.g. "team , we" -> "team, we")
+  // 4. Space before comma/period
   const spaceBeforePunctPattern = /([a-zA-Z0-9])\s+([,.:;?!])/g;
   while ((match = spaceBeforePunctPattern.exec(text)) !== null) {
     add(
@@ -452,7 +505,7 @@ export function analyzeGrammar(text: string): {
     );
   }
 
-  // 6. Contractions missing apostrophes (dont, cant, didnt, etc.)
+  // 5. Contractions missing apostrophes (dont, cant, didnt, etc.)
   for (const [mis, fix] of Object.entries(CONTRACTIONS_MISSING_APOSTROPHE)) {
     const reg = new RegExp(`\\b${mis}\\b`, 'gi');
     while ((match = reg.exec(text)) !== null) {
@@ -460,7 +513,7 @@ export function analyzeGrammar(text: string): {
     }
   }
 
-  // 7. Articles (a vs an)
+  // 6. Articles (a vs an)
   const aVowelPattern = /\ba\s+(apple|engineer|developer|intern|internship|interview|opportunity|experience|error|issue|exception|organization|industry|action|algorithm|api|application|asset|element|example|hour|honest|honor|environment|easy|effective|efficient|ideal|answer|offer|update|upgrade|urgent|essential|impactful)\b/gi;
   while ((match = aVowelPattern.exec(text)) !== null) {
     const word = match[0].split(/\s+/)[1];
@@ -473,14 +526,39 @@ export function analyzeGrammar(text: string): {
     add(match[0], `a ${word}`, `Use "a" before words starting with a consonant sound ("${word}").`, 'article_usage', 'grammar', 'high');
   }
 
-  // 8. Double negatives
+  // Missing article before adjective + countable singular noun (e.g. "am hardworking person")
+  const missingArticleAdjNoun = /\b(am|is|are|was|were)\s+(hardworking|dedicated|passionate|honest|creative|responsible|enthusiastic|curious|good|strong)\s+(person|student|engineer|developer|professional|worker|candidate|individual)\b/gi;
+  while ((match = missingArticleAdjNoun.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    const aux = parts[0];
+    const adj = parts[1];
+    const noun = parts[2];
+    const art = /^[aeiou]/i.test(adj) ? 'an' : 'a';
+    add(match[0], `${aux} ${art} ${adj} ${noun}`, `Missing article: singular countable nouns require "${art}" ("${aux} ${art} ${adj} ${noun}").`, 'article_usage', 'grammar', 'high');
+  }
+
+  // Article with uncountable nouns
+  const aUncountablePattern = /\ba\s+(advice|feedback|information|software|hardware|furniture|equipment)\b/gi;
+  while ((match = aUncountablePattern.exec(text)) !== null) {
+    const noun = match[0].split(/\s+/)[1];
+    add(match[0], noun, `"${noun}" is an uncountable noun and does not take the article "a".`, 'article_usage', 'grammar', 'high');
+  }
+
+  // 7. Double negatives
   const doubleNegPattern = /\b(don't|doesn't|didn't|isn't|wasn't|can't|won't)\b\s+\w*\s*\b(no|none|nothing|nobody|never)\b/gi;
   while ((match = doubleNegPattern.exec(text)) !== null) {
     const fixed = match[0].replace(/\bno\b/gi, 'any').replace(/\bnothing\b/gi, 'anything').replace(/\bnobody\b/gi, 'anybody');
     add(match[0], fixed, "Avoid double negatives — use a single negative verb paired with 'any' or 'anything'.", 'double_negative', 'grammar', 'high');
   }
 
-  // 9. Subject-Verb Agreement: Pronouns
+  // 8. Subject-Verb Agreement: Pronoun & Abstract Noun Rules
+  const nameDreamArePattern = /\b(my|his|her|their|our)\s+(name|dream|goal|aim|hobby|passion|vision|plan|purpose)\s+(are|were)\b/gi;
+  while ((match = nameDreamArePattern.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    const fixedVerb = parts[2].toLowerCase() === 'are' ? 'is' : 'was';
+    add(match[0], `${parts[0]} ${parts[1]} ${fixedVerb}`, `Singular subject "${parts[1]}" requires singular verb "${fixedVerb}" (not "${parts[2]}").`, 'subject_verb_agreement', 'grammar', 'high');
+  }
+
   const iHasPattern = /\bI\s+(has|was is|don't has|dont has)\b/gi;
   while ((match = iHasPattern.exec(text)) !== null) {
     add(match[0], 'I have', "Use 'have' (not 'has') with first-person pronoun 'I'.", 'subject_verb_agreement', 'grammar', 'high');
@@ -496,19 +574,29 @@ export function analyzeGrammar(text: string): {
     add(match[0], 'I do', "Use 'do' with pronoun 'I'.", 'subject_verb_agreement', 'grammar', 'high');
   }
 
+  // "I [adverb] -s verb" (e.g. "I wants", "I always tries", "I works", "I likes", "I thinks")
+  const iVerbSPattern = /\bI\s+(?:(?:always|usually|often|sometimes|never|also|really|surely)\s+)?(wants|tries|works|likes|thinks|says|gets|gives|makes|takes|knows|needs|helps|starts|feels|believes|hopes)\b/gi;
+  while ((match = iVerbSPattern.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    const verbWithS = parts[parts.length - 1];
+    const baseVerb = verbWithS === 'tries' ? 'try' : verbWithS.slice(0, -1);
+    parts[parts.length - 1] = baseVerb;
+    add(match[0], parts.join(' '), `First-person pronoun 'I' takes the base verb ("${baseVerb}") without '-s'.`, 'subject_verb_agreement', 'grammar', 'high');
+  }
+
   const singularHave = /\b(he|she|it)\s+have\b/gi;
   while ((match = singularHave.exec(text)) !== null) {
     const subj = match[0].split(/\s+/)[0];
     add(match[0], `${subj} has`, `Use "has" (not "have") with third-person singular pronoun "${subj}".`, 'subject_verb_agreement', 'grammar', 'high');
   }
 
-  const pronounDont = /\b(he|she|it)\s+(don't|dont)\b/gi;
+  const pronounDont = /\b(he|she|it)\s+(don't|dont|do\s+not)\b/gi;
   while ((match = pronounDont.exec(text)) !== null) {
     const subj = match[0].split(/\s+/)[0];
-    add(match[0], `${subj} doesn't`, `Use "doesn't" (not "don't") with singular pronoun "${subj}".`, 'subject_verb_agreement', 'grammar', 'high');
+    add(match[0], `${subj} doesn't`, `Use "doesn't" (not "don't" or "do not") with singular pronoun "${subj}".`, 'subject_verb_agreement', 'grammar', 'high');
   }
 
-  const pluralDoesnt = /\b(I|we|you|they)\s+(doesn't|doesnt)\b/gi;
+  const pluralDoesnt = /\b(I|we|you|they)\s+(doesn't|doesnt|does\s+not)\b/gi;
   while ((match = pluralDoesnt.exec(text)) !== null) {
     const subj = match[0].split(/\s+/)[0];
     add(match[0], `${subj} don't`, `Use "don't" (not "doesn't") with "${subj}".`, 'subject_verb_agreement', 'grammar', 'high');
@@ -546,6 +634,44 @@ export function analyzeGrammar(text: string): {
     add(match[0], `${subj} ${baseVerb}`, `Plural pronoun "${subj}" takes the base verb form ("${baseVerb}").`, 'subject_verb_agreement', 'grammar', 'high');
   }
 
+  // Singular noun with plural verb / Plural noun with singular verb
+  const singularNounPluralVerb = /\b(my|the|this)\s+(friend|colleague|brother|sister|teacher|manager|project|issue)\s+(are|were)\b/gi;
+  while ((match = singularNounPluralVerb.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    const fixedVerb = parts[2].toLowerCase() === 'are' ? 'is' : 'was';
+    add(match[0], `${parts[0]} ${parts[1]} ${fixedVerb}`, `Singular subject "${parts[1]}" takes singular verb "${fixedVerb}".`, 'subject_verb_agreement', 'grammar', 'high');
+  }
+
+  const pluralNounSingularVerb = /\b(my|the|these)\s+(friends|colleagues|brothers|sisters|teachers|managers|projects|issues)\s+(is|was)\b/gi;
+  while ((match = pluralNounSingularVerb.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    const fixedVerb = parts[2].toLowerCase() === 'is' ? 'are' : 'were';
+    add(match[0], `${parts[0]} ${parts[1]} ${fixedVerb}`, `Plural subject "${parts[1]}" takes plural verb "${fixedVerb}".`, 'subject_verb_agreement', 'grammar', 'high');
+  }
+
+  // Relative clause agreement (e.g. "coach which help" -> "coach which helps")
+  const relClauseSingular = /\b(coach|project|application|system|feature|tool|platform|service)\s+which\s+help\b/gi;
+  while ((match = relClauseSingular.exec(text)) !== null) {
+    const noun = match[0].split(/\s+/)[0];
+    add(match[0], `${noun} which helps`, `Singular antecedent "${noun}" requires singular verb "helps".`, 'subject_verb_agreement', 'grammar', 'high');
+  }
+
+  // 9. Quantity & Countability: many + singular noun (e.g. "many project" -> "many projects")
+  const manySingularPattern = /\b(many|several|multiple|various|few|both|two|three|four|five)\s+(project|student|technology|skill|company|problem|challenge|error|bug|issue|year|month|day|book|friend|colleague|task|role|opportunity|feature)\b/gi;
+  while ((match = manySingularPattern.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    const quant = parts[0];
+    const noun = parts[1];
+    const pluralNoun = noun.endsWith('y') ? noun.slice(0, -1) + 'ies' : noun + 's';
+    add(match[0], `${quant} ${pluralNoun}`, `Quantitative adjective "${quant}" must be followed by a plural noun ("${pluralNoun}").`, 'plural_agreement', 'grammar', 'high');
+  }
+
+  const theseSingular = /\bthese\s+(problem|issue|project|question|error|challenge)\b/gi;
+  while ((match = theseSingular.exec(text)) !== null) {
+    const noun = match[0].split(/\s+/)[1];
+    add(match[0], `these ${noun}s`, `Demonstrative "these" requires a plural noun ("${noun}s").`, 'plural_agreement', 'grammar', 'high');
+  }
+
   // Indefinite pronouns taking singular verb
   const indefinitePronouns = /\b(everyone|everybody|someone|somebody|no one|nobody|each)\s+(are|were|have)\b/gi;
   while ((match = indefinitePronouns.exec(text)) !== null) {
@@ -556,17 +682,93 @@ export function analyzeGrammar(text: string): {
     add(match[0], `${pronoun} ${fixed}`, `"${pronoun}" is grammatically singular and takes "${fixed}".`, 'subject_verb_agreement', 'grammar', 'high');
   }
 
-  // 10. Verb Tenses & Auxiliaries (didn't went -> didn't go, did not had -> did not have)
-  const didPastPattern = /\b(didn't|didnt|did\s+not)\s+(went|saw|came|ate|took|made|got|gave|knew|wrote|had|said|told|found|thought|worked|started|asked|called|learned|built|created|ran|spoke|chose|did)\b/gi;
+  // 10. Perfect Tense: have/has/had + base verb (e.g. "have make" -> "have made", "have complete" -> "have completed")
+  const haveBaseKeys = Object.keys(HAVE_BASE_TO_PP).join('|');
+  const haveBasePattern = new RegExp(`\\b(have|has|had)\\s+(${haveBaseKeys})\\b`, 'gi');
+  while ((match = haveBasePattern.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    const aux = parts[0];
+    const verb = parts[1].toLowerCase();
+    const pp = HAVE_BASE_TO_PP[verb] || (verb + 'ed');
+    add(match[0], `${aux} ${pp}`, `With "${aux}", use the past participle form ("${pp}") instead of the base verb.`, 'verb_form', 'grammar', 'high');
+  }
+
+  // Perfect Tense: have/has/had + irregular simple past (e.g. "have went" -> "have gone")
+  const havePastKeys = Object.keys(HAVE_PAST_TO_PP).join('|');
+  const havePastPattern = new RegExp(`\\b(have|has|had)\\s+(${havePastKeys})\\b`, 'gi');
+  while ((match = havePastPattern.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    const aux = parts[0];
+    const verb = parts[1].toLowerCase();
+    const pp = HAVE_PAST_TO_PP[verb] || verb;
+    add(match[0], `${aux} ${pp}`, `Use past participle "${pp}" (not past tense "${verb}") after "${aux}".`, 'verb_form', 'grammar', 'high');
+  }
+
+  // 11. Progressive Tense: am/is/are + base verb (e.g. "am study" -> "am studying")
+  const beBaseKeys = Object.keys(BE_BASE_TO_ING).join('|');
+  const beBasePattern = new RegExp(`\\b(am|is|are|was|were)\\s+(${beBaseKeys})\\b`, 'gi');
+  while ((match = beBasePattern.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    const aux = parts[0];
+    const verb = parts[1].toLowerCase();
+    const ing = BE_BASE_TO_ING[verb] || (verb + 'ing');
+    add(match[0], `${aux} ${ing}`, `Use progressive form "${ing}" (or simple present tense) instead of "${aux} ${verb}".`, 'verb_form', 'grammar', 'high');
+  }
+
+  // Redundant "am have" / "am also have"
+  const amHavePattern = /\b(I\s+am|am|is|are)\s+(?:also\s+)?have\b/gi;
+  while ((match = amHavePattern.exec(text)) !== null) {
+    add(match[0], 'I also have', "Avoid combining 'am' with 'have' — say 'I have' or 'I also have'.", 'verb_form', 'grammar', 'high');
+  }
+
+  // 12. "want + gerund" (e.g. "want learning" -> "want to learn")
+  const wantGerundPattern = /\b(want|wants|wanted)\s+(learning|working|doing|joining|making|knowing|improving|becoming|studying|getting)\b/gi;
+  while ((match = wantGerundPattern.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    const wantVerb = parts[0];
+    const gerund = parts[1].toLowerCase();
+    const base = gerund.replace(/ing$/, '').replace(/e$/, '') + 'e';
+    const trueBase = gerund === 'getting' ? 'get' : gerund === 'joining' ? 'join' : gerund === 'doing' ? 'do' : gerund === 'learning' ? 'learn' : base;
+    add(match[0], `${wantVerb} to ${trueBase}`, `The verb "${wantVerb}" is followed by an infinitive with "to" ("${wantVerb} to ${trueBase}"), not a gerund.`, 'verb_form', 'grammar', 'high');
+  }
+
+  // 13. Infinitive 'to' errors: to + -s verb (e.g. "to improves" -> "to improve")
+  const toSPattern = /\bto\s+(improves|works|helps|learns|makes|gives|gets|creates|develops|builds|solves)\b/gi;
+  while ((match = toSPattern.exec(text)) !== null) {
+    const verb = match[0].split(/\s+/)[1].toLowerCase();
+    const base = verb.slice(0, -1);
+    add(match[0], `to ${base}`, `Infinitive "to" must be followed by base verb form without "-s" ("to ${base}").`, 'verb_form', 'grammar', 'high');
+  }
+
+  // Infinitive 'to' + past verb (to went -> to go, to did -> to do)
+  const toPastPattern = /\bto\s+(went|saw|did|took|made|came|wrote|knew|worked|started|created|solved)\b/gi;
+  while ((match = toPastPattern.exec(text)) !== null) {
+    const verb = match[0].split(/\s+/)[1].toLowerCase();
+    const base = PAST_TO_BASE[verb] || verb.replace(/ed$/, '');
+    add(match[0], `to ${base}`, `Infinitive "to" must be followed by base verb form ("to ${base}").`, 'verb_form', 'grammar', 'high');
+  }
+
+  // 14. Negative Auxiliary: didn't + past verb (didn't went -> didn't go)
+  const didPastPattern = /\b(didn't|didnt|did\s+not)\s+(went|saw|came|ate|took|made|got|gave|knew|wrote|had|said|told|found|thought|worked|started|asked|called|learned|built|created|ran|spoke|chose|did|wanted|needed|played|finished|solved)\b/gi;
   while ((match = didPastPattern.exec(text)) !== null) {
     const parts = match[0].split(/\s+/);
     const verb = parts[parts.length - 1].toLowerCase();
-    const base = PAST_TO_BASE[verb] || verb;
+    const base = PAST_TO_BASE[verb] || verb.replace(/ed$/, '');
     const prefix = parts.slice(0, parts.length - 1).join(' ');
-    add(match[0], `${prefix} ${base}`, `After "didn't", use the base verb form ("${base}") instead of the past tense.`, 'verb_form', 'grammar', 'high');
+    add(match[0], `${prefix} ${base}`, `After "didn't", use the base verb form ("${base}") instead of past tense.`, 'verb_form', 'grammar', 'high');
   }
 
-  // Double Modals: can able to -> can / am able to
+  // Negative Auxiliary: doesn't + -s verb (doesn't knows -> doesn't know, doesn't has -> doesn't have)
+  const doesntSPattern = /\b(doesn't|doesnt|does\s+not)\s+(knows|works|has|wants|likes|needs|helps|thinks|says|comes|goes|makes|takes|gives|tries)\b/gi;
+  while ((match = doesntSPattern.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    const verb = parts[parts.length - 1].toLowerCase();
+    const base = verb === 'has' ? 'have' : verb === 'goes' ? 'go' : verb === 'tries' ? 'try' : verb.slice(0, -1);
+    const prefix = parts.slice(0, parts.length - 1).join(' ');
+    add(match[0], `${prefix} ${base}`, `After "${prefix}", use base verb form ("${base}") without "-s".`, 'verb_form', 'grammar', 'high');
+  }
+
+  // 15. Modals
   const canAblePattern = /\b(can|could)\s+able\s+to\b/gi;
   while ((match = canAblePattern.exec(text)) !== null) {
     add(match[0], 'can', 'Avoid "can able to" — say either "can" or "am able to".', 'modal_usage', 'grammar', 'high');
@@ -584,7 +786,24 @@ export function analyzeGrammar(text: string): {
     add(match[0], `${modal} ${verb}`, `Do not use "to" directly after modal verb "${modal}". Say "${modal} ${verb}".`, 'modal_usage', 'grammar', 'high');
   }
 
-  // 11. Prepositions & Redundancies
+  // 16. Prepositions & Collocations
+  const studentInUniv = /\bstudent\s+in\s+([A-Z][a-zA-Z\s]+(University|College|Institute))\b/g;
+  while ((match = studentInUniv.exec(text)) !== null) {
+    add(match[0], `student at ${match[1]}`, `Use preposition "at" when referring to educational institutions ("student at ${match[1]}").`, 'preposition', 'style', 'high');
+  }
+
+  const inThirdYear = /\bin\s+(first|second|third|fourth|final)\s+year\b/gi;
+  while ((match = inThirdYear.exec(text)) !== null) {
+    const yr = match[0].split(/\s+/)[1];
+    add(match[0], `in the ${yr} year`, `Use "in the ${yr} year" or "in my ${yr} year".`, 'preposition', 'style', 'high');
+  }
+
+  const techSkillPattern = /\b(my|our|their)\s+technical\s+skill\b/gi;
+  while ((match = techSkillPattern.exec(text)) !== null) {
+    const pronoun = match[0].split(/\s+/)[0];
+    add(match[0], `${pronoun} technical skills`, `Use plural "technical skills" when referring to a general skillset.`, 'plural_agreement', 'style', 'high');
+  }
+
   const discussAbout = /\b(discuss|discussed|discussing|discusses)\s+about\b/gi;
   while ((match = discussAbout.exec(text)) !== null) {
     const verb = match[0].split(/\s+/)[0];
@@ -625,27 +844,57 @@ export function analyzeGrammar(text: string): {
     add(match[0], 'pay attention to', 'The correct preposition is "pay attention to", not "on".', 'preposition', 'grammar', 'high');
   }
 
-  const interestedFor = /\binterested\s+for\b/gi;
+  const interestedFor = /\binterested\s+(for|on)\b/gi;
   while ((match = interestedFor.exec(text)) !== null) {
-    add(match[0], 'interested in', 'The correct preposition is "interested in", not "for".', 'preposition', 'grammar', 'high');
+    add(match[0], 'interested in', 'The correct preposition is "interested in".', 'preposition', 'grammar', 'high');
   }
 
-  const dependOf = /\bdepend\s+of\b/gi;
-  while ((match = dependOf.exec(text)) !== null) {
-    add(match[0], 'depend on', 'Use "depend on" instead of "depend of".', 'preposition', 'grammar', 'high');
+  const applyAJob = /\b(apply|search|look)\s+a\s+job\b/gi;
+  while ((match = applyAJob.exec(text)) !== null) {
+    const verb = match[0].split(/\s+/)[0];
+    add(match[0], `${verb} for a job`, `Use preposition "for" after "${verb}": "${verb} for a job".`, 'preposition', 'grammar', 'high');
   }
 
-  // 12. Indian English / ESL Formulations
+  const orderFor = /\border\s+for\s+(food|pizza|lunch|dinner|items)\b/gi;
+  while ((match = orderFor.exec(text)) !== null) {
+    const item = match[0].split(/\s+/)[2];
+    add(match[0], `order ${item}`, `Use transitive verb "order ${item}" without redundant "for".`, 'preposition', 'grammar', 'high');
+  }
+
+  const timeSincePattern = /\bsince\s+(\d+|many|several)\s+(years|months|days|weeks|hours)\b/gi;
+  while ((match = timeSincePattern.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    add(match[0], `for ${parts[1]} ${parts[2]}`, 'Use "for" to denote a duration of time, and "since" for a specific point in time.', 'preposition', 'grammar', 'high');
+  }
+
+  const yesterdayNight = /\byesterday\s+night\b/gi;
+  while ((match = yesterdayNight.exec(text)) !== null) {
+    add(match[0], 'last night', 'Say "last night" rather than "yesterday night".', 'collocation', 'style', 'high');
+  }
+
+  const todayMorning = /\btoday\s+morning\b/gi;
+  while ((match = todayMorning.exec(text)) !== null) {
+    add(match[0], 'this morning', 'Say "this morning" rather than "today morning".', 'collocation', 'style', 'high');
+  }
+
+  const cousinBrotherSister = /\bcousin\s+(brother|sister)\b/gi;
+  while ((match = cousinBrotherSister.exec(text)) !== null) {
+    add(match[0], 'cousin', 'In standard English, simply use "cousin" regardless of gender.', 'collocation', 'style', 'high');
+  }
+
+  // 17. Indian English / ESL Formulations
   const amHavingExp = /\b(I\s+am|am)\s+having\s+(\d+)\s+years\s+(of\s+)?experience\b/gi;
   while ((match = amHavingExp.exec(text)) !== null) {
     const yrs = match[2];
     add(match[0], `I have ${yrs} years of experience`, 'Use simple present "I have" rather than "I am having" for possession of experience.', 'verb_form', 'grammar', 'high');
   }
 
-  const myselfIntro = /(^|[.!?]\s+)myself\s+([A-Z][a-zA-Z]+)\b/g;
+  const myselfIntro = /(^|[.!?]\s+)myself\s+([a-zA-Z]+)\b/gi;
   while ((match = myselfIntro.exec(text)) !== null) {
     const name = match[2];
-    add(`myself ${name}`, `I am ${name}`, 'Avoid "myself [Name]" for self-introductions; say "I am [Name]" or "My name is [Name]".', 'style', 'style', 'high');
+    if (!['and', 'to', 'for', 'with', 'in', 'on', 'at', 'as'].includes(name.toLowerCase())) {
+      add(`myself ${name}`, `I am ${name}`, 'Avoid "myself [Name]" for self-introductions; say "I am [Name]" or "My name is [Name]".', 'style', 'style', 'high');
+    }
   }
 
   const passOut = /\b(pass|passed)\s+out\s+from\b/gi;
@@ -665,7 +914,15 @@ export function analyzeGrammar(text: string): {
     add(match[0], `${parts.slice(0, -1).join(' ')} ${noun}s`, `"one of the" requires a plural noun ("${noun}s").`, 'plural_agreement', 'grammar', 'high');
   }
 
-  // 13. Homophones & Confused Words
+  // 18. Uncountable Nouns with plural -s
+  const uncountablePattern = /\b(softwares|hardwares|informations|furnitures|equipments|advices|feedbacks)\b/gi;
+  while ((match = uncountablePattern.exec(text)) !== null) {
+    const term = match[0].toLowerCase();
+    const singular = term.slice(0, -1);
+    add(match[0], matchCase(match[0], singular), `"${singular}" is an uncountable noun in English and does not take a plural "-s".`, 'noun_countability', 'grammar', 'high');
+  }
+
+  // 19. Homophones & Confused Words
   const yourGoing = /\byour\s+(going|coming|trying|looking|planning|making|doing)\b/gi;
   while ((match = yourGoing.exec(text)) !== null) {
     const action = match[0].split(/\s+/)[1];
@@ -707,7 +964,13 @@ export function analyzeGrammar(text: string): {
     add(match[0], `${comp} than`, 'Use "than" (for comparison), not "then" (sequence in time).', 'homophone', 'grammar', 'high');
   }
 
-  // 14. Repeated Words
+  const toMuchFast = /\bto\s+(much|many|fast|slow|hard|late|early)\b/gi;
+  while ((match = toMuchFast.exec(text)) !== null) {
+    const adv = match[0].split(/\s+/)[1];
+    add(match[0], `too ${adv}`, `Use "too" (with double 'o' meaning excessively) before "${adv}".`, 'homophone', 'spelling', 'high');
+  }
+
+  // 20. Repeated Words
   const repeatedWordPattern = /\b([a-zA-Z]+)\s+\1\b/gi;
   while ((match = repeatedWordPattern.exec(text)) !== null) {
     if (!['that'].includes(match[1].toLowerCase())) {
@@ -715,7 +978,7 @@ export function analyzeGrammar(text: string): {
     }
   }
 
-  // 15. Casual Formality (gonna, wanna, kinda)
+  // 21. Casual Formality (gonna, wanna, kinda)
   const formalityPattern = /\b(gonna|wanna|kinda|sorta|dunno)\b/gi;
   const formalityMap: Record<string, string> = {
     gonna: 'going to', wanna: 'want to', kinda: 'kind of', sorta: 'sort of', dunno: "don't know"
@@ -725,7 +988,7 @@ export function analyzeGrammar(text: string): {
     add(match[0], matchCase(match[0], formalityMap[term] || term), 'Casual contraction — use formal phrasing in professional interviews.', 'formality', 'style', 'high');
   }
 
-  // 16. Extended Spelling Dictionary (350+ entries)
+  // 22. Extended Spelling Dictionary (350+ entries)
   const words = text.match(/[A-Za-z']+/g) || [];
   for (const word of words) {
     const lower = word.toLowerCase();
@@ -751,12 +1014,9 @@ export function analyzeGrammar(text: string): {
   const styleCorrections = uniqueCorrections.filter((c) => c.category === 'style');
 
   // Realistic Grammar Score:
-  // Clean answer with 0 errors = 96-100.
-  // Each grammar error takes 10-12 points, spelling takes 6-8 points, style takes 4 points.
-  const totalDeductions = (grammarCorrections.length * 11) + (spellingCorrections.length * 7) + (styleCorrections.length * 4);
+  const totalDeductions = (grammarCorrections.length * 8) + (spellingCorrections.length * 5) + (styleCorrections.length * 3);
   let score = Math.max(25, Math.min(100, Math.round(100 - totalDeductions)));
 
-  // If text is extremely short and broken, adjust downward proportionally
   if (words.length < 8 && uniqueCorrections.length > 0) {
     score = Math.min(score, 50);
   }
@@ -867,7 +1127,6 @@ const CONCEPT_SYNONYMS: Record<string, string[]> = {
 
 /**
  * Semantic Relevance Analysis Engine.
- * Evaluates whether the candidate genuinely addresses the core theme of the question.
  */
 export function analyzeRelevance(question: string, answer: string): {
   score: number;
@@ -887,7 +1146,6 @@ export function analyzeRelevance(question: string, answer: string): {
   const addressedConcepts: string[] = [];
   const missingConcepts: string[] = [];
 
-  // Categorize questions into thematic concepts to check semantic coverage
   const thematicChecks: { label: string; triggers: string[]; synonyms: string[] }[] = [
     {
       label: 'Professional Background & Skills',
@@ -916,7 +1174,6 @@ export function analyzeRelevance(question: string, answer: string): {
     },
   ];
 
-  // Identify which concepts are relevant for this question
   let activeThematicChecks = thematicChecks.filter((tc) =>
     tc.triggers.some((tr) => qLower.includes(tr) || qWords.some((qw) => stemWord(qw) === stemWord(tr)))
   );
@@ -941,7 +1198,6 @@ export function analyzeRelevance(question: string, answer: string): {
     }
   }
 
-  // Check direct overlap with question key terms
   let directMatches = 0;
   for (const qw of qWords) {
     const qStem = stemWord(qw);
@@ -961,7 +1217,6 @@ export function analyzeRelevance(question: string, answer: string): {
   } else if (thematicCoverage >= 0.5) {
     score = 75 + Math.min(15, directMatches * 5);
   } else {
-    // If very little thematic overlap exists, check if user wrote completely unrelated content
     score = Math.max(30, Math.min(60, 30 + directMatches * 10));
   }
 
@@ -1013,7 +1268,6 @@ export function analyzeStructureAndClarity(text: string): {
 
 /**
  * Intelligent, faithful Better Alternative Generator.
- * Elevates the candidate's actual points, skills, and background into an articulate executive response.
  */
 export function generateBetterAlternative(question: string, answer: string): string {
   const trimmed = answer.trim();
@@ -1021,7 +1275,6 @@ export function generateBetterAlternative(question: string, answer: string): str
     return `"I bring a solid combination of technical expertise and collaborative problem-solving to this position. Throughout my projects, I have focused on delivering reliable, scalable results while continuously refining my skills. I am excited to contribute this foundation to your team and drive meaningful impact."`;
   }
 
-  // 1. Clean up grammatical and spelling flaws in the user's text
   let cleaned = trimmed
     .replace(/(^|[\s,;:(])i(?=[\s,;:!?.']|$)/g, '$1I')
     .replace(/\bi has\b/gi, 'I have')
@@ -1038,22 +1291,33 @@ export function generateBetterAlternative(question: string, answer: string): str
     .replace(/\bcope up with\b/gi, 'cope with')
     .replace(/\bI am agree\b/gi, 'I agree')
     .replace(/\bpassed out from\b/gi, 'graduated from')
-    .replace(/\bmyself\s+([A-Z][a-zA-Z]+)\b/g, 'I am $1');
+    .replace(/\bmyself\s+([a-zA-Z]+)\b/gi, 'I am $1')
+    .replace(/\bmy name are\b/gi, 'my name is')
+    .replace(/\bmy dream are\b/gi, 'my dream is')
+    .replace(/\bam study\b/gi, 'am studying')
+    .replace(/\bhave make\b/gi, 'have made')
+    .replace(/\bmany project\b/gi, 'many projects')
+    .replace(/\bto improves\b/gi, 'to improve')
+    .replace(/\bI am also have\b/gi, 'I also have')
+    .replace(/\bI wants\b/gi, 'I want')
+    .replace(/\bwant learning\b/gi, 'want to learn')
+    .replace(/\bam hardworking person\b/gi, 'am a hardworking person')
+    .replace(/\bI always tries\b/gi, 'I always try')
+    .replace(/\bstudent in ([A-Z][a-zA-Z\s]+University)\b/g, 'student at $1')
+    .replace(/\btechnical skill\b/gi, 'technical skills')
+    .replace(/\bcoach which help\b/gi, 'coach which helps');
 
-  // Ensure initial letter capitalized and terminal punctuation
   if (cleaned.length > 0) {
     cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
     if (!/[.!?]$/.test(cleaned)) cleaned += '.';
   }
 
-  // 2. Extract concrete keywords from candidate's answer
   const rawWords = (cleaned.match(/[a-zA-Z']+/g) || []);
   const contentWords = rawWords.filter((w) => !STOPWORDS.has(w.toLowerCase()) && w.length > 3);
   const keyTerms = Array.from(new Set(contentWords.map((w) => w.toLowerCase()))).slice(0, 5);
 
   const qLower = question.toLowerCase();
 
-  // If answer is comprehensive (20+ words), refine and polish the user's text directly
   if (rawWords.length >= 18) {
     return (
       `"A polished, executive phrasing of your response is:\n\n` +
@@ -1061,7 +1325,6 @@ export function generateBetterAlternative(question: string, answer: string): str
     );
   }
 
-  // If answer is moderate (8-17 words), expand on their actual points
   if (rawWords.length >= 8) {
     const focus = keyTerms.length > 0 ? keyTerms.join(' and ') : 'practical problem-solving';
     if (qLower.includes('yourself') || qLower.includes('introduce') || qLower.includes('role')) {
@@ -1084,7 +1347,6 @@ export function generateBetterAlternative(question: string, answer: string): str
     );
   }
 
-  // If answer is short (<8 words), provide an expanded exemplary response incorporating whatever they said
   const anchor = cleaned.replace(/[.!?]$/, '');
   return (
     `"To make your response compelling and interview-ready, expand your point with structure:\n\n` +
@@ -1094,12 +1356,6 @@ export function generateBetterAlternative(question: string, answer: string): str
 
 /**
  * Master Text Analysis Evaluator.
- * Computes transparent, mathematically consistent scores across all 5 pillars:
- * 1. Grammar & Accuracy (30%)
- * 2. Relevance & Content (25%)
- * 3. Vocabulary & Phrasing (20%)
- * 4. Structure & Flow (15%)
- * 5. Clarity & Conciseness (10%)
  */
 export function performClientTextAnalysis(question: string, answer: string): ClientTextAnalysis {
   const grammar = analyzeGrammar(answer);
@@ -1108,8 +1364,6 @@ export function performClientTextAnalysis(question: string, answer: string): Cli
   const { structureScore, clarityScore } = analyzeStructureAndClarity(answer);
   const alternative = generateBetterAlternative(question, answer);
 
-  // Exact, transparent, unskewed weighted sum
-  // 30% Grammar + 25% Relevance + 20% Vocabulary + 15% Structure + 10% Clarity = 100%
   const overallScore = Math.round(
     grammar.score * 0.30 +
     relevance.score * 0.25 +

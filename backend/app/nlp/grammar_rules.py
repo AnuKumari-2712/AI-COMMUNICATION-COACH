@@ -98,6 +98,20 @@ _PAST_TO_BASE = {
 }
 _AM_AGREE = re.compile(r"\bI\s+am\s+agree\b", re.IGNORECASE)
 _DISCUSS_ABOUT = re.compile(r"\b(discuss|discussed|discussing|discusses)\s+about\b", re.IGNORECASE)
+_NAME_DREAM_ARE = re.compile(r"\b(my|his|her|their|our)\s+(name|dream|goal|aim|hobby|passion|vision|plan|purpose)\s+(are|were)\b", re.IGNORECASE)
+_I_VERB_S = re.compile(r"\bI\s+(?:(?:always|usually|often|sometimes|never|also|really|surely)\s+)?(wants|tries|works|likes|thinks|says|gets|gives|makes|takes|knows|needs|helps|starts|feels|believes|hopes)\b", re.IGNORECASE)
+_MANY_SINGULAR = re.compile(r"\b(many|several|multiple|various|few|both|two|three|four|five)\s+(project|student|technology|skill|company|problem|challenge|error|bug|issue|year|month|day|book|friend|colleague|task|role|opportunity|feature)\b", re.IGNORECASE)
+_TO_S = re.compile(r"\bto\s+(improves|works|helps|learns|makes|gives|gets|creates|develops|builds|solves)\b", re.IGNORECASE)
+_WANT_GERUND = re.compile(r"\b(want|wants|wanted)\s+(learning|working|doing|joining|making|knowing|improving|becoming|studying|getting)\b", re.IGNORECASE)
+_MISSING_ARTICLE_ADJ_NOUN = re.compile(r"\b(am|is|are|was|were)\s+(hardworking|dedicated|passionate|honest|creative|responsible|enthusiastic|curious|good|strong)\s+(person|student|engineer|developer|professional|worker|candidate|individual)\b", re.IGNORECASE)
+_AM_HAVE = re.compile(r"\b(I\s+am|am|is|are)\s+(?:also\s+)?have\b", re.IGNORECASE)
+_HAVE_MAKE_BASE = re.compile(r"\b(have|has|had)\s+(make|complete|learn|create|develop|build|work|design|start|finish|manage|solve|take|write|give|achieve|attend|participate|submit|improve|prepare)\b", re.IGNORECASE)
+_AM_STUDY_BASE = re.compile(r"\b(am|is|are|was|were)\s+(study|work|learn|prepare|look|try|do|live|teach|code|program|test|develop|manage)\b", re.IGNORECASE)
+_STUDENT_IN_UNIV = re.compile(r"\bstudent\s+in\s+([A-Z][a-zA-Z\s]+(University|College|Institute))\b")
+_IN_ORDINAL_YEAR = re.compile(r"\bin\s+(first|second|third|fourth|final)\s+year\b", re.IGNORECASE)
+_TECH_SKILL = re.compile(r"\b(my|our|their)\s+technical\s+skill\b", re.IGNORECASE)
+_COACH_WHICH_HELP = re.compile(r"\b(coach|project|application|system|feature|tool|platform|service)\s+which\s+help\b", re.IGNORECASE)
+
 _SINGULAR_BARE_VERB = re.compile(
     r"\b(he|she)\s+(go|do|make|take|come|work|like|want|need|know|think|play|say|get|give|use|try|help|speak|write|live)\b",
     re.IGNORECASE,
@@ -325,6 +339,64 @@ def _fix_common_errors(text: str) -> list[Correction]:
         add(m.group(0), "I agree", "'Agree' is a verb, so don't use 'am' before it — say 'I agree'.", "verb_form")
     for m in _DISCUSS_ABOUT.finditer(text):
         add(m.group(0), m.group(1), f"'{m.group(1)}' already means 'talk about' — drop the extra 'about'.", "preposition")
+
+    for m in _NAME_DREAM_ARE.finditer(text):
+        fixed_verb = "is" if m.group(3).lower() == "are" else "was"
+        add(m.group(0), f"{m.group(1)} {m.group(2)} {fixed_verb}", f"Singular subject '{m.group(2)}' requires singular verb '{fixed_verb}'.", "subject_verb_agreement")
+
+    for m in _I_VERB_S.finditer(text):
+        parts = m.group(0).split()
+        verb_s = parts[-1]
+        base_v = "try" if verb_s == "tries" else verb_s[:-1]
+        parts[-1] = base_v
+        add(m.group(0), " ".join(parts), f"First-person pronoun 'I' takes the base verb ('{base_v}') without '-s'.", "subject_verb_agreement")
+
+    for m in _MANY_SINGULAR.finditer(text):
+        quant, noun = m.group(1), m.group(2)
+        plural_noun = noun[:-1] + "ies" if noun.endswith("y") else noun + "s"
+        add(m.group(0), f"{quant} {plural_noun}", f"Quantitative word '{quant}' must be followed by a plural noun ('{plural_noun}').", "plural_agreement")
+
+    for m in _TO_S.finditer(text):
+        verb = m.group(1)
+        add(m.group(0), f"to {verb[:-1]}", f"Infinitive 'to' must be followed by base verb form without '-s' ('to {verb[:-1]}').", "verb_form")
+
+    for m in _WANT_GERUND.finditer(text):
+        want_v, gerund = m.group(1), m.group(2)
+        base = {"getting": "get", "joining": "join", "doing": "do", "learning": "learn"}.get(gerund, gerund.replace("ing", ""))
+        add(m.group(0), f"{want_v} to {base}", f"The verb '{want_v}' is followed by an infinitive with 'to' ('{want_v} to {base}'), not a gerund.", "verb_form")
+
+    for m in _MISSING_ARTICLE_ADJ_NOUN.finditer(text):
+        parts = m.group(0).split()
+        art = "an" if parts[1][0].lower() in "aeiou" else "a"
+        add(m.group(0), f"{parts[0]} {art} {parts[1]} {parts[2]}", f"Singular countable nouns require article '{art}' ('{parts[0]} {art} {parts[1]} {parts[2]}').", "article_usage")
+
+    for m in _AM_HAVE.finditer(text):
+        add(m.group(0), "I also have", "Avoid combining 'am' with 'have' — say 'I have' or 'I also have'.", "verb_form")
+
+    for m in _HAVE_MAKE_BASE.finditer(text):
+        aux, verb = m.group(1), m.group(2).lower()
+        pp = {"make": "made", "take": "taken", "write": "written", "give": "given", "build": "built", "do": "done"}.get(verb, verb + "ed" if not verb.endswith("e") else verb + "d")
+        add(m.group(0), f"{aux} {pp}", f"With '{aux}', use the past participle form ('{pp}') instead of the base verb.", "verb_form")
+
+    for m in _AM_STUDY_BASE.finditer(text):
+        aux, verb = m.group(1), m.group(2).lower()
+        ing = verb + "ing" if not verb.endswith("e") else verb[:-1] + "ing"
+        add(m.group(0), f"{aux} {ing}", f"Use progressive form '{ing}' instead of '{aux} {verb}'.", "verb_form")
+
+    for m in _STUDENT_IN_UNIV.finditer(text):
+        add(m.group(0), f"student at {m.group(1)}", f"Use preposition 'at' when referring to educational institutions ('student at {m.group(1)}').", "preposition", category="style")
+
+    for m in _IN_ORDINAL_YEAR.finditer(text):
+        yr = m.group(0).split()[1]
+        add(m.group(0), f"in the {yr} year", f"Use 'in the {yr} year' or 'in my {yr} year'.", "preposition", category="style")
+
+    for m in _TECH_SKILL.finditer(text):
+        pron = m.group(0).split()[0]
+        add(m.group(0), f"{pron} technical skills", "Use plural 'technical skills' when referring to a general skillset.", "plural_agreement", category="style")
+
+    for m in _COACH_WHICH_HELP.finditer(text):
+        noun = m.group(0).split()[0]
+        add(m.group(0), f"{noun} which helps", f"Singular antecedent '{noun}' requires singular verb 'helps'.", "subject_verb_agreement")
 
     for m in _SINGULAR_BARE_VERB.finditer(text):
         if _previous_word(text, m.start()) in _BARE_VERB_OK_BEFORE:
