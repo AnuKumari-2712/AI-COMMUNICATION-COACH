@@ -1013,12 +1013,21 @@ export function analyzeGrammar(text: string): {
   const spellingCorrections = uniqueCorrections.filter((c) => c.category === 'spelling');
   const styleCorrections = uniqueCorrections.filter((c) => c.category === 'style');
 
-  // Realistic Grammar Score:
-  const totalDeductions = (grammarCorrections.length * 8) + (spellingCorrections.length * 5) + (styleCorrections.length * 3);
-  let score = Math.max(25, Math.min(100, Math.round(100 - totalDeductions)));
+  // Calibrated Error-Density Grammar Score:
+  // Instead of subtracting arbitrary fixed amounts that artificially crash longer texts,
+  // evaluate error frequency relative to word volume (standard in CEFR / TOEFL evaluation).
+  let score: number;
+  if (uniqueCorrections.length === 0) {
+    score = words.length >= 25 ? 98 : 95;
+  } else {
+    const totalDeductions = (grammarCorrections.length * 5) + (spellingCorrections.length * 3) + (styleCorrections.length * 1.5);
+    const effectiveWords = Math.max(14, words.length);
+    const density = (totalDeductions / effectiveWords) * 100;
+    score = Math.max(28, Math.min(96, Math.round(96 - (density * 0.52))));
+  }
 
   if (words.length < 8 && uniqueCorrections.length > 0) {
-    score = Math.min(score, 50);
+    score = Math.min(score, 48);
   }
 
   return {
@@ -1235,7 +1244,7 @@ export function analyzeRelevance(question: string, answer: string): {
 /**
  * Structure and Clarity Assessment Engine.
  */
-export function analyzeStructureAndClarity(text: string): {
+export function analyzeStructureAndClarity(text: string, grammarErrorCount: number = 0): {
   structureScore: number;
   clarityScore: number;
 } {
@@ -1258,10 +1267,14 @@ export function analyzeStructureAndClarity(text: string): {
   const structureScore = Math.min(96, Math.max(40, structure));
 
   const avgSentenceLen = words.length / Math.max(1, sentences.length);
-  let clarityScore = 88;
-  if (avgSentenceLen < 7) clarityScore -= 12;
-  else if (avgSentenceLen > 28) clarityScore -= 18;
-  clarityScore = Math.max(45, Math.min(95, clarityScore));
+  let clarityBase = 88;
+  if (avgSentenceLen < 7) clarityBase -= 10;
+  else if (avgSentenceLen > 28) clarityBase -= 14;
+
+  // Real clarity is meaningfully impacted when grammar disruptions confuse comprehension:
+  const errorDensity = (grammarErrorCount / Math.max(12, words.length)) * 100;
+  const clarityPenalty = Math.min(26, Math.round(errorDensity * 1.5));
+  const clarityScore = Math.max(35, Math.min(95, clarityBase - clarityPenalty));
 
   return { structureScore, clarityScore };
 }
@@ -1361,7 +1374,7 @@ export function performClientTextAnalysis(question: string, answer: string): Cli
   const grammar = analyzeGrammar(answer);
   const vocab = analyzeVocabulary(answer);
   const relevance = analyzeRelevance(question, answer);
-  const { structureScore, clarityScore } = analyzeStructureAndClarity(answer);
+  const { structureScore, clarityScore } = analyzeStructureAndClarity(answer, grammar.corrections.length);
   const alternative = generateBetterAlternative(question, answer);
 
   const overallScore = Math.round(

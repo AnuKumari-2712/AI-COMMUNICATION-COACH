@@ -13,7 +13,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, ProgressBar } from '@/components/ui';
 import { ScoreDonutChart } from '@/components/charts/ScoreDonutChart';
 import { practiceService, type TextAnalysisResult } from '@/services/practiceService';
 import { chartColors } from '@/lib/chartTheme';
@@ -288,6 +288,19 @@ export default function TextPracticePage() {
     }
   };
 
+  const getScoreTextColor = (val: number) => {
+    if (val >= 75) return 'text-success-400';
+    if (val >= 50) return 'text-warning-400';
+    return 'text-danger-400';
+  };
+
+  const getScoreStatusBadge = (val: number): { label: string; variant: 'success' | 'warning' | 'danger' } => {
+    if (val >= 85) return { label: 'Strong', variant: 'success' };
+    if (val >= 70) return { label: 'Proficient', variant: 'success' };
+    if (val >= 50) return { label: 'Fair', variant: 'warning' };
+    return { label: 'Needs Work', variant: 'danger' };
+  };
+
   return (
     <div>
       <PageHeader
@@ -453,29 +466,95 @@ export default function TextPracticePage() {
           </div>
 
           <Card className="p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-display text-base font-semibold text-base-50">Score Breakdown</h3>
-              <span className="text-xs text-base-400">Weighted NLP Evaluation Model</span>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-3">
+              <div>
+                <h3 className="font-display text-base font-semibold text-base-50">Score Breakdown</h3>
+                <p className="text-xs text-base-400">
+                  Comprehensive 5-Pillar evaluation weighted according to corporate communication benchmarks.
+                </p>
+              </div>
+              <Badge variant="outline" size="sm" className="text-xs">
+                NLP Evaluation Model
+              </Badge>
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
               {([
-                { label: 'Grammar', weight: '30%', value: result.grammarScore, sufficientData: result.grammarSufficientData },
-                { label: 'Relevance', weight: '25%', value: result.relevanceScore, sufficientData: result.relevanceSufficientData },
-                { label: 'Vocabulary', weight: '20%', value: result.vocabularyScore, sufficientData: result.vocabularySufficientData },
-                { label: 'Structure', weight: '15%', value: result.structureScore, sufficientData: true },
-                { label: 'Clarity', weight: '10%', value: result.clarityScore, sufficientData: true },
-              ] as const).map((m) => (
-                <div key={m.label} className="rounded-xl border border-white/5 bg-base-800/60 p-3.5 text-center">
-                  <p className={`font-display text-2xl font-semibold text-${scoreTone(m.value)}-400`}>{Math.round(m.value)}</p>
-                  <p className="mt-1 text-xs font-medium text-base-300">{m.label}</p>
-                  <p className="text-[10px] text-base-400">Weight: {m.weight}</p>
-                  {!m.sufficientData && (
-                    <Badge variant="outline" size="sm" className="mt-2 text-[10px]">
-                      Short answer
-                    </Badge>
-                  )}
-                </div>
-              ))}
+                {
+                  label: 'Grammar',
+                  weight: '30%',
+                  value: result.grammarScore,
+                  sufficientData: result.grammarSufficientData,
+                  desc: 'Syntax, tense & agreement',
+                },
+                {
+                  label: 'Relevance',
+                  weight: '25%',
+                  value: result.relevanceScore,
+                  sufficientData: result.relevanceSufficientData,
+                  desc: 'Topic coverage & intent',
+                },
+                {
+                  label: 'Vocabulary',
+                  weight: '20%',
+                  value: result.vocabularyScore,
+                  sufficientData: result.vocabularySufficientData,
+                  desc: 'Lexical depth & variety',
+                },
+                {
+                  label: 'Structure',
+                  weight: '15%',
+                  value: result.structureScore,
+                  sufficientData: true,
+                  desc: 'Organization & flow',
+                },
+                {
+                  label: 'Clarity',
+                  weight: '10%',
+                  value: result.clarityScore,
+                  sufficientData: true,
+                  desc: 'Readability & conciseness',
+                },
+              ] as const).map((m) => {
+                const status = getScoreStatusBadge(m.value);
+                const tone = scoreTone(m.value);
+                const scoreColor = getScoreTextColor(m.value);
+                return (
+                  <div
+                    key={m.label}
+                    className="flex flex-col justify-between rounded-xl border border-white/5 bg-base-800/60 p-4 transition-colors hover:border-white/10"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-base-200">{m.label}</span>
+                        <span className="text-[10px] font-medium text-base-400">Wt. {m.weight}</span>
+                      </div>
+
+                      <div className="mt-3 flex items-baseline justify-between">
+                        <span className={`font-display text-3xl font-bold ${scoreColor}`}>
+                          {Math.round(m.value)}
+                        </span>
+                        <Badge variant={status.variant} size="sm" className="text-[10px]">
+                          {status.label}
+                        </Badge>
+                      </div>
+
+                      <div className="mt-3">
+                        <ProgressBar value={m.value} tone={tone} size="sm" />
+                      </div>
+                    </div>
+
+                    <div className="mt-3 border-t border-white/5 pt-2 text-center sm:text-left">
+                      <p className="text-[11px] text-base-400 leading-snug">{m.desc}</p>
+                      {!m.sufficientData && (
+                        <span className="mt-1 inline-block text-[10px] text-warning-400">
+                          (Short sample)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </Card>
 
@@ -485,7 +564,7 @@ export default function TextPracticePage() {
                 <Target className="size-5" />
                 <h3 className="font-display text-base font-semibold text-base-50">Answer Relevance</h3>
               </div>
-              <span className={`font-display text-xl font-semibold text-${scoreTone(result.relevanceScore)}-400`}>
+              <span className={`font-display text-xl font-semibold ${getScoreTextColor(result.relevanceScore)}`}>
                 {Math.round(result.relevanceScore)}%
               </span>
             </div>
