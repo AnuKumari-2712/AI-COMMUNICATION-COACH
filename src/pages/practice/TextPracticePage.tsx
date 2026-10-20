@@ -453,20 +453,25 @@ export default function TextPracticePage() {
           </div>
 
           <Card className="p-5">
-            <h3 className="mb-4 font-display text-base font-semibold text-base-50">Score Breakdown</h3>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="font-display text-base font-semibold text-base-50">Score Breakdown</h3>
+              <span className="text-xs text-base-400">Weighted NLP Evaluation Model</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               {([
-                { label: 'Grammar', value: result.grammarScore, sufficientData: result.grammarSufficientData },
-                { label: 'Vocabulary', value: result.vocabularyScore, sufficientData: result.vocabularySufficientData },
-                { label: 'Structure', value: result.structureScore, sufficientData: true },
-                { label: 'Clarity', value: result.clarityScore, sufficientData: true },
+                { label: 'Grammar', weight: '30%', value: result.grammarScore, sufficientData: result.grammarSufficientData },
+                { label: 'Relevance', weight: '25%', value: result.relevanceScore, sufficientData: result.relevanceSufficientData },
+                { label: 'Vocabulary', weight: '20%', value: result.vocabularyScore, sufficientData: result.vocabularySufficientData },
+                { label: 'Structure', weight: '15%', value: result.structureScore, sufficientData: true },
+                { label: 'Clarity', weight: '10%', value: result.clarityScore, sufficientData: true },
               ] as const).map((m) => (
                 <div key={m.label} className="rounded-xl border border-white/5 bg-base-800/60 p-3.5 text-center">
                   <p className={`font-display text-2xl font-semibold text-${scoreTone(m.value)}-400`}>{Math.round(m.value)}</p>
-                  <p className="mt-1 text-xs text-base-400">{m.label}</p>
+                  <p className="mt-1 text-xs font-medium text-base-300">{m.label}</p>
+                  <p className="text-[10px] text-base-400">Weight: {m.weight}</p>
                   {!m.sufficientData && (
-                    <Badge variant="outline" size="sm" className="mt-2">
-                      Low confidence — short answer
+                    <Badge variant="outline" size="sm" className="mt-2 text-[10px]">
+                      Short answer
                     </Badge>
                   )}
                 </div>
