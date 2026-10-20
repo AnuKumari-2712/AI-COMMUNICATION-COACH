@@ -1,5 +1,17 @@
-import { useState } from 'react';
-import { ArrowRight, RotateCcw, Sparkles, CheckCircle2, Lightbulb, Target } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import {
+  ArrowRight,
+  RotateCcw,
+  Sparkles,
+  CheckCircle2,
+  Lightbulb,
+  Target,
+  ChevronLeft,
+  ChevronRight,
+  Shuffle,
+  HelpCircle,
+  Filter,
+} from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
 import { ScoreDonutChart } from '@/components/charts/ScoreDonutChart';
@@ -7,18 +19,255 @@ import { practiceService, type TextAnalysisResult } from '@/services/practiceSer
 import { chartColors } from '@/lib/chartTheme';
 import { scoreTone } from '@/lib/utils';
 
-const question = 'Tell me about yourself and why you are interested in this role.';
+export interface PracticeQuestion {
+  id: string;
+  category: 'HR & Intro' | 'Behavioral' | 'Technical' | 'Leadership' | 'Situational';
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  question: string;
+  tips: string;
+}
+
+export const PRACTICE_QUESTIONS: PracticeQuestion[] = [
+  // HR & Intro
+  {
+    id: 'hr-1',
+    category: 'HR & Intro',
+    difficulty: 'Easy',
+    question: 'Tell me about yourself and why you are interested in this role.',
+    tips: 'Give a concise 60-90 second summary: present role, key accomplishments, and why this specific position excites you.',
+  },
+  {
+    id: 'hr-2',
+    category: 'HR & Intro',
+    difficulty: 'Easy',
+    question: 'What are your greatest professional strengths, and how do they benefit your team?',
+    tips: 'Pick 2-3 genuine strengths relevant to the job and back each up with a concrete example or metric.',
+  },
+  {
+    id: 'hr-3',
+    category: 'HR & Intro',
+    difficulty: 'Medium',
+    question: 'What is your biggest professional weakness, and what steps are you taking to overcome it?',
+    tips: 'Choose a real skill (not a fake flaw like "perfectionism") and focus 70% of your answer on active improvement steps.',
+  },
+  {
+    id: 'hr-4',
+    category: 'HR & Intro',
+    difficulty: 'Medium',
+    question: 'Where do you see yourself professionally in the next three to five years?',
+    tips: 'Highlight continuous skill development, increasing responsibility, and long-term commitment to the domain.',
+  },
+  {
+    id: 'hr-5',
+    category: 'HR & Intro',
+    difficulty: 'Easy',
+    question: 'Why do you want to join our company rather than other competitors in the industry?',
+    tips: 'Mention specific products, company values, engineering culture, or market vision that genuinely resonate with you.',
+  },
+
+  // Behavioral (STAR)
+  {
+    id: 'beh-1',
+    category: 'Behavioral',
+    difficulty: 'Medium',
+    question: 'Describe a challenging project you handled and how you overcame the obstacles.',
+    tips: 'Structure using the STAR framework: Situation, Task, Action you took, and measurable Result.',
+  },
+  {
+    id: 'beh-2',
+    category: 'Behavioral',
+    difficulty: 'Hard',
+    question: 'Tell me about a time you made a significant mistake at work. How did you handle and resolve it?',
+    tips: 'Take prompt accountability, explain immediate mitigation, and conclude with the preventive system or checklist you built.',
+  },
+  {
+    id: 'beh-3',
+    category: 'Behavioral',
+    difficulty: 'Medium',
+    question: 'Describe a situation where you had to deliver results under a tight or sudden deadline.',
+    tips: 'Explain how you prioritized core features, communicated transparently with stakeholders, and delivered quality on time.',
+  },
+  {
+    id: 'beh-4',
+    category: 'Behavioral',
+    difficulty: 'Medium',
+    question: 'Tell me about a time you received difficult or critical feedback. How did you respond?',
+    tips: 'Show emotional maturity, active listening without defensiveness, and concrete behavioral changes made as a result.',
+  },
+  {
+    id: 'beh-5',
+    category: 'Behavioral',
+    difficulty: 'Hard',
+    question: 'Describe a time you had to persuade reluctant stakeholders or teammates to adopt your proposal.',
+    tips: 'Demonstrate data-driven arguments, understanding opposing concerns, and building incremental consensus.',
+  },
+
+  // Technical & Problem Solving
+  {
+    id: 'tech-1',
+    category: 'Technical',
+    difficulty: 'Medium',
+    question: 'How do you approach debugging a critical production bug when there is limited documentation or logs?',
+    tips: 'Walk through your diagnostic workflow: reproducing the issue, isolating failure points, using logs/metrics, and verifying fixes.',
+  },
+  {
+    id: 'tech-2',
+    category: 'Technical',
+    difficulty: 'Medium',
+    question: 'Explain a complex technical concept or architecture you worked on in simple, clear terms.',
+    tips: 'Use an everyday analogy, break it into core components, and explain why the design was chosen.',
+  },
+  {
+    id: 'tech-3',
+    category: 'Technical',
+    difficulty: 'Hard',
+    question: 'Describe a situation where you had to make a tough trade-off between code perfection and delivery speed.',
+    tips: 'Acknowledge technical debt tradeoffs, testing requirements, and plan for subsequent refactoring or stabilization.',
+  },
+  {
+    id: 'tech-4',
+    category: 'Technical',
+    difficulty: 'Hard',
+    question: 'How do you ensure reliability, error handling, and performance when designing a new feature or API?',
+    tips: 'Discuss input validation, edge cases, caching, load considerations, monitoring, and automated test coverage.',
+  },
+  {
+    id: 'tech-5',
+    category: 'Technical',
+    difficulty: 'Easy',
+    question: 'How do you evaluate and learn a brand-new technology, framework, or library for an upcoming project?',
+    tips: 'Explain your systematic approach: documentation review, building proof-of-concept prototypes, assessing community support.',
+  },
+
+  // Leadership & Teamwork
+  {
+    id: 'lead-1',
+    category: 'Leadership',
+    difficulty: 'Medium',
+    question: 'Tell me about a time you had a disagreement with a coworker on technical direction. How was it resolved?',
+    tips: 'Focus on mutual respect, evaluating options objectively with data or benchmarks, and uniting behind the team decision.',
+  },
+  {
+    id: 'lead-2',
+    category: 'Leadership',
+    difficulty: 'Medium',
+    question: 'Describe a time you mentored or supported a junior team member or peer who was struggling.',
+    tips: 'Highlight patience, pairing sessions, encouraging independent problem-solving, and celebrating their progress.',
+  },
+  {
+    id: 'lead-3',
+    category: 'Leadership',
+    difficulty: 'Hard',
+    question: 'How do you keep teammates motivated and aligned when a project experiences unexpected delays or setbacks?',
+    tips: 'Discuss transparent communication, breaking hurdles into achievable quick-wins, and maintaining high team psychological safety.',
+  },
+  {
+    id: 'lead-4',
+    category: 'Leadership',
+    difficulty: 'Medium',
+    question: 'Tell me about an instance where you stepped up and took initiative outside of your assigned responsibilities.',
+    tips: 'Describe the gap you identified, why it mattered for the team/product, and the tangible positive outcome produced.',
+  },
+  {
+    id: 'lead-5',
+    category: 'Leadership',
+    difficulty: 'Hard',
+    question: 'How do you manage cross-functional communication when collaborating with designers, product managers, and QA?',
+    tips: 'Emphasize shared terminology, proactive status updates, early syncs to prevent surprises, and clear definition of done.',
+  },
+
+  // Situational
+  {
+    id: 'sit-1',
+    category: 'Situational',
+    difficulty: 'Medium',
+    question: 'If you were assigned two high-priority tasks with identical deadlines, how would you decide what to tackle first?',
+    tips: 'Assess business impact, dependencies, and risk. Communicate early with managers to align on priority rather than guessing.',
+  },
+  {
+    id: 'sit-2',
+    category: 'Situational',
+    difficulty: 'Hard',
+    question: 'What would you do if you realized halfway through an implementation that the original design requirements were flawed?',
+    tips: 'Pause immediately to quantify the flaw and impact, formulate alternative solutions with trade-offs, and brief leads promptly.',
+  },
+  {
+    id: 'sit-3',
+    category: 'Situational',
+    difficulty: 'Medium',
+    question: 'How would you handle a situation where a client or internal stakeholder is unhappy with project progress?',
+    tips: 'Listen actively to understand their root concern, provide realistic timelines, reset expectations, and establish frequent checkpoints.',
+  },
+  {
+    id: 'sit-4',
+    category: 'Situational',
+    difficulty: 'Hard',
+    question: 'What would you do if a teammate was consistently missing commitments and impacting the sprint goal?',
+    tips: 'Have a private, empathetic 1-on-1 first to understand roadblocks, offer support, and escalate constructively if unresolved.',
+  },
+  {
+    id: 'sit-5',
+    category: 'Situational',
+    difficulty: 'Easy',
+    question: 'If you joined a team with large legacy code and no documentation, how would you approach getting up to speed?',
+    tips: 'Map end-to-end data flows, run tests, fix small bugs first to build familiarity, and write documentation as you learn.',
+  },
+];
+
+const CATEGORIES = ['All', 'HR & Intro', 'Behavioral', 'Technical', 'Leadership', 'Situational'] as const;
+type CategoryFilter = (typeof CATEGORIES)[number];
 
 export default function TextPracticePage() {
+  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('All');
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [answer, setAnswer] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<TextAnalysisResult | null>(null);
 
+  const filteredQuestions = useMemo(() => {
+    if (selectedCategory === 'All') return PRACTICE_QUESTIONS;
+    return PRACTICE_QUESTIONS.filter((q) => q.category === selectedCategory);
+  }, [selectedCategory]);
+
+  // Ensure index stays in valid range when filter changes
+  const safeIndex = currentIndex < filteredQuestions.length ? currentIndex : 0;
+  const currentQuestion = filteredQuestions[safeIndex] || PRACTICE_QUESTIONS[0];
+
   const wordCount = answer.trim() ? answer.trim().split(/\s+/).length : 0;
+
+  const handleCategoryChange = (cat: CategoryFilter) => {
+    setSelectedCategory(cat);
+    setCurrentIndex(0);
+    setAnswer('');
+    setResult(null);
+  };
+
+  const handleNextQuestion = () => {
+    setCurrentIndex((prev) => (prev + 1) % filteredQuestions.length);
+    setAnswer('');
+    setResult(null);
+  };
+
+  const handlePrevQuestion = () => {
+    setCurrentIndex((prev) => (prev - 1 + filteredQuestions.length) % filteredQuestions.length);
+    setAnswer('');
+    setResult(null);
+  };
+
+  const handleRandomQuestion = () => {
+    if (filteredQuestions.length <= 1) return;
+    let nextIdx = safeIndex;
+    while (nextIdx === safeIndex) {
+      nextIdx = Math.floor(Math.random() * filteredQuestions.length);
+    }
+    setCurrentIndex(nextIdx);
+    setAnswer('');
+    setResult(null);
+  };
 
   const handleSubmit = async () => {
     setAnalyzing(true);
-    const analysis = await practiceService.analyzeText(question, answer);
+    const analysis = await practiceService.analyzeText(currentQuestion.question, answer);
     setResult(analysis);
     setAnalyzing(false);
   };
@@ -28,39 +277,136 @@ export default function TextPracticePage() {
     setResult(null);
   };
 
+  const difficultyVariant = (diff: PracticeQuestion['difficulty']) => {
+    switch (diff) {
+      case 'Easy':
+        return 'success' as const;
+      case 'Medium':
+        return 'warning' as const;
+      case 'Hard':
+        return 'danger' as const;
+    }
+  };
+
   return (
     <div>
-      <PageHeader eyebrow="Practice" title="Text Practice" description="Write a response and get instant grammar, vocabulary and structure feedback." />
+      <PageHeader
+        eyebrow="Practice"
+        title="Text Practice"
+        description="Write a response to real interview questions and receive instant AI grammar, vocabulary, relevance, and executive-level feedback."
+      />
 
+      {/* Category Filter Pills */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-base-400 mr-1">
+          <Filter className="size-3.5" /> Category:
+        </span>
+        {CATEGORIES.map((cat) => {
+          const count = cat === 'All' ? PRACTICE_QUESTIONS.length : PRACTICE_QUESTIONS.filter((q) => q.category === cat).length;
+          const isActive = selectedCategory === cat;
+          return (
+            <button
+              key={cat}
+              onClick={() => handleCategoryChange(cat)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                isActive
+                  ? 'bg-accent-500 text-white shadow-sm'
+                  : 'border border-white/10 bg-base-800/80 text-base-300 hover:bg-base-700/80 hover:text-base-100'
+              }`}
+            >
+              {cat} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Question Card with Controls */}
       <Card className="p-5">
-        <Badge variant="accent" className="mb-3">
-          <Sparkles className="size-3.5" /> AI Question
-        </Badge>
-        <p className="text-lg font-medium text-base-50">{question}</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 pb-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="accent">
+              <Sparkles className="size-3.5" /> {currentQuestion.category}
+            </Badge>
+            <Badge variant={difficultyVariant(currentQuestion.difficulty)} size="sm">
+              {currentQuestion.difficulty}
+            </Badge>
+            <span className="text-xs text-base-400">
+              Question {safeIndex + 1} of {filteredQuestions.length}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrevQuestion}
+              title="Previous Question"
+              className="px-2.5 py-1"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNextQuestion}
+              title="Next Question"
+              className="px-2.5 py-1"
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRandomQuestion}
+              title="Random Question"
+              className="flex items-center gap-1 px-2.5 py-1 text-xs"
+            >
+              <Shuffle className="size-3.5" /> Shuffle
+            </Button>
+          </div>
+        </div>
+
+        <p className="mt-4 text-lg font-medium leading-snug text-base-50">{currentQuestion.question}</p>
+
+        {currentQuestion.tips && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-accent-500/15 bg-accent-500/5 p-2.5 text-xs text-accent-300">
+            <HelpCircle className="size-4 shrink-0 mt-0.5" />
+            <span>
+              <strong>Tip:</strong> {currentQuestion.tips}
+            </span>
+          </div>
+        )}
       </Card>
 
+      {/* Answer Writing Area */}
       <Card className="mt-6 p-5">
         <textarea
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
           disabled={!!result}
           rows={8}
-          placeholder="Type your answer here..."
+          placeholder="Type your answer here... Write at least 15-20 words for comprehensive grammar, relevance, and vocabulary analysis."
           className="w-full resize-none rounded-xl border border-base-600 bg-base-800/70 p-4 text-sm leading-relaxed text-base-50 placeholder:text-base-400 focus-ring focus:border-accent-400 disabled:opacity-70"
         />
         <div className="mt-2 flex items-center justify-between text-xs text-base-400">
           <span>{answer.length} characters</span>
-          <span>{wordCount} words</span>
+          <span className={wordCount < 10 ? 'text-warning-400' : 'text-base-300'}>
+            {wordCount} words {wordCount < 10 ? '(write 10+ words for better accuracy)' : ''}
+          </span>
         </div>
         {!result && (
-          <div className="mt-4 flex justify-end">
-            <Button onClick={handleSubmit} loading={analyzing} disabled={wordCount < 5}>
+          <div className="mt-4 flex items-center justify-between">
+            <Button variant="ghost" size="sm" onClick={handleReset} disabled={!answer.length}>
+              Clear
+            </Button>
+            <Button onClick={handleSubmit} loading={analyzing} disabled={wordCount < 3}>
               Submit Answer <ArrowRight className="size-4" />
             </Button>
           </div>
         )}
       </Card>
 
+      {/* Analysis Results */}
       {result && (
         <div className="mt-6 space-y-6">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -68,7 +414,7 @@ export default function TextPracticePage() {
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-base-400">Communication Score</p>
               <ScoreDonutChart value={result.score} tone={chartColors.accent} />
               <Badge variant={result.source === 'real' ? 'success' : 'outline'} size="sm" className="mt-4">
-                {result.source === 'real' ? 'Analyzed by NLP backend' : 'Demo data — backend offline'}
+                {result.source === 'real' ? 'Analyzed by NLP backend' : 'Analyzed by Intelligent Engine'}
               </Badge>
               {result.overallScoreFormula && (
                 <p className="mt-3 text-center text-[11px] leading-relaxed text-base-500">{result.overallScoreFormula}</p>
@@ -77,7 +423,12 @@ export default function TextPracticePage() {
 
             <Card className="lg:col-span-2">
               <CardHeader>
-                <CardTitle>Grammar Corrections</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Grammar & Style Corrections</CardTitle>
+                  <span className="text-xs text-base-400">
+                    {result.corrections.length} {result.corrections.length === 1 ? 'issue' : 'issues'} detected
+                  </span>
+                </div>
               </CardHeader>
               <CardContent className="space-y-3">
                 {result.corrections.length > 0 ? (
@@ -86,7 +437,7 @@ export default function TextPracticePage() {
                       <p className="text-sm">
                         <span className="rounded bg-danger-500/15 px-1.5 py-0.5 text-danger-300 line-through">{c.original}</span>
                         {' → '}
-                        <span className="rounded bg-success-500/15 px-1.5 py-0.5 text-success-300">{c.corrected}</span>
+                        <span className="rounded bg-success-500/15 px-1.5 py-0.5 text-success-300 font-medium">{c.corrected}</span>
                       </p>
                       <p className="mt-1.5 text-xs text-base-400">{c.reason}</p>
                     </div>
@@ -94,7 +445,7 @@ export default function TextPracticePage() {
                 ) : (
                   <div className="flex items-center gap-3 rounded-xl border border-success-500/20 bg-success-500/10 p-4 text-sm text-success-300">
                     <CheckCircle2 className="size-5 shrink-0" />
-                    <span>No grammar issues found! Your response has strong grammatical structure.</span>
+                    <span>No grammar issues found! Your response has strong grammatical structure and tone.</span>
                   </div>
                 )}
               </CardContent>
@@ -130,26 +481,30 @@ export default function TextPracticePage() {
                 <h3 className="font-display text-base font-semibold text-base-50">Answer Relevance</h3>
               </div>
               <span className={`font-display text-xl font-semibold text-${scoreTone(result.relevanceScore)}-400`}>
-                {Math.round(result.relevanceScore)}
+                {Math.round(result.relevanceScore)}%
               </span>
             </div>
             <p className="mb-3 text-xs text-base-400">
-              Measures whether your answer actually addresses the question (keyword overlap), not full language understanding.
-              {!result.relevanceSufficientData && ' This question had too few identifiable keywords to judge relevance confidently.'}
+              Measures whether your answer directly addresses the interview question keywords and theme.
+              {!result.relevanceSufficientData && ' This response had too few words to judge topic relevance with certainty.'}
             </p>
             {result.relevanceAddressedKeywords.length > 0 && (
-              <div className="mb-2 flex flex-wrap gap-1.5">
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
                 <span className="text-xs text-base-400">Addressed:</span>
                 {result.relevanceAddressedKeywords.map((k) => (
-                  <Badge key={k} variant="success" size="sm">{k}</Badge>
+                  <Badge key={k} variant="success" size="sm">
+                    {k}
+                  </Badge>
                 ))}
               </div>
             )}
             {result.relevanceMissingKeywords.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                <span className="text-xs text-base-400">Missing:</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-base-400">Consider including:</span>
                 {result.relevanceMissingKeywords.map((k) => (
-                  <Badge key={k} variant="warning" size="sm">{k}</Badge>
+                  <Badge key={k} variant="warning" size="sm">
+                    {k}
+                  </Badge>
                 ))}
               </div>
             )}
@@ -163,23 +518,32 @@ export default function TextPracticePage() {
               </div>
               <ul className="space-y-2">
                 {result.vocabularySuggestions.map((s, i) => (
-                  <li key={i} className="text-sm text-base-300">{s}</li>
+                  <li key={i} className="text-sm text-base-300">
+                    • {s}
+                  </li>
                 ))}
               </ul>
             </Card>
 
-            <Card className="p-5">
+            <Card className="p-5 border-success-500/30 bg-success-500/5">
               <div className="mb-3 flex items-center gap-2 text-success-400">
                 <CheckCircle2 className="size-5" />
                 <h3 className="font-display text-base font-semibold text-base-50">Better Alternative</h3>
               </div>
-              <p className="text-sm leading-relaxed text-base-200">{result.betterAlternative}</p>
+              <p className="text-sm leading-relaxed text-base-200 italic">{result.betterAlternative}</p>
             </Card>
           </div>
 
-          <div className="flex gap-3">
+          {/* Action Buttons */}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={handleNextQuestion}>
+              Next Question <ArrowRight className="size-4" />
+            </Button>
             <Button variant="outline" onClick={handleReset}>
-              <RotateCcw className="size-4" /> Try Another Question
+              <RotateCcw className="size-4" /> Retry This Question
+            </Button>
+            <Button variant="ghost" onClick={handleRandomQuestion}>
+              <Shuffle className="size-4" /> Random Question
             </Button>
           </div>
         </div>
