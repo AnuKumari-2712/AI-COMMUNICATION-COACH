@@ -40,9 +40,10 @@ export interface VoiceAnalysisResult {
 
 export interface TextAnalysisResult {
   score: number;
-  corrections: { original: string; corrected: string; reason: string }[];
+  corrections: { original: string; corrected: string; reason: string; rule?: string; errorType?: string }[];
   vocabularySuggestions: string[];
   betterAlternative: string;
+  correctedAnswer: string;
   /** 'real' = analyzed by the FastAPI backend's NLP pipeline, 'mock' = local demo data (backend not running). */
   source: 'real' | 'mock';
   grammarScore: number;
@@ -68,9 +69,12 @@ function dynamicTextAnalysis(question: string, text: string): TextAnalysisResult
       original: c.original,
       corrected: c.corrected,
       reason: c.reason,
+      rule: c.rule,
+      errorType: c.errorType || 'Grammar',
     })),
     vocabularySuggestions: analysis.vocabularySuggestions,
     betterAlternative: analysis.betterAlternative,
+    correctedAnswer: analysis.correctedAnswer,
     source: 'real',
     grammarScore: analysis.grammarScore,
     vocabularyScore: analysis.vocabularyScore,
@@ -89,9 +93,10 @@ function dynamicTextAnalysis(question: string, text: string): TextAnalysisResult
 
 interface BackendTextAnalysisResponse {
   score: number;
-  corrections: { original: string; corrected: string; reason: string; rule: string }[];
+  corrections: { original: string; corrected: string; reason: string; rule: string; error_type?: string }[];
   vocabulary_suggestions: string[];
   better_alternative: string;
+  corrected_answer?: string;
   grammar_score: number;
   vocabulary_score: number;
   structure_score: number;
@@ -326,9 +331,16 @@ export const practiceService = {
       });
       return {
         score: data.score,
-        corrections: data.corrections.map((c) => ({ original: c.original, corrected: c.corrected, reason: c.reason })),
+        corrections: data.corrections.map((c) => ({
+          original: c.original,
+          corrected: c.corrected,
+          reason: c.reason,
+          rule: c.rule,
+          errorType: c.error_type || 'Grammar',
+        })),
         vocabularySuggestions: data.vocabulary_suggestions,
         betterAlternative: data.better_alternative,
+        correctedAnswer: data.corrected_answer || '',
         source: 'real',
         grammarScore: data.grammar_score,
         vocabularyScore: data.vocabulary_score,

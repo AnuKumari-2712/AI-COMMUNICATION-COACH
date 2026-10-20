@@ -11,6 +11,8 @@ import {
   Shuffle,
   HelpCircle,
   Filter,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, ProgressBar } from '@/components/ui';
@@ -272,9 +274,19 @@ export default function TextPracticePage() {
     setAnalyzing(false);
   };
 
+  const [copiedCorrected, setCopiedCorrected] = useState(false);
+
   const handleReset = () => {
     setAnswer('');
     setResult(null);
+    setCopiedCorrected(false);
+  };
+
+  const handleCopyCorrected = () => {
+    if (!result?.correctedAnswer) return;
+    navigator.clipboard.writeText(result.correctedAnswer);
+    setCopiedCorrected(true);
+    setTimeout(() => setCopiedCorrected(false), 2000);
   };
 
   const difficultyVariant = (diff: PracticeQuestion['difficulty']) => {
@@ -447,10 +459,16 @@ export default function TextPracticePage() {
                 {result.corrections.length > 0 ? (
                   result.corrections.map((c, i) => (
                     <div key={i} className="rounded-xl border border-white/5 bg-base-800/60 p-3.5">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <Badge variant="outline" size="sm" className="border-accent-500/30 text-[10px] font-semibold uppercase tracking-wider text-accent-400">
+                          {c.errorType || 'Grammar'}
+                        </Badge>
+                        <span className="text-[10px] text-base-500 font-mono">#{i + 1}</span>
+                      </div>
                       <p className="text-sm">
                         <span className="rounded bg-danger-500/15 px-1.5 py-0.5 text-danger-300 line-through">{c.original}</span>
                         {' → '}
-                        <span className="rounded bg-success-500/15 px-1.5 py-0.5 text-success-300 font-medium">{c.corrected}</span>
+                        <span className="rounded bg-success-500/15 px-1.5 py-0.5 font-medium text-success-300">{c.corrected}</span>
                       </p>
                       <p className="mt-1.5 text-xs text-base-400">{c.reason}</p>
                     </div>
@@ -594,6 +612,47 @@ export default function TextPracticePage() {
             )}
           </Card>
 
+          {/* Fully Corrected Version (Requirement 6) */}
+          {result.correctedAnswer && (
+            <Card className="border-emerald-500/30 bg-emerald-500/5 p-5">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-3">
+                <div className="flex items-center gap-2 text-emerald-400">
+                  <CheckCircle2 className="size-5" />
+                  <h3 className="font-display text-base font-semibold text-base-50">Fully Corrected Version</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="success" size="sm">
+                    Exact Meaning Preserved
+                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyCorrected}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-base-300 hover:text-base-50"
+                  >
+                    {copiedCorrected ? (
+                      <>
+                        <Check className="size-3.5 text-success-400" /> Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="size-3.5" /> Copy Text
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <p className="mb-3 text-xs text-base-400">
+                Your complete answer with every grammar, spelling, article, and tense error fixed in place without altering your personal details:
+              </p>
+              <div className="rounded-xl border border-white/5 bg-base-900/80 p-4">
+                <p className="text-sm font-normal leading-relaxed text-base-100 whitespace-pre-wrap">
+                  {result.correctedAnswer}
+                </p>
+              </div>
+            </Card>
+          )}
+
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card className="p-5">
               <div className="mb-3 flex items-center gap-2 text-accent-400">
@@ -609,12 +668,17 @@ export default function TextPracticePage() {
               </ul>
             </Card>
 
-            <Card className="p-5 border-success-500/30 bg-success-500/5">
-              <div className="mb-3 flex items-center gap-2 text-success-400">
-                <CheckCircle2 className="size-5" />
-                <h3 className="font-display text-base font-semibold text-base-50">Better Alternative</h3>
+            <Card className="p-5 border-accent-500/30 bg-accent-500/5">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-accent-400">
+                  <Sparkles className="size-5" />
+                  <h3 className="font-display text-base font-semibold text-base-50">Better Alternative</h3>
+                </div>
+                <Badge variant="accent" size="sm">
+                  Executive Phrasing
+                </Badge>
               </div>
-              <p className="text-sm leading-relaxed text-base-200 italic">{result.betterAlternative}</p>
+              <p className="text-sm leading-relaxed text-base-200 italic whitespace-pre-wrap">{result.betterAlternative}</p>
             </Card>
           </div>
 

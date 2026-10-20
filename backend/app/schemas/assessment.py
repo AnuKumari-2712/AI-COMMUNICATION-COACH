@@ -16,6 +16,7 @@ class GrammarCorrection(BaseModel):
     corrected: str
     reason: str
     rule: str
+    error_type: str = "Grammar"
     # MODULE 1: category determines whether this issue affects grammar_score
     # at all (only "grammar" does — spelling/style never do); confidence
     # marks issues the checker can't be fully certain about (e.g. tense
@@ -41,6 +42,7 @@ class TextAnalysisResponse(BaseModel):
     vocabulary_suggestions: list[str]
     repeated_words: list[str]
     better_alternative: str
+    corrected_answer: str = ""
     word_count: int = Field(ge=0)
     # MODULE 1 transparency fields — lets a caller verify grammar_score by
     # hand instead of trusting it blindly. See grammar_rules.py::analyze().

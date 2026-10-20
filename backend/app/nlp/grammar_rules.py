@@ -48,6 +48,7 @@ class Correction:
     category: Category
     confidence: Confidence
     sentence: str = ""  # the full sentence the issue was found in, for context
+    error_type: str = "Grammar"
 
 
 @dataclass
@@ -63,6 +64,7 @@ class GrammarAnalysis:
     formula: str
     sufficient_data: bool
     weaknesses: list[str] = field(default_factory=list)
+    corrected_answer: str = ""
 
 
 _DOUBLE_NEGATIVE = re.compile(r"\b(don't|doesn't|didn't|isn't|wasn't|can't|won't)\b\s+\w*\s*\b(no|none|nothing|nobody|never)\b", re.IGNORECASE)
@@ -130,30 +132,79 @@ _AN_BEFORE_CONSONANT_PREFIXES = ("hour", "honest", "honor", "honour", "heir")
 _LOWER_I = re.compile(
     r"(?<![\w.'\-])i((?:\s+(?:am|was|have|had|will|would|can|could|do|did|think|want|like|work|worked|believe|feel))|'(?:m|ve|ll|d))\b"
 )
-_COMMON_MISSPELLINGS = {
-    "definately": "definitely", "definatly": "definitely", "recieve": "receive", "recieved": "received",
-    "seperate": "separate", "occured": "occurred", "untill": "until", "becuase": "because", "becasue": "because",
-    "beleive": "believe", "goverment": "government", "enviroment": "environment", "accomodate": "accommodate",
-    "tommorow": "tomorrow", "tomorow": "tomorrow", "experiance": "experience", "knowlege": "knowledge",
-    "managment": "management", "comunication": "communication", "comunicate": "communicate",
-    "langauge": "language", "pronounciation": "pronunciation", "intrested": "interested",
-    "responsability": "responsibility", "sucessful": "successful", "succesful": "successful",
-    "sucess": "success", "succes": "success", "adress": "address", "neccessary": "necessary",
-    "necesary": "necessary", "occassion": "occasion", "freind": "friend", "thier": "their", "realy": "really",
-    "writting": "writing", "begining": "beginning", "existance": "existence", "independant": "independent",
-    "arguement": "argument", "calender": "calendar", "collegue": "colleague", "commited": "committed",
-    "familar": "familiar", "immediatly": "immediately", "intresting": "interesting", "maintainance": "maintenance",
-    "noticable": "noticeable", "persistant": "persistent", "priviledge": "privilege", "publically": "publicly",
-    "refered": "referred", "relevent": "relevant", "suprise": "surprise", "tecnology": "technology",
-    "truely": "truly", "wierd": "weird", "proffesional": "professional", "profesional": "professional",
-    "carrer": "career", "improvment": "improvement", "developement": "development", "oppurtunity": "opportunity",
-    "opportunty": "opportunity", "excellant": "excellent", "confidance": "confidence", "confidant": None,
-    "guidence": "guidance", "teh": "the", "dont": "don't", "cant": "can't", "didnt": "didn't",
-    "doesnt": "doesn't", "isnt": "isn't", "wasnt": "wasn't", "wont": None, "im": None,
+_RULE_ERROR_TYPE_MAP: dict[str, str] = {
+    "subject_verb_agreement": "Subject-Verb Agreement",
+    "plural_agreement": "Singular / Plural",
+    "verb_form": "Verb Form",
+    "modal_of": "Modal Verb Usage",
+    "double_negative": "Double Negative",
+    "double_comparative": "Comparative Adjective",
+    "preposition": "Preposition",
+    "article_usage": "Article Usage",
+    "capitalization": "Capitalization",
+    "punctuation": "Punctuation",
+    "spelling": "Spelling",
+    "homophone": "Homophone",
+    "formality": "Formality & Style",
+    "repeated_word": "Repeated Word",
+    "tense_consistency": "Tense Consistency",
+    "word_choice": "Word Choice",
 }
-# Entries mapped to None are intentionally ignored (valid words or too ambiguous).
+
+_COMMON_MISSPELLINGS = {
+    "grammer": "grammar", "gramer": "grammar", "gramar": "grammar",
+    "corrction": "correction", "corection": "correction", "correciton": "correction",
+    "vacalbury": "vocabulary", "vacabulary": "vocabulary", "vocablary": "vocabulary", "vocabullary": "vocabulary",
+    "revalent": "relevant", "relavent": "relevant", "relevent": "relevant",
+    "fetaures": "features", "feautres": "features", "feuture": "feature",
+    "alot": "a lot", "allot": "a lot", "infront": "in front", "atleast": "at least",
+    "aswell": "as well", "eachother": "each other", "infact": "in fact", "noone": "no one",
+    "everytime": "every time", "definately": "definitely", "definatly": "definitely", "definitly": "definitely",
+    "recieve": "receive", "recieved": "received", "recieving": "receiving",
+    "seperate": "separate", "seperated": "separated", "seperately": "separately",
+    "occured": "occurred", "occuring": "occurring", "untill": "until",
+    "becuase": "because", "becasue": "because", "beacuse": "because",
+    "beleive": "believe", "beleived": "believed", "beleiving": "believing", "beleif": "belief",
+    "goverment": "government", "enviroment": "environment", "accomodate": "accommodate", "accomodation": "accommodation",
+    "tommorow": "tomorrow", "tomorow": "tomorrow", "experiance": "experience", "experianced": "experienced", "experiances": "experiences",
+    "knowlege": "knowledge", "knowlegeable": "knowledgeable", "managment": "management",
+    "comunication": "communication", "comunicate": "communicate", "comunicating": "communicating",
+    "langauge": "language", "pronounciation": "pronunciation", "intrested": "interested", "intresting": "interesting",
+    "tecnology": "technology", "tecnologies": "technologies", "proffesional": "professional", "profesional": "professional", "proffesionals": "professionals",
+    "carrer": "career", "improvment": "improvement", "improvments": "improvements",
+    "developement": "development", "oppurtunity": "opportunity", "opportunty": "opportunity", "oppurtunities": "opportunities",
+    "responsability": "responsibility", "sucessful": "successful", "succesful": "successful", "sucessfully": "successfully",
+    "sucess": "success", "succes": "success", "adress": "address", "adressed": "addressed",
+    "neccessary": "necessary", "necesary": "necessary", "occassion": "occasion", "occassionally": "occasionally",
+    "freind": "friend", "freinds": "friends", "thier": "their", "realy": "really",
+    "writting": "writing", "begining": "beginning", "existance": "existence", "independant": "independent",
+    "arguement": "argument", "calender": "calendar", "collegue": "colleague", "collegues": "colleagues",
+    "commited": "committed", "familar": "familiar", "immediatly": "immediately", "maintainance": "maintenance",
+    "noticable": "noticeable", "persistant": "persistent", "priviledge": "privilege", "publically": "publicly",
+    "refered": "referred", "diffrent": "different", "differant": "different", "consistant": "consistent",
+    "guarentee": "guarantee", "garantee": "guarantee", "tendancy": "tendency", "occurence": "occurrence", "occurrance": "occurrence",
+    "fourty": "forty", "ninty": "ninety", "nineth": "ninth", "twelth": "twelfth",
+    "interveiw": "interview", "interviews": "interviews", "posible": "possible",
+    "responce": "response", "responces": "responses", "chalenge": "challenge", "chalenges": "challenges",
+    "problm": "problem", "problms": "problems", "softwere": "software", "hardwere": "hardware",
+    "learing": "learning", "leared": "learned", "studing": "studying", "studided": "studied",
+    "collegee": "college", "univercity": "university", "certifcate": "certificate", "certifaction": "certification",
+    "requirment": "requirement", "requirments": "requirements", "algorithim": "algorithm", "algorithims": "algorithms",
+    "perfomance": "performance", "optmization": "optimization", "optmized": "optimized",
+    "databse": "database", "plateform": "platform", "framwork": "framework", "framworks": "frameworks",
+    "backened": "backend", "frontened": "frontend", "analisys": "analysis", "analize": "analyze",
+    "soluton": "solution", "solutons": "solutions", "implimentation": "implementation", "impliment": "implement", "implimented": "implemented",
+    "stratergy": "strategy", "stratergies": "strategies", "succeded": "succeeded",
+    "effectivly": "effectively", "effecient": "efficient", "effeciently": "efficiently",
+    "suprise": "surprise", "truely": "truly", "wierd": "weird",
+    "excellant": "excellent", "confidance": "confidence", "guidence": "guidance", "teh": "the",
+    "dont": "don't", "cant": "can't", "didnt": "didn't", "doesnt": "doesn't", "isnt": "isn't", "wasnt": "wasn't",
+}
 _COMMON_MISSPELLINGS = {k: v for k, v in _COMMON_MISSPELLINGS.items() if v}
 _MISSPELLING_PATTERN = re.compile(r"\b(" + "|".join(sorted(_COMMON_MISSPELLINGS, key=len, reverse=True)) + r")\b", re.IGNORECASE)
+
+_MISSING_SPACE_PUNCT = re.compile(r"([a-zA-Z0-9])([,.:;?!])([a-zA-Z0-9])")
+_SPACE_BEFORE_PUNCT = re.compile(r"([a-zA-Z0-9])\s+([,.:;?!])")
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 _WORD_PATTERN = re.compile(r"[A-Za-z']+")
@@ -467,6 +518,73 @@ def _tense_consistency(text: str, sentences: list[str]) -> list[Correction]:
     return corrections
 
 
+def _fix_punctuation(text: str) -> list[Correction]:
+    out: list[Correction] = []
+    for m in _MISSING_SPACE_PUNCT.finditer(text):
+        if m.group(2) == "." and m.group(1).isdigit() and m.group(3).isdigit():
+            continue
+        surrounding = text[max(0, m.start() - 4):m.start() + 10]
+        if re.search(r"\b(B\.Tech|M\.Tech|B\.Sc|M\.Sc|Ph\.D|B\.E|M\.E|B\.Com|M\.Com|B\.A|M\.A|BCA|MCA|e\.g\.|i\.e\.|U\.S\.|etc\.)", surrounding, re.IGNORECASE):
+            continue
+        out.append(
+            Correction(
+                original=m.group(0),
+                corrected=f"{m.group(1)}{m.group(2)} {m.group(3)}",
+                reason=f"Add a space after punctuation '{m.group(2)}'.",
+                rule="punctuation",
+                category="style",
+                confidence="high",
+                error_type="Punctuation",
+            )
+        )
+    for m in _SPACE_BEFORE_PUNCT.finditer(text):
+        out.append(
+            Correction(
+                original=m.group(0),
+                corrected=f"{m.group(1)}{m.group(2)}",
+                reason=f"Remove unnecessary space before punctuation '{m.group(2)}'.",
+                rule="punctuation",
+                category="style",
+                confidence="high",
+                error_type="Punctuation",
+            )
+        )
+    return out
+
+
+def generate_corrected_answer(text: str, corrections: list[Correction]) -> str:
+    if not text.strip():
+        return text
+    result = text
+    # Order corrections by length descending so longer phrases match before substrings
+    sorted_corr = sorted(corrections, key=lambda c: len(c.original), reverse=True)
+    for c in sorted_corr:
+        if c.corrected.startswith("(") and c.corrected.endswith(")"):
+            continue
+        orig = c.original
+        corr = c.corrected
+        escaped = re.escape(orig)
+        if re.match(r"^[A-Za-z0-9_]+(?:\s+[A-Za-z0-9_]+)*$", orig):
+            pat = re.compile(rf"\b{escaped}\b", re.IGNORECASE)
+        else:
+            pat = re.compile(escaped, re.IGNORECASE)
+
+        def repl(m):
+            txt = m.group(0)
+            if txt.isupper() and len(txt) > 1:
+                return corr.upper()
+            if txt[:1].isupper() and not corr[:1].isupper():
+                return corr[:1].upper() + corr[1:]
+            return corr
+
+        result = pat.sub(repl, result)
+
+    result = re.sub(r"\s+([,.:;?!])", r"\1", result)
+    result = re.sub(r"[ \t]{2,}", " ", result)
+    result = re.sub(r"(^|[.!?]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper(), result)
+    return result.strip()
+
+
 def analyze(text: str, assume_unpunctuated: bool = False) -> dict:
     """Runs every rule against `text` and returns a transparent grammar
     score plus the list of corrections found. See GrammarAnalysis for the
@@ -490,15 +608,38 @@ def analyze(text: str, assume_unpunctuated: bool = False) -> dict:
             sentence_count = estimated
 
     corrections: list[Correction] = []
-    for fn in (_fix_double_negative, _fix_i_has, _fix_neither_plural, _fix_repeated_word, _fix_simple_typos, _fix_common_errors, _fix_misspellings):
+    for fn in (
+        _fix_double_negative,
+        _fix_i_has,
+        _fix_neither_plural,
+        _fix_repeated_word,
+        _fix_simple_typos,
+        _fix_common_errors,
+        _fix_punctuation,
+        _fix_misspellings,
+    ):
         corrections.extend(fn(text))
     corrections.extend(_tense_consistency(text, sentences))
 
-    # Attach full-sentence context to every correction that doesn't already
-    # carry one (tense_consistency already sets `sentence` to the whole sentence).
+    # Attach full-sentence context and error_type to every correction
     for c in corrections:
         if not c.sentence:
             c.sentence = _sentence_containing(sentences, c.original)
+        if not hasattr(c, "error_type") or not c.error_type or c.error_type == "Grammar":
+            c.error_type = _RULE_ERROR_TYPE_MAP.get(c.rule, "Grammar")
+
+    # Deduplicate corrections while preserving distinct occurrences across sentences
+    unique_corrections: list[Correction] = []
+    seen = set()
+    for c in corrections:
+        key = (c.original.lower(), c.corrected.lower(), c.sentence.lower())
+        if key not in seen:
+            seen.add(key)
+            unique_corrections.append(c)
+
+    corrections = unique_corrections
+
+    corrected_answer = generate_corrected_answer(text, corrections) if word_count > 0 else ""
 
     if word_count == 0:
         return GrammarAnalysis(
@@ -513,6 +654,7 @@ def analyze(text: str, assume_unpunctuated: bool = False) -> dict:
             formula="No input provided — no meaningful text to grade.",
             sufficient_data=False,
             weaknesses=[],
+            corrected_answer="",
         ).__dict__
 
     grammar_corrections = [c for c in corrections if c.category == "grammar"]
@@ -542,4 +684,5 @@ def analyze(text: str, assume_unpunctuated: bool = False) -> dict:
         formula=formula,
         sufficient_data=True,
         weaknesses=sorted({c.rule for c in grammar_corrections}),
+        corrected_answer=corrected_answer,
     ).__dict__

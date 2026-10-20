@@ -10,8 +10,10 @@ export interface ClientGrammarCorrection {
   corrected: string;
   reason: string;
   rule: string;
+  errorType?: string;
   category: 'grammar' | 'spelling' | 'style';
   confidence: 'high' | 'medium';
+  sentence?: string;
 }
 
 export interface ClientTextAnalysis {
@@ -25,6 +27,7 @@ export interface ClientTextAnalysis {
   vocabularySuggestions: string[];
   repeatedWords: string[];
   betterAlternative: string;
+  correctedAnswer: string;
   grammarSufficientData: boolean;
   vocabularySufficientData: boolean;
   relevanceSufficientData: boolean;
@@ -425,6 +428,52 @@ function stemWord(w: string): string {
     .trim();
 }
 
+export const RULE_ERROR_TYPE_MAP: Record<string, string> = {
+  subject_verb_agreement: 'Subject-Verb Agreement',
+  plural_agreement: 'Singular / Plural',
+  verb_form: 'Verb Form',
+  modal_of: 'Modal Verb Usage',
+  double_negative: 'Double Negative',
+  double_comparative: 'Comparative Adjective',
+  preposition: 'Preposition',
+  article_usage: 'Article Usage',
+  capitalization: 'Capitalization',
+  punctuation: 'Punctuation',
+  spelling: 'Spelling',
+  homophone: 'Homophone',
+  formality: 'Formality & Style',
+  repeated_word: 'Repeated Word',
+  tense_consistency: 'Tense Consistency',
+  word_choice: 'Word Choice',
+};
+
+export function generateFullCorrectedAnswer(text: string, corrections: ClientGrammarCorrection[]): string {
+  if (!text.trim()) return text;
+  let result = text;
+  const sorted = [...corrections].sort((a, b) => b.original.length - a.original.length);
+  for (const c of sorted) {
+    if (c.corrected.startsWith('(') && c.corrected.endsWith(')')) continue;
+    const orig = c.original;
+    const corr = c.corrected;
+    const isWordPhrase = /^[A-Za-z0-9_]+(?:\s+[A-Za-z0-9_]+)*$/.test(orig);
+    const escaped = orig.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(isWordPhrase ? `\\b${escaped}\\b` : escaped, 'gi');
+    result = result.replace(regex, (matched) => {
+      if (matched === matched.toUpperCase() && matched.length > 1) {
+        return corr.toUpperCase();
+      }
+      if (matched.charAt(0) === matched.charAt(0).toUpperCase() && corr.charAt(0) !== corr.charAt(0).toUpperCase()) {
+        return corr.charAt(0).toUpperCase() + corr.slice(1);
+      }
+      return corr;
+    });
+  }
+  result = result.replace(/\s+([,.:;?!])/g, '$1');
+  result = result.replace(/[ \t]{2,}/g, ' ');
+  result = result.replace(/(^|[.!?]\s+)([a-z])/g, (_, p1, p2) => p1 + p2.toUpperCase());
+  return result.trim();
+}
+
 /**
  * Comprehensive Grammar, Spelling, Punctuation and Collocation analysis.
  */
@@ -434,10 +483,11 @@ export function analyzeGrammar(text: string): {
   grammarIssueCount: number;
   spellingIssueCount: number;
   styleIssueCount: number;
+  correctedAnswer: string;
 } {
   const trimmed = text.trim();
   if (!trimmed) {
-    return { score: 100, corrections: [], grammarIssueCount: 0, spellingIssueCount: 0, styleIssueCount: 0 };
+    return { score: 100, corrections: [], grammarIssueCount: 0, spellingIssueCount: 0, styleIssueCount: 0, correctedAnswer: '' };
   }
 
   const corrections: ClientGrammarCorrection[] = [];
@@ -448,9 +498,11 @@ export function analyzeGrammar(text: string): {
     reason: string,
     rule: string,
     category: 'grammar' | 'spelling' | 'style' = 'grammar',
-    confidence: 'high' | 'medium' = 'high'
+    confidence: 'high' | 'medium' = 'high',
+    errorType?: string
   ) => {
-    corrections.push({ original, corrected, reason, rule, category, confidence });
+    const etype = errorType || RULE_ERROR_TYPE_MAP[rule] || 'Grammar';
+    corrections.push({ original, corrected, reason, rule, category, confidence, errorType: etype });
   };
 
   let match: RegExpExecArray | null;
@@ -998,11 +1050,11 @@ export function analyzeGrammar(text: string): {
     }
   }
 
-  // Deduplicate corrections
+  // Deduplicate corrections while preserving distinct issues across sentences
   const uniqueCorrections: ClientGrammarCorrection[] = [];
   const seen = new Set<string>();
   for (const c of corrections) {
-    const key = `${c.original.toLowerCase()}->${c.corrected.toLowerCase()}`;
+    const key = `${c.original.toLowerCase()}->${c.corrected.toLowerCase()}::${c.rule}`;
     if (!seen.has(key)) {
       seen.add(key);
       uniqueCorrections.push(c);
@@ -1030,12 +1082,15 @@ export function analyzeGrammar(text: string): {
     score = Math.min(score, 48);
   }
 
+  const correctedAnswer = generateFullCorrectedAnswer(text, uniqueCorrections);
+
   return {
     score,
     corrections: uniqueCorrections,
     grammarIssueCount: grammarCorrections.length,
     spellingIssueCount: spellingCorrections.length,
     styleIssueCount: styleCorrections.length,
+    correctedAnswer,
   };
 }
 
@@ -1399,12 +1454,14 @@ export function performClientTextAnalysis(question: string, answer: string): Cli
       corrected: c.corrected,
       reason: c.reason,
       rule: c.rule,
+      errorType: c.errorType || RULE_ERROR_TYPE_MAP[c.rule] || 'Grammar',
       category: c.category,
       confidence: c.confidence,
     })),
     vocabularySuggestions: vocab.suggestions,
     repeatedWords: vocab.repeatedWords,
     betterAlternative: alternative,
+    correctedAnswer: grammar.correctedAnswer,
     grammarSufficientData: wordCount >= 8,
     vocabularySufficientData: vocab.sufficientData,
     relevanceSufficientData: relevance.sufficientData,
