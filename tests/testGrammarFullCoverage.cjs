@@ -74,7 +74,82 @@ if (!result.correctedAnswer.includes('My dream is')) {
   throw new Error('Missing corrected My dream is: ' + result.correctedAnswer);
 }
 
-console.log('SUCCESS: All checks passed!');
+// 2. Technical question response
+const techText = 'In my last project, one of my biggest problem were database latency. I have did several optimizations and I am good in coding. There is many solutions we evaluated to worked on scalability.';
+const techResult = performClientTextAnalysis('Describe a technical project', techText);
+const techFlagged = techResult.corrections.map(c => c.original.toLowerCase());
+console.log('Tech corrections detected:', techResult.corrections.length);
+if (!techFlagged.some(f => f.includes('one of my biggest problem'))) {
+  throw new Error('Missing tech one of problem: ' + JSON.stringify(techFlagged));
+}
+if (!techFlagged.some(f => f.includes('were'))) {
+  throw new Error('Missing tech were: ' + JSON.stringify(techFlagged));
+}
+if (!techFlagged.some(f => f.includes('have did'))) {
+  throw new Error('Missing tech have did: ' + JSON.stringify(techFlagged));
+}
+if (!techFlagged.some(f => f.includes('good in coding'))) {
+  throw new Error('Missing tech good in coding: ' + JSON.stringify(techFlagged));
+}
+if (!techFlagged.some(f => f.includes('there is many'))) {
+  throw new Error('Missing tech there is many: ' + JSON.stringify(techFlagged));
+}
+if (!techFlagged.some(f => f.includes('to worked'))) {
+  throw new Error('Missing tech to worked: ' + JSON.stringify(techFlagged));
+}
+if (!techResult.correctedAnswer.includes('one of my biggest problems')) {
+  throw new Error('Missing corrected problems: ' + techResult.correctedAnswer);
+}
+if (!techResult.correctedAnswer.includes('have done')) {
+  throw new Error('Missing corrected have done: ' + techResult.correctedAnswer);
+}
+
+// 3. HR / Strengths response
+const hrText = 'My strengths is dedication and communication. I try to cope up with tight deadlines under pressure. In my team, everyone are encouraged to share feedback.';
+const hrResult = performClientTextAnalysis('What are your strengths?', hrText);
+const hrFlagged = hrResult.corrections.map(c => c.original.toLowerCase());
+console.log('HR corrections detected:', hrResult.corrections.length);
+if (!hrFlagged.some(f => f.includes('strengths is'))) {
+  throw new Error('Missing hr strengths is: ' + JSON.stringify(hrFlagged));
+}
+if (!hrFlagged.some(f => f.includes('cope up with'))) {
+  throw new Error('Missing hr cope up with: ' + JSON.stringify(hrFlagged));
+}
+if (!hrFlagged.some(f => f.includes('everyone are'))) {
+  throw new Error('Missing hr everyone are: ' + JSON.stringify(hrFlagged));
+}
+
+// 4. Intro & Behavioral response
+const introText = 'Myself Rahul and I am software engineer. I passed out from college and I am having 2 years of experience. Me and my team worked hard to solved client issues. Please revert back with your feedbacks.';
+const introResult = performClientTextAnalysis('Tell me about yourself', introText);
+const introFlagged = introResult.corrections.map(c => c.original.toLowerCase());
+console.log('Intro corrections detected:', introResult.corrections.length);
+if (!introFlagged.some(f => f.includes('myself rahul'))) {
+  throw new Error('Missing intro myself rahul: ' + JSON.stringify(introFlagged));
+}
+if (!introFlagged.some(f => f.includes('am software engineer'))) {
+  throw new Error('Missing intro am software engineer: ' + JSON.stringify(introFlagged));
+}
+if (!introFlagged.some(f => f.includes('am having 2 years'))) {
+  throw new Error('Missing intro am having: ' + JSON.stringify(introFlagged));
+}
+if (!introFlagged.some(f => f.includes('passed out'))) {
+  throw new Error('Missing intro passed out: ' + JSON.stringify(introFlagged));
+}
+if (!introFlagged.some(f => f.includes('me and my team'))) {
+  throw new Error('Missing intro me and my team: ' + JSON.stringify(introFlagged));
+}
+if (!introFlagged.some(f => f.includes('to solved'))) {
+  throw new Error('Missing intro to solved: ' + JSON.stringify(introFlagged));
+}
+if (!introFlagged.some(f => f.includes('revert back'))) {
+  throw new Error('Missing intro revert back: ' + JSON.stringify(introFlagged));
+}
+if (!introFlagged.some(f => f.includes('feedbacks'))) {
+  throw new Error('Missing intro feedbacks: ' + JSON.stringify(introFlagged));
+}
+
+console.log('SUCCESS: All checks across diverse question answers passed!');
 `;
 
 fs.writeFileSync(path.join(__dirname, 'runner.tmp.ts'), testScript);

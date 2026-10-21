@@ -103,3 +103,104 @@ def test_correct_text_produces_zero_corrections():
     analysis = grammar_rules.analyze(clean_text)
     assert len(analysis["corrections"]) == 0
     assert analysis["score"] >= 95.0
+
+
+def test_technical_question_mistakes_detected():
+    """
+    Verifies mistakes in technical/project questions:
+    'one of my biggest problem were' -> problems, was
+    'have did' -> have done
+    'good in coding' -> good at coding
+    'there is many solutions' -> there are many solutions
+    'to worked' -> to work
+    """
+    text = (
+        "In my last project, one of my biggest problem were database latency. "
+        "I have did several optimizations and I am good in coding. "
+        "There is many solutions we evaluated to worked on scalability."
+    )
+    analysis = grammar_rules.analyze(text)
+    corrections = analysis["corrections"]
+    flagged = [c.original.lower() for c in corrections]
+
+    assert any("one of my biggest problem" in f for f in flagged)
+    assert any("problem were" in f or "were" in f for f in flagged)
+    assert any("have did" in f for f in flagged)
+    assert any("good in coding" in f for f in flagged)
+    assert any("there is many" in f for f in flagged)
+    assert any("to worked" in f for f in flagged)
+
+    corrected = analysis["corrected_answer"]
+    assert "one of my biggest problems" in corrected
+    assert "have done" in corrected
+    assert "good at coding" in corrected
+    assert "there are many solutions" in corrected.lower()
+    assert "to work" in corrected
+
+
+def test_strengths_and_weaknesses_mistakes_detected():
+    """
+    Verifies mistakes in HR / Strengths & Weaknesses answers:
+    'My strengths is' -> strengths are
+    'cope up with' -> cope with
+    'everyone are' -> everyone is
+    """
+    text = (
+        "My strengths is dedication and communication. "
+        "I try to cope up with tight deadlines under pressure. "
+        "In my team, everyone are encouraged to share feedback."
+    )
+    analysis = grammar_rules.analyze(text)
+    corrections = analysis["corrections"]
+    flagged = [c.original.lower() for c in corrections]
+
+    assert any("strengths is" in f for f in flagged)
+    assert any("cope up with" in f for f in flagged)
+    assert any("everyone are" in f for f in flagged)
+
+    corrected = analysis["corrected_answer"]
+    assert "strengths are" in corrected
+    assert "cope with" in corrected
+    assert "everyone is" in corrected
+
+
+def test_introduction_and_behavioral_mistakes_detected():
+    """
+    Verifies mistakes in Introduction / Behavioral questions:
+    'myself Rahul' -> I am Rahul
+    'am software engineer' -> am a software engineer
+    'am having 2 years experience' -> have 2 years of experience
+    'passed out from' -> graduated from
+    'me and my team worked' -> My team and I worked
+    'feedbacks' -> feedback
+    'revert back' -> revert / reply
+    """
+    text = (
+        "Myself Rahul and I am software engineer. "
+        "I passed out from college and I am having 2 years of experience. "
+        "Me and my team worked hard to solved client issues. "
+        "Please revert back with your feedbacks."
+    )
+    analysis = grammar_rules.analyze(text)
+    corrections = analysis["corrections"]
+    flagged = [c.original.lower() for c in corrections]
+
+    assert any("myself rahul" in f for f in flagged)
+    assert any("am software engineer" in f for f in flagged)
+    assert any("am having 2 years" in f for f in flagged)
+    assert any("passed out" in f for f in flagged)
+    assert any("me and my team" in f for f in flagged)
+    assert any("to solved" in f for f in flagged)
+    assert any("revert back" in f for f in flagged)
+    assert any("feedbacks" in f for f in flagged)
+
+    corrected = analysis["corrected_answer"]
+    assert "I am Rahul" in corrected or "My name is Rahul" in corrected
+    assert "am a software engineer" in corrected
+    assert "have 2 years of experience" in corrected
+    assert "graduated from" in corrected
+    assert "My team and I worked" in corrected
+    assert "to solve" in corrected
+    assert "revert" in corrected or "reply" in corrected
+    assert "feedback" in corrected
+

@@ -147,7 +147,36 @@ const COMMON_MISSPELLINGS: Record<string, string> = {
   oppurtunities: 'opportunities',
   excellant: 'excellent',
   confidance: 'confidence',
+  confindence: 'confidence',
   teh: 'the',
+  strenght: 'strength',
+  strenth: 'strength',
+  weaknes: 'weakness',
+  weaknss: 'weakness',
+  achive: 'achieve',
+  achiving: 'achieving',
+  enginer: 'engineer',
+  enginear: 'engineer',
+  responsibilty: 'responsibility',
+  responsbility: 'responsibility',
+  responsiblity: 'responsibility',
+  technolgy: 'technology',
+  technolagy: 'technology',
+  challange: 'challenge',
+  challanges: 'challenges',
+  solutuon: 'solution',
+  imporve: 'improve',
+  imporving: 'improving',
+  differnt: 'different',
+  confortable: 'comfortable',
+  availble: 'available',
+  avaliable: 'available',
+  necessery: 'necessary',
+  programing: 'programming',
+  programer: 'programmer',
+  collague: 'colleague',
+  gradution: 'graduation',
+  graduted: 'graduated',
   acheive: 'achieve',
   acheived: 'achieved',
   acheiving: 'achieving',
@@ -192,7 +221,6 @@ const COMMON_MISSPELLINGS: Record<string, string> = {
   responsability: 'responsibility',
   responsabilities: 'responsibilities',
   adress: 'address',
-  programing: 'programming',
   allways: 'always',
   basicly: 'basically',
   actualy: 'actually',
@@ -445,6 +473,11 @@ export const RULE_ERROR_TYPE_MAP: Record<string, string> = {
   repeated_word: 'Repeated Word',
   tense_consistency: 'Tense Consistency',
   word_choice: 'Word Choice',
+  noun_countability: 'Singular / Plural',
+  modal_usage: 'Modal Verb Usage',
+  collocation: 'Word Choice & Collocation',
+  redundancy: 'Word Choice / Redundancy',
+  pronoun_usage: 'Pronoun & Style',
 };
 
 export function generateFullCorrectedAnswer(text: string, corrections: ClientGrammarCorrection[]): string {
@@ -604,11 +637,13 @@ export function analyzeGrammar(text: string): {
   }
 
   // 8. Subject-Verb Agreement: Pronoun & Abstract Noun Rules
-  const nameDreamArePattern = /\b(my|his|her|their|our)\s+(name|dream|goal|aim|hobby|passion|vision|plan|purpose)\s+(are|were)\b/gi;
+  const nameDreamArePattern = /\b(?:(my|his|her|their|our|this|the)\s+)?(name|dream|goal|aim|hobby|passion|vision|plan|purpose|strength|weakness|role|project|experience|achievement|qualification|responsibility|background|motivation|family|team|company|colleague|friend|problem|solution|system|feature|performance)\s+(are|were)\b/gi;
   while ((match = nameDreamArePattern.exec(text)) !== null) {
     const parts = match[0].split(/\s+/);
-    const fixedVerb = parts[2].toLowerCase() === 'are' ? 'is' : 'was';
-    add(match[0], `${parts[0]} ${parts[1]} ${fixedVerb}`, `Singular subject "${parts[1]}" requires singular verb "${fixedVerb}" (not "${parts[2]}").`, 'subject_verb_agreement', 'grammar', 'high');
+    const verb = parts[parts.length - 1].toLowerCase();
+    const fixedVerb = verb === 'are' ? 'is' : 'was';
+    parts[parts.length - 1] = fixedVerb;
+    add(match[0], parts.join(' '), `Singular subject takes singular verb "${fixedVerb}" (not "${verb}").`, 'subject_verb_agreement', 'grammar', 'high');
   }
 
   const iHasPattern = /\bI\s+(has|was is|don't has|dont has)\b/gi;
@@ -627,7 +662,7 @@ export function analyzeGrammar(text: string): {
   }
 
   // "I [adverb] -s verb" (e.g. "I wants", "I always tries", "I works", "I likes", "I thinks")
-  const iVerbSPattern = /\bI\s+(?:(?:always|usually|often|sometimes|never|also|really|surely)\s+)?(wants|tries|works|likes|thinks|says|gets|gives|makes|takes|knows|needs|helps|starts|feels|believes|hopes)\b/gi;
+  const iVerbSPattern = /\bI\s+(?:(?:always|usually|often|sometimes|never|also|really|surely)\s+)?(wants|tries|works|likes|thinks|says|gets|gives|makes|takes|knows|needs|helps|starts|feels|believes|hopes|learns|creates|builds|handles|manages|develops|solves|uses|prefers|writes)\b/gi;
   while ((match = iVerbSPattern.exec(text)) !== null) {
     const parts = match[0].split(/\s+/);
     const verbWithS = parts[parts.length - 1];
@@ -694,11 +729,26 @@ export function analyzeGrammar(text: string): {
     add(match[0], `${parts[0]} ${parts[1]} ${fixedVerb}`, `Singular subject "${parts[1]}" takes singular verb "${fixedVerb}".`, 'subject_verb_agreement', 'grammar', 'high');
   }
 
-  const pluralNounSingularVerb = /\b(my|the|these)\s+(friends|colleagues|brothers|sisters|teachers|managers|projects|issues)\s+(is|was)\b/gi;
+  const pluralNounSingularVerb = /\b(my|his|her|their|our|these|the)\s+(strengths|weaknesses|skills|hobbies|projects|goals|aims|responsibilities|achievements|qualifications|friends|colleagues|problems|solutions|features|results|candidates)\s+(is|was)\b/gi;
   while ((match = pluralNounSingularVerb.exec(text)) !== null) {
     const parts = match[0].split(/\s+/);
-    const fixedVerb = parts[2].toLowerCase() === 'is' ? 'are' : 'were';
-    add(match[0], `${parts[0]} ${parts[1]} ${fixedVerb}`, `Plural subject "${parts[1]}" takes plural verb "${fixedVerb}".`, 'subject_verb_agreement', 'grammar', 'high');
+    const fixedVerb = parts[parts.length - 1].toLowerCase() === 'is' ? 'are' : 'were';
+    parts[parts.length - 1] = fixedVerb;
+    add(match[0], parts.join(' '), `Plural subject takes plural verb "${fixedVerb}".`, 'subject_verb_agreement', 'grammar', 'high');
+  }
+
+  const thereIsPluralPattern = /\bthere\s+(is|was)\s+(many|several|multiple|various|few|two|three|four|five|\d+)\b/gi;
+  while ((match = thereIsPluralPattern.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    const v = parts[1].toLowerCase() === 'is' ? 'are' : 'were';
+    add(match[0], `there ${v} ${parts[2]}`, `Use plural "there ${v}" with plural quantity "${parts[2]}".`, 'subject_verb_agreement', 'grammar', 'high');
+  }
+
+  const thereAreSingularPattern = /\bthere\s+(are|were)\s+(a|an)\b/gi;
+  while ((match = thereAreSingularPattern.exec(text)) !== null) {
+    const parts = match[0].split(/\s+/);
+    const v = parts[1].toLowerCase() === 'are' ? 'is' : 'was';
+    add(match[0], `there ${v} ${parts[2]}`, `Use singular "there ${v}" before "${parts[2]}".`, 'subject_verb_agreement', 'grammar', 'high');
   }
 
   // Relative clause agreement (e.g. "coach which help" -> "coach which helps")
@@ -709,7 +759,7 @@ export function analyzeGrammar(text: string): {
   }
 
   // 9. Quantity & Countability: many + singular noun (e.g. "many project" -> "many projects")
-  const manySingularPattern = /\b(many|several|multiple|various|few|both|two|three|four|five)\s+(project|student|technology|skill|company|problem|challenge|error|bug|issue|year|month|day|book|friend|colleague|task|role|opportunity|feature)\b/gi;
+  const manySingularPattern = /\b(many|several|multiple|various|few|both|two|three|four|five)\s+(project|student|technology|skill|company|problem|challenge|error|bug|issue|year|month|day|book|friend|colleague|task|role|opportunity|feature|system|solution)\b/gi;
   while ((match = manySingularPattern.exec(text)) !== null) {
     const parts = match[0].split(/\s+/);
     const quant = parts[0];
@@ -725,11 +775,11 @@ export function analyzeGrammar(text: string): {
   }
 
   // Indefinite pronouns taking singular verb
-  const indefinitePronouns = /\b(everyone|everybody|someone|somebody|no one|nobody|each)\s+(are|were|have)\b/gi;
+  const indefinitePronouns = /\b(everyone|everybody|someone|somebody|no\s+one|nobody|each)\s+(are|were|have)\b/gi;
   while ((match = indefinitePronouns.exec(text)) !== null) {
     const parts = match[0].split(/\s+/);
     const pronoun = parts[0];
-    const verb = parts[1].toLowerCase();
+    const verb = parts[parts.length - 1].toLowerCase();
     const fixed = verb === 'are' ? 'is' : verb === 'were' ? 'was' : 'has';
     add(match[0], `${pronoun} ${fixed}`, `"${pronoun}" is grammatically singular and takes "${fixed}".`, 'subject_verb_agreement', 'grammar', 'high');
   }
@@ -785,18 +835,22 @@ export function analyzeGrammar(text: string): {
   }
 
   // 13. Infinitive 'to' errors: to + -s verb (e.g. "to improves" -> "to improve")
-  const toSPattern = /\bto\s+(improves|works|helps|learns|makes|gives|gets|creates|develops|builds|solves)\b/gi;
+  const toSPattern = /\bto\s+(improves|works|helps|learns|makes|gives|gets|creates|develops|builds|solves|writes|manages|handles|achieves|enhances|delivers|executes|completes|communicates|connects|understands|designs|codes|leads|guides|assists|organizes|supports|provides|analyzes|maintains|collaborates|contributes|participates|shares|uses|tries|speaks|starts)\b/gi;
   while ((match = toSPattern.exec(text)) !== null) {
     const verb = match[0].split(/\s+/)[1].toLowerCase();
     const base = verb.slice(0, -1);
     add(match[0], `to ${base}`, `Infinitive "to" must be followed by base verb form without "-s" ("to ${base}").`, 'verb_form', 'grammar', 'high');
   }
 
-  // Infinitive 'to' + past verb (to went -> to go, to did -> to do)
-  const toPastPattern = /\bto\s+(went|saw|did|took|made|came|wrote|knew|worked|started|created|solved)\b/gi;
+  // Infinitive 'to' + past verb (to went -> to go, to did -> to do, to worked -> to work)
+  const toPastPattern = /\bto\s+(went|saw|did|took|made|came|wrote|knew|worked|started|created|solved|learned|achieved|improved|managed|built|joined|completed|designed|handled|delivered|executed|organized|supported|provided|analyzed|maintained)\b/gi;
   while ((match = toPastPattern.exec(text)) !== null) {
     const verb = match[0].split(/\s+/)[1].toLowerCase();
-    const base = PAST_TO_BASE[verb] || verb.replace(/ed$/, '');
+    let base = PAST_TO_BASE[verb] || verb.replace(/ed$/, '');
+    if (verb === 'built') base = 'build';
+    else if (verb === 'solved') base = 'solve';
+    else if (verb === 'improved') base = 'improve';
+    else if (verb === 'managed') base = 'manage';
     add(match[0], `to ${base}`, `Infinitive "to" must be followed by base verb form ("to ${base}").`, 'verb_form', 'grammar', 'high');
   }
 
@@ -959,19 +1013,80 @@ export function analyzeGrammar(text: string): {
     add(match[0], 'I agree', '"Agree" is an active verb, so say "I agree" instead of "I am agree".', 'verb_form', 'grammar', 'high');
   }
 
-  const oneOfFriend = /\bone\s+of\s+(my|the)\s+(friend|problem|reason|challenge|project|advantage|factor|component)\b/gi;
-  while ((match = oneOfFriend.exec(text)) !== null) {
-    const parts = match[0].split(/\s+/);
-    const noun = parts[parts.length - 1];
-    add(match[0], `${parts.slice(0, -1).join(' ')} ${noun}s`, `"one of the" requires a plural noun ("${noun}s").`, 'plural_agreement', 'grammar', 'high');
+  const oneOfSingularPattern = /\bone\s+of\s+(my|the|our|their|his|her)\s+(?:(?:best|greatest|biggest|key|main|favorite|top)\s+)?(friend|problem|reason|challenge|project|advantage|factor|component|strength|weakness|achievement|mistake|priority|skill|opportunity)\b/gi;
+  while ((match = oneOfSingularPattern.exec(text)) !== null) {
+    const noun = match[2];
+    const pluralNoun = noun.endsWith('y') ? noun.slice(0, -1) + 'ies' : noun.endsWith('s') || noun.endsWith('x') || noun.endsWith('ch') || noun.endsWith('sh') ? noun + 'es' : noun + 's';
+    const fixed = match[0].replace(new RegExp(`\\b${noun}\\b`, 'i'), pluralNoun);
+    add(match[0], fixed, `"one of the/my" must be followed by a plural noun ("${pluralNoun}").`, 'plural_agreement', 'grammar', 'high');
+  }
+
+  const oneOfPluralVerbPattern = /\bone\s+of\s+(?:the|my|our|their|his|her)\s+(?:(?:\w+)\s+)?\w+\s+(were|are)\b/gi;
+  while ((match = oneOfPluralVerbPattern.exec(text)) !== null) {
+    const verb = match[1].toLowerCase();
+    const fixedV = verb === 'were' ? 'was' : 'is';
+    add(match[1], fixedV, `With "one of...", the subject is "one" (singular) and takes singular verb "${fixedV}".`, 'subject_verb_agreement', 'grammar', 'high');
+  }
+
+  // Stative verbs with redundant "am"
+  const stativeAmPattern = /\b(I\s+am|am)\s+(believe|know|think|want|need|prefer|understand)\b/gi;
+  while ((match = stativeAmPattern.exec(text)) !== null) {
+    const verb = match[2];
+    add(match[0], `I ${verb}`, `Stative verb "${verb}" does not take auxiliary "am" — say "I ${verb}".`, 'verb_form', 'grammar', 'high');
+  }
+
+  // Missing article before profession/title
+  const missingArtProfPattern = /\b(am|as|become)\s+(software engineer|web developer|full stack developer|frontend developer|backend developer|data scientist|ai engineer|machine learning engineer|developer|engineer|student|fresher|programmer|coder|manager|team leader|designer)\b/gi;
+  while ((match = missingArtProfPattern.exec(text)) !== null) {
+    const action = match[1];
+    const prof = match[2];
+    const art = /^[aeiou]/i.test(prof) ? 'an' : 'a';
+    add(match[0], `${action} ${art} ${prof}`, `Singular profession "${prof}" requires indefinite article "${art}".`, 'article_usage', 'grammar', 'high');
+  }
+
+  // Team subject pronoun error ("me and my team did...")
+  const meAndMyTeamPattern = /\b(me and my (?:team|friends|colleagues|family|classmates))\s+(have|has|had|did|worked|built|created|solved|managed|started|went|participated)\b/gi;
+  while ((match = meAndMyTeamPattern.exec(text)) !== null) {
+    const parts = match[1].split(/\s+/);
+    const grp = parts[parts.length - 1];
+    add(match[0], `My ${grp} and I ${match[2]}`, `Use subject pronoun "I" when you are part of the subject performing the action ("My ${grp} and I").`, 'pronoun_usage', 'grammar', 'high');
+  }
+
+  // Prepositions: listen object, explain object, comparison than
+  const listenObjPattern = /\blisten\s+(me|him|her|them|us)\b/gi;
+  while ((match = listenObjPattern.exec(text)) !== null) {
+    add(match[0], `listen to ${match[1]}`, `Use "listen to" before person pronoun "${match[1]}".`, 'preposition', 'grammar', 'high');
+  }
+
+  const explainObjPattern = /\bexplain\s+(me|him|her|them|us)\b/gi;
+  while ((match = explainObjPattern.exec(text)) !== null) {
+    add(match[0], `explain to ${match[1]}`, `Use "explain to ${match[1]}" (not "explain ${match[1]}").`, 'preposition', 'grammar', 'high');
+  }
+
+  const comparisonThanPattern = /\b(senior|junior|superior|inferior)\s+than\b/gi;
+  while ((match = comparisonThanPattern.exec(text)) !== null) {
+    add(match[0], `${match[1]} to`, `Use "${match[1]} to" (not "${match[1]} than").`, 'preposition', 'grammar', 'high');
   }
 
   // 18. Uncountable Nouns with plural -s
-  const uncountablePattern = /\b(softwares|hardwares|informations|furnitures|equipments|advices|feedbacks)\b/gi;
+  const uncountableMap: Record<string, string> = {
+    softwares: 'software',
+    hardwares: 'hardware',
+    informations: 'information',
+    furnitures: 'furniture',
+    equipments: 'equipment',
+    advices: 'advice',
+    feedbacks: 'feedback',
+    hardworks: 'hard work',
+    homeworks: 'homework',
+    peoples: 'people',
+    childrens: 'children',
+  };
+  const uncountablePattern = /\b(softwares|hardwares|informations|furnitures|equipments|advices|feedbacks|hardworks|homeworks|peoples|childrens)\b/gi;
   while ((match = uncountablePattern.exec(text)) !== null) {
     const term = match[0].toLowerCase();
-    const singular = term.slice(0, -1);
-    add(match[0], matchCase(match[0], singular), `"${singular}" is an uncountable noun in English and does not take a plural "-s".`, 'noun_countability', 'grammar', 'high');
+    const singular = uncountableMap[term] || term.slice(0, -1);
+    add(match[0], matchCase(match[0], singular), `"${term}" is uncountable in English — use "${singular}".`, 'noun_countability', 'grammar', 'high');
   }
 
   // 19. Homophones & Confused Words

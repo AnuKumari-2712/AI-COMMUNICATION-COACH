@@ -100,15 +100,113 @@ _PAST_TO_BASE = {
 }
 _AM_AGREE = re.compile(r"\bI\s+am\s+agree\b", re.IGNORECASE)
 _DISCUSS_ABOUT = re.compile(r"\b(discuss|discussed|discussing|discusses)\s+about\b", re.IGNORECASE)
-_NAME_DREAM_ARE = re.compile(r"\b(my|his|her|their|our)\s+(name|dream|goal|aim|hobby|passion|vision|plan|purpose)\s+(are|were)\b", re.IGNORECASE)
-_I_VERB_S = re.compile(r"\bI\s+(?:(?:always|usually|often|sometimes|never|also|really|surely)\s+)?(wants|tries|works|likes|thinks|says|gets|gives|makes|takes|knows|needs|helps|starts|feels|believes|hopes)\b", re.IGNORECASE)
-_MANY_SINGULAR = re.compile(r"\b(many|several|multiple|various|few|both|two|three|four|five)\s+(project|student|technology|skill|company|problem|challenge|error|bug|issue|year|month|day|book|friend|colleague|task|role|opportunity|feature)\b", re.IGNORECASE)
-_TO_S = re.compile(r"\bto\s+(improves|works|helps|learns|makes|gives|gets|creates|develops|builds|solves)\b", re.IGNORECASE)
+
+_ABSTRACT_ENTITY_NOUNS = (
+    r"name|dream|goal|aim|hobby|passion|vision|plan|purpose|strength|weakness|role|project|"
+    r"experience|achievement|qualification|responsibility|background|motivation|family|team|"
+    r"company|colleague|friend|problem|solution|system|feature|performance"
+)
+_NAME_DREAM_ARE = re.compile(rf"\b(my|his|her|their|our|this|the)\s+({_ABSTRACT_ENTITY_NOUNS})\s+(are|were)\b", re.IGNORECASE)
+
+_PLURAL_ENTITY_NOUNS = (
+    r"strengths|weaknesses|skills|hobbies|projects|goals|aims|responsibilities|achievements|"
+    r"qualifications|friends|colleagues|problems|solutions|features|results|candidates"
+)
+_PLURAL_NOUN_SINGULAR_VERB = re.compile(rf"\b(my|his|her|their|our|these|the)\s+({_PLURAL_ENTITY_NOUNS})\s+(is|was)\b", re.IGNORECASE)
+
+_INDEFINITE_PRONOUNS_PLURAL = re.compile(r"\b(everyone|everybody|someone|somebody|no\s+one|nobody|each)\s+(are|were|have)\b", re.IGNORECASE)
+_THERE_IS_PLURAL = re.compile(r"\bthere\s+(is|was)\s+(many|several|multiple|various|few|two|three|four|five|\d+)\b", re.IGNORECASE)
+_THERE_ARE_SINGULAR = re.compile(r"\bthere\s+(are|were)\s+(a|an)\b", re.IGNORECASE)
+
+_ONE_OF_SINGULAR = re.compile(
+    r"\bone\s+of\s+(my|the|our|their|his|her)\s+(?:(?:best|greatest|biggest|key|main|favorite|top)\s+)?"
+    r"(friend|problem|reason|challenge|project|advantage|factor|component|strength|weakness|achievement|mistake|priority|skill|opportunity)\b",
+    re.IGNORECASE,
+)
+_ONE_OF_PLURAL_VERB = re.compile(
+    r"\bone\s+of\s+(?:the|my|our|their|his|her)\s+(?:(?:\w+)\s+)?\w+\s+(were|are)\b",
+    re.IGNORECASE,
+)
+
+_I_VERB_S = re.compile(r"\bI\s+(?:(?:always|usually|often|sometimes|never|also|really|surely)\s+)?(wants|tries|works|likes|thinks|says|gets|gives|makes|takes|knows|needs|helps|starts|feels|believes|hopes|learns|creates|builds|handles|manages|develops|solves|uses|prefers|writes)\b", re.IGNORECASE)
+_MANY_SINGULAR = re.compile(r"\b(many|several|multiple|various|few|both|two|three|four|five)\s+(project|student|technology|skill|company|problem|challenge|error|bug|issue|year|month|day|book|friend|colleague|task|role|opportunity|feature|system|solution)\b", re.IGNORECASE)
+
+_TO_S = re.compile(
+    r"\bto\s+(improves|works|helps|learns|makes|gives|gets|creates|develops|builds|solves|"
+    r"writes|manages|handles|achieves|enhances|delivers|executes|completes|communicates|"
+    r"connects|understands|designs|codes|leads|guides|assists|organizes|supports|provides|"
+    r"analyzes|maintains|collaborates|contributes|participates|shares|uses|tries|speaks|starts)\b",
+    re.IGNORECASE,
+)
+
+_TO_PAST = re.compile(
+    r"\bto\s+(went|saw|did|took|made|came|wrote|knew|worked|started|created|solved|learned|"
+    r"achieved|improved|managed|built|joined|completed|designed|handled|delivered|executed|"
+    r"organized|supported|provided|analyzed|maintained)\b",
+    re.IGNORECASE,
+)
+
 _WANT_GERUND = re.compile(r"\b(want|wants|wanted)\s+(learning|working|doing|joining|making|knowing|improving|becoming|studying|getting)\b", re.IGNORECASE)
 _MISSING_ARTICLE_ADJ_NOUN = re.compile(r"\b(am|is|are|was|were)\s+(hardworking|dedicated|passionate|honest|creative|responsible|enthusiastic|curious|good|strong)\s+(person|student|engineer|developer|professional|worker|candidate|individual)\b", re.IGNORECASE)
 _AM_HAVE = re.compile(r"\b(I\s+am|am|is|are)\s+(?:also\s+)?have\b", re.IGNORECASE)
-_HAVE_MAKE_BASE = re.compile(r"\b(have|has|had)\s+(make|complete|learn|create|develop|build|work|design|start|finish|manage|solve|take|write|give|achieve|attend|participate|submit|improve|prepare)\b", re.IGNORECASE)
-_AM_STUDY_BASE = re.compile(r"\b(am|is|are|was|were)\s+(study|work|learn|prepare|look|try|do|live|teach|code|program|test|develop|manage)\b", re.IGNORECASE)
+_HAVE_MAKE_BASE = re.compile(r"\b(have|has|had)\s+(make|complete|learn|create|develop|build|work|design|start|finish|manage|solve|take|write|give|achieve|attend|participate|submit|improve|prepare|handle|lead)\b", re.IGNORECASE)
+_HAVE_IRREGULAR_PAST = re.compile(r"\b(have|has|had)\s+(did|saw|went|took|wrote|gave|knew|ate|spoke|chose|broke|came|began|ran)\b", re.IGNORECASE)
+_IRREG_PAST_TO_PP = {
+    "did": "done", "saw": "seen", "went": "gone", "took": "taken", "wrote": "written",
+    "gave": "given", "knew": "known", "ate": "eaten", "spoke": "spoken", "chose": "chosen",
+    "broke": "broken", "came": "come", "began": "begun", "ran": "run",
+}
+
+_DOESNT_S = re.compile(
+    r"\b(doesn't|doesnt|does\s+not)\s+(knows|works|has|wants|likes|needs|helps|thinks|says|comes|goes|makes|takes|gives|tries)\b",
+    re.IGNORECASE,
+)
+
+_CAN_ABLE_TO = re.compile(r"\b(can|could)\s+able\s+to\b", re.IGNORECASE)
+_WILL_CAN = re.compile(r"\bwill\s+can\b", re.IGNORECASE)
+_MODAL_TO = re.compile(r"\b(must|should|can|could|will|would|might|may)\s+to\s+([a-zA-Z]+)\b", re.IGNORECASE)
+
+_STATIVE_AM_VERB = re.compile(r"\b(I\s+am|am)\s+(believe|know|think|want|need|prefer|understand)\b", re.IGNORECASE)
+
+_GOOD_IN = re.compile(r"\bgood\s+in\s+([a-zA-Z]+)\b", re.IGNORECASE)
+_GOOD_IN_TOPICS = {"math", "maths", "english", "coding", "programming", "communication", "speaking", "design", "development", "python", "java", "react", "technology", "management", "leadership"}
+_WEAK_IN = re.compile(r"\bweak\s+in\s+([a-zA-Z]+)\b", re.IGNORECASE)
+
+_INTERESTED_FOR = re.compile(r"\binterested\s+(for|on)\b", re.IGNORECASE)
+_LISTEN_OBJ = re.compile(r"\blisten\s+(me|him|her|them|us|music|songs|podcast|podcasts)\b", re.IGNORECASE)
+_EXPLAIN_OBJ = re.compile(r"\bexplain\s+(me|him|her|them|us)\b", re.IGNORECASE)
+_COPE_UP_WITH = re.compile(r"\bcope\s+up\s+with\b", re.IGNORECASE)
+_REDUNDANT_BACK = re.compile(r"\b(revert|reply|return)\s+back\b", re.IGNORECASE)
+_REPEAT_AGAIN = re.compile(r"\brepeat\s+again\b", re.IGNORECASE)
+_PAY_ATTENTION_ON = re.compile(r"\bpay\s+attention\s+on\b", re.IGNORECASE)
+_COMPARISON_THAN = re.compile(r"\b(senior|junior|superior|inferior)\s+than\b", re.IGNORECASE)
+
+_UNCOUNTABLE_PLURAL = re.compile(
+    r"\b(softwares|hardwares|informations|furnitures|equipments|advices|feedbacks|hardworks|homeworks|peoples|childrens)\b",
+    re.IGNORECASE,
+)
+_UNCOUNTABLE_MAP = {
+    "softwares": "software", "hardwares": "hardware", "informations": "information",
+    "furnitures": "furniture", "equipments": "equipment", "advices": "advice",
+    "feedbacks": "feedback", "hardworks": "hard work", "homeworks": "homework",
+    "peoples": "people", "childrens": "children",
+}
+
+_MISSING_ARTICLE_PROFESSION = re.compile(
+    r"\b(am|as|become)\s+(software engineer|web developer|full stack developer|frontend developer|backend developer|"
+    r"data scientist|ai engineer|machine learning engineer|developer|engineer|student|fresher|programmer|coder|manager|team leader|designer)\b",
+    re.IGNORECASE,
+)
+
+_MYSELF_INTRO = re.compile(r"(^|[.!?]\s+)myself\s+([A-Za-z]+)\b", re.IGNORECASE)
+_AM_HAVING_EXP = re.compile(r"\b(I\s+am|am)\s+having\s+(\d+)\s+years\s+(of\s+)?experience\b", re.IGNORECASE)
+_PASS_OUT = re.compile(r"\b(pass|passed)\s+out\s+(?:from|in)\b", re.IGNORECASE)
+_ME_AND_MY_TEAM = re.compile(
+    r"\b(me and my (?:team|friends|colleagues|family|classmates))\s+(have|has|had|did|worked|built|created|solved|managed|started|went|participated)\b",
+    re.IGNORECASE,
+)
+
+_AM_STUDY_BASE = re.compile(r"\b(am|is|are|was|were)\s+(study|work|learn|prepare|look|try|do|live|teach|code|program|test|develop|manage|handle|lead|build|solve|create)\b", re.IGNORECASE)
 _STUDENT_IN_UNIV = re.compile(r"\bstudent\s+in\s+([A-Z][a-zA-Z\s]+(University|College|Institute))\b")
 _IN_ORDINAL_YEAR = re.compile(r"\bin\s+(first|second|third|fourth|final)\s+year\b", re.IGNORECASE)
 _TECH_SKILL = re.compile(r"\b(my|our|their)\s+technical\s+skill\b", re.IGNORECASE)
@@ -118,15 +216,11 @@ _SINGULAR_BARE_VERB = re.compile(
     r"\b(he|she)\s+(go|do|make|take|come|work|like|want|need|know|think|play|say|get|give|use|try|help|speak|write|live)\b",
     re.IGNORECASE,
 )
-# Words before "he/she + verb" that legitimately take a bare verb after the
-# pronoun (questions, modals, "let/make him go" style), so we never flag them.
 _BARE_VERB_OK_BEFORE = {
     "did", "does", "do", "can", "could", "will", "would", "should", "may", "might", "must", "shall",
     "to", "let", "if", "that", "lest", "whether", "than", "as",
 }
 _ARTICLE_PHRASE = re.compile(r"\b(a|an)\s+([a-z][A-Za-z'-]*)\b", re.IGNORECASE)
-# Vowel-starting words that take "a" (consonant sound) and consonant-starting
-# words that take "an" (vowel sound).
 _A_BEFORE_VOWEL_PREFIXES = ("univers", "unit", "unif", "union", "uniq", "unic", "unilat", "use", "usu", "util", "eu", "one", "once", "ubiq", "ukr")
 _AN_BEFORE_CONSONANT_PREFIXES = ("hour", "honest", "honor", "honour", "heir")
 _LOWER_I = re.compile(
@@ -137,6 +231,7 @@ _RULE_ERROR_TYPE_MAP: dict[str, str] = {
     "plural_agreement": "Singular / Plural",
     "verb_form": "Verb Form",
     "modal_of": "Modal Verb Usage",
+    "modal_usage": "Modal Verb Usage",
     "double_negative": "Double Negative",
     "double_comparative": "Comparative Adjective",
     "preposition": "Preposition",
@@ -149,6 +244,10 @@ _RULE_ERROR_TYPE_MAP: dict[str, str] = {
     "repeated_word": "Repeated Word",
     "tense_consistency": "Tense Consistency",
     "word_choice": "Word Choice",
+    "noun_countability": "Singular / Plural",
+    "redundancy": "Word Choice / Redundancy",
+    "collocation": "Word Choice & Collocation",
+    "pronoun_usage": "Pronoun & Style",
 }
 
 _COMMON_MISSPELLINGS = {
@@ -197,7 +296,16 @@ _COMMON_MISSPELLINGS = {
     "stratergy": "strategy", "stratergies": "strategies", "succeded": "succeeded",
     "effectivly": "effectively", "effecient": "efficient", "effeciently": "efficiently",
     "suprise": "surprise", "truely": "truly", "wierd": "weird",
-    "excellant": "excellent", "confidance": "confidence", "guidence": "guidance", "teh": "the",
+    "excellant": "excellent", "confidance": "confidence", "confindence": "confidence", "guidence": "guidance", "teh": "the",
+    "strenght": "strength", "strenth": "strength", "weaknes": "weakness", "weaknss": "weakness",
+    "achive": "achieve", "acheive": "achieve", "achiving": "achieving",
+    "enginer": "engineer", "enginear": "engineer", "responsibilty": "responsibility", "responsbility": "responsibility",
+    "responsiblity": "responsibility", "technolgy": "technology", "technolagy": "technology",
+    "challange": "challenge", "challanges": "challenges", "solutuon": "solution",
+    "imporve": "improve", "imporving": "improving", "differnt": "different",
+    "confortable": "comfortable", "availble": "available", "avaliable": "available", "necessery": "necessary",
+    "programing": "programming", "programer": "programmer", "collague": "colleague",
+    "gradution": "graduation", "graduted": "graduated",
     "dont": "don't", "cant": "can't", "didnt": "didn't", "doesnt": "doesn't", "isnt": "isn't", "wasnt": "wasn't",
 }
 _COMMON_MISSPELLINGS = {k: v for k, v in _COMMON_MISSPELLINGS.items() if v}
@@ -448,6 +556,135 @@ def _fix_common_errors(text: str) -> list[Correction]:
     for m in _COACH_WHICH_HELP.finditer(text):
         noun = m.group(0).split()[0]
         add(m.group(0), f"{noun} which helps", f"Singular antecedent '{noun}' requires singular verb 'helps'.", "subject_verb_agreement")
+
+    for m in _PLURAL_NOUN_SINGULAR_VERB.finditer(text):
+        fixed_verb = "are" if m.group(3).lower() == "is" else "were"
+        add(m.group(0), f"{m.group(1)} {m.group(2)} {fixed_verb}", f"Plural subject '{m.group(2)}' requires plural verb '{fixed_verb}'.", "subject_verb_agreement")
+
+    for m in _INDEFINITE_PRONOUNS_PLURAL.finditer(text):
+        pron, verb = m.group(1), m.group(2).lower()
+        fixed_verb = "is" if verb == "are" else "was" if verb == "were" else "has"
+        add(m.group(0), f"{pron} {fixed_verb}", f"Indefinite pronoun '{pron}' is grammatically singular and takes '{fixed_verb}'.", "subject_verb_agreement")
+
+    for m in _THERE_IS_PLURAL.finditer(text):
+        v = "are" if m.group(1).lower() == "is" else "were"
+        add(m.group(0), f"there {v} {m.group(2)}", f"Use plural 'there {v}' with plural quantity '{m.group(2)}'.", "subject_verb_agreement")
+
+    for m in _THERE_ARE_SINGULAR.finditer(text):
+        v = "is" if m.group(1).lower() == "are" else "was"
+        add(m.group(0), f"there {v} {m.group(2)}", f"Use singular 'there {v}' before '{m.group(2)}'.", "subject_verb_agreement")
+
+    for m in _ONE_OF_SINGULAR.finditer(text):
+        noun = m.group(2)
+        plural_noun = noun[:-1] + "ies" if noun.endswith("y") else noun + "es" if noun.endswith(("s", "x", "ch", "sh")) else noun + "s"
+        fixed = re.sub(rf"\b{re.escape(noun)}\b", plural_noun, m.group(0))
+        add(m.group(0), fixed, f"'One of the/my' must be followed by a plural noun ('{plural_noun}').", "plural_agreement")
+
+    for m in _ONE_OF_PLURAL_VERB.finditer(text):
+        verb = m.group(1).lower()
+        fixed_v = "was" if verb == "were" else "is"
+        add(m.group(1), fixed_v, f"With 'one of...', the subject is 'one' (singular) and takes singular verb '{fixed_v}'.", "subject_verb_agreement")
+
+    for m in _TO_PAST.finditer(text):
+        verb = m.group(1).lower()
+        base = _PAST_TO_BASE.get(verb, verb[:-2] if verb.endswith("ed") else verb)
+        if verb == "built":
+            base = "build"
+        elif verb == "solved":
+            base = "solve"
+        elif verb == "improved":
+            base = "improve"
+        elif verb == "managed":
+            base = "manage"
+        add(m.group(0), f"to {base}", f"Infinitive 'to' must be followed by base verb form ('to {base}').", "verb_form")
+
+    for m in _HAVE_IRREGULAR_PAST.finditer(text):
+        aux, verb = m.group(1), m.group(2).lower()
+        pp = _IRREG_PAST_TO_PP.get(verb, verb)
+        add(m.group(0), f"{aux} {pp}", f"With '{aux}', use past participle form ('{pp}') instead of simple past '{verb}'.", "verb_form")
+
+    for m in _DOESNT_S.finditer(text):
+        verb = m.group(2).lower()
+        base = "have" if verb == "has" else "go" if verb == "goes" else "try" if verb == "tries" else verb[:-1]
+        add(m.group(0), f"{m.group(1)} {base}", f"After '{m.group(1)}', use base verb form ('{base}') without '-s'.", "verb_form")
+
+    for m in _CAN_ABLE_TO.finditer(text):
+        add(m.group(0), "can", "Avoid 'can able to' — say either 'can' or 'am able to'.", "modal_usage")
+
+    for m in _WILL_CAN.finditer(text):
+        add(m.group(0), "will be able to", "Say 'will be able to' instead of 'will can'.", "modal_usage")
+
+    for m in _MODAL_TO.finditer(text):
+        add(m.group(0), f"{m.group(1)} {m.group(2)}", f"Do not use 'to' directly after modal verb '{m.group(1)}' — say '{m.group(1)} {m.group(2)}'.", "modal_usage")
+
+    for m in _STATIVE_AM_VERB.finditer(text):
+        verb = m.group(2)
+        add(m.group(0), f"I {verb}", f"Stative verb '{verb}' does not take auxiliary 'am' — say 'I {verb}'.", "verb_form")
+
+    for m in _GOOD_IN.finditer(text):
+        topic = m.group(1).lower()
+        if topic in _GOOD_IN_TOPICS:
+            add(m.group(0), f"good at {m.group(1)}", f"Use 'good at' (not 'good in') when referring to skills or disciplines.", "preposition")
+
+    for m in _WEAK_IN.finditer(text):
+        topic = m.group(1).lower()
+        if topic in _GOOD_IN_TOPICS:
+            add(m.group(0), f"weak at {m.group(1)}", f"Use 'weak at' (not 'weak in') when referring to skills or disciplines.", "preposition")
+
+    for m in _INTERESTED_FOR.finditer(text):
+        add(m.group(0), "interested in", "The correct preposition is 'interested in'.", "preposition")
+
+    for m in _LISTEN_OBJ.finditer(text):
+        target = m.group(1)
+        add(m.group(0), f"listen to {target}", f"Use 'listen to' before '{target}'.", "preposition")
+
+    for m in _EXPLAIN_OBJ.finditer(text):
+        target = m.group(1)
+        add(m.group(0), f"explain to {target}", f"Use 'explain to {target}' (not 'explain {target}').", "preposition")
+
+    for m in _COPE_UP_WITH.finditer(text):
+        add(m.group(0), "cope with", "The correct standard idiom is 'cope with' (drop 'up').", "preposition")
+
+    for m in _REDUNDANT_BACK.finditer(text):
+        add(m.group(0), m.group(1), f"'{m.group(1)}' already implies replying back — drop the redundant 'back'.", "redundancy", category="style")
+
+    for m in _REPEAT_AGAIN.finditer(text):
+        add(m.group(0), "repeat", "'Repeat' already means say or do again — drop 'again'.", "redundancy", category="style")
+
+    for m in _PAY_ATTENTION_ON.finditer(text):
+        add(m.group(0), "pay attention to", "The correct preposition is 'pay attention to', not 'on'.", "preposition")
+
+    for m in _COMPARISON_THAN.finditer(text):
+        word = m.group(1)
+        add(m.group(0), f"{word} to", f"Use '{word} to' (not '{word} than').", "preposition")
+
+    for m in _UNCOUNTABLE_PLURAL.finditer(text):
+        word = m.group(1).lower()
+        fixed = _UNCOUNTABLE_MAP.get(word, word)
+        add(m.group(0), _match_case(m.group(0), fixed), f"'{word}' is uncountable in English — use '{fixed}'.", "noun_countability")
+
+    for m in _MISSING_ARTICLE_PROFESSION.finditer(text):
+        action, title = m.group(1), m.group(2)
+        art = "an" if title[0].lower() in "aeiou" else "a"
+        add(m.group(0), f"{action} {art} {title}", f"Singular profession '{title}' requires indefinite article '{art}'.", "article_usage")
+
+    for m in _MYSELF_INTRO.finditer(text):
+        name = m.group(2)
+        if name.lower() not in ("and", "to", "for", "with", "in", "on", "at", "as"):
+            add(f"myself {name}", f"I am {name}", f"Avoid 'myself {name}' for self-introductions; say 'I am {name}' or 'My name is {name}'.", "pronoun_usage", category="style")
+
+    for m in _AM_HAVING_EXP.finditer(text):
+        yrs = m.group(2)
+        add(m.group(0), f"I have {yrs} years of experience", "Use simple present 'I have' rather than 'I am having' for possession of experience.", "verb_form")
+
+    for m in _PASS_OUT.finditer(text):
+        add(m.group(0), "graduated from", "Use 'graduated from' (or 'graduated in') for academic completion.", "word_choice", category="style")
+
+    for m in _ME_AND_MY_TEAM.finditer(text):
+        subj, verb = m.group(1), m.group(2)
+        parts = subj.split()
+        group = parts[-1].capitalize()
+        add(m.group(0), f"My {group.lower()} and I {verb}", f"Use subject pronoun 'I' when you are part of the subject performing the action ('My {group.lower()} and I').", "pronoun_usage")
 
     for m in _SINGULAR_BARE_VERB.finditer(text):
         if _previous_word(text, m.start()) in _BARE_VERB_OK_BEFORE:
