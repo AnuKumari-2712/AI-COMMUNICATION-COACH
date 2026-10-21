@@ -460,25 +460,36 @@ export const RULE_ERROR_TYPE_MAP: Record<string, string> = {
   subject_verb_agreement: 'Subject-Verb Agreement',
   plural_agreement: 'Singular / Plural',
   verb_form: 'Verb Form',
-  modal_of: 'Modal Verb Usage',
-  double_negative: 'Double Negative',
-  double_comparative: 'Comparative Adjective',
+  modal_of: 'Verb Form',
+  modal_usage: 'Verb Form',
+  double_negative: 'Sentence Structure',
+  double_comparative: 'Grammar',
   preposition: 'Preposition',
-  article_usage: 'Article Usage',
+  article_usage: 'Article',
   capitalization: 'Capitalization',
   punctuation: 'Punctuation',
   spelling: 'Spelling',
-  homophone: 'Homophone',
-  formality: 'Formality & Style',
-  repeated_word: 'Repeated Word',
-  tense_consistency: 'Tense Consistency',
+  homophone: 'Word Choice',
+  formality: 'Unnatural Expression',
+  repeated_word: 'Sentence Structure',
+  tense_consistency: 'Tense',
   word_choice: 'Word Choice',
   noun_countability: 'Singular / Plural',
-  modal_usage: 'Modal Verb Usage',
-  collocation: 'Word Choice & Collocation',
-  redundancy: 'Word Choice / Redundancy',
-  pronoun_usage: 'Pronoun & Style',
+  collocation: 'Unnatural Expression',
+  redundancy: 'Word Choice',
+  pronoun_usage: 'Pronoun',
 };
+
+export function splitIntoSentences(text: string): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  const abbrPattern = /\b(B\.Tech|M\.Tech|B\.Sc|M\.Sc|Ph\.D\.|Ph\.D|B\.E\.|B\.E|M\.E\.|M\.E|B\.Com|M\.Com|B\.A\.|B\.A|M\.A\.|M\.A|BCA|MCA|MBA|Dr\.|Mr\.|Mrs\.|Ms\.|Prof\.|e\.g\.|i\.e\.|etc\.|vs\.|U\.S\.|U\.K\.)/gi;
+  let protectedText = trimmed.replace(abbrPattern, (m) => m.replace(/\./g, '__DOT__'));
+  protectedText = protectedText.replace(/(\d+)\.(\d+)/g, '$1__DOT__$2');
+
+  const raw = protectedText.split(/(?<=[.!?])\s+/);
+  return raw.map((s) => s.replace(/__DOT__/g, '.').trim()).filter(Boolean);
+}
 
 export function generateFullCorrectedAnswer(text: string, corrections: ClientGrammarCorrection[]): string {
   if (!text.trim()) return text;
@@ -508,21 +519,9 @@ export function generateFullCorrectedAnswer(text: string, corrections: ClientGra
 }
 
 /**
- * Comprehensive Grammar, Spelling, Punctuation and Collocation analysis.
+ * Analyzes a single sentence independently and collects all mistakes.
  */
-export function analyzeGrammar(text: string): {
-  score: number;
-  corrections: ClientGrammarCorrection[];
-  grammarIssueCount: number;
-  spellingIssueCount: number;
-  styleIssueCount: number;
-  correctedAnswer: string;
-} {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return { score: 100, corrections: [], grammarIssueCount: 0, spellingIssueCount: 0, styleIssueCount: 0, correctedAnswer: '' };
-  }
-
+function analyzeSingleSentence(text: string, isFirstSentence: boolean = false): ClientGrammarCorrection[] {
   const corrections: ClientGrammarCorrection[] = [];
 
   const add = (
@@ -535,7 +534,7 @@ export function analyzeGrammar(text: string): {
     errorType?: string
   ) => {
     const etype = errorType || RULE_ERROR_TYPE_MAP[rule] || 'Grammar';
-    corrections.push({ original, corrected, reason, rule, category, confidence, errorType: etype });
+    corrections.push({ original, corrected, reason, rule, category, confidence, errorType: etype, sentence: text });
   };
 
   let match: RegExpExecArray | null;
@@ -820,7 +819,8 @@ export function analyzeGrammar(text: string): {
   // Redundant "am have" / "am also have"
   const amHavePattern = /\b(I\s+am|am|is|are)\s+(?:also\s+)?have\b/gi;
   while ((match = amHavePattern.exec(text)) !== null) {
-    add(match[0], 'I also have', "Avoid combining 'am' with 'have' — say 'I have' or 'I also have'.", 'verb_form', 'grammar', 'high');
+    const hasAlso = match[0].toLowerCase().includes('also');
+    add(match[0], hasAlso ? 'I also have' : 'I have', "Avoid combining 'am' with 'have' — say 'I have' or 'I also have'.", 'verb_form', 'grammar', 'high');
   }
 
   // 12. "want + gerund" (e.g. "want learning" -> "want to learn")
@@ -1165,26 +1165,57 @@ export function analyzeGrammar(text: string): {
     }
   }
 
-  // Deduplicate corrections while preserving distinct issues across sentences
-  const uniqueCorrections: ClientGrammarCorrection[] = [];
-  const seen = new Set<string>();
+  // Deduplicate within this single sentence
+  const uniqueInSent: ClientGrammarCorrection[] = [];
+  const seenInSent = new Set<string>();
   for (const c of corrections) {
-    const key = `${c.original.toLowerCase()}->${c.corrected.toLowerCase()}::${c.rule}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniqueCorrections.push(c);
+    const key = `${c.original.toLowerCase()}->${c.corrected.toLowerCase()}`;
+    if (!seenInSent.has(key)) {
+      seenInSent.add(key);
+      uniqueInSent.push(c);
     }
   }
+  return uniqueInSent;
+}
 
-  const grammarCorrections = uniqueCorrections.filter((c) => c.category === 'grammar');
-  const spellingCorrections = uniqueCorrections.filter((c) => c.category === 'spelling');
-  const styleCorrections = uniqueCorrections.filter((c) => c.category === 'style');
+/**
+ * Comprehensive Grammar, Spelling, Punctuation and Collocation analysis.
+ * Analyzes every sentence independently, detects all mistakes without early termination,
+ * and reconstructs the corrected answer sentence-by-sentence.
+ */
+export function analyzeGrammar(fullText: string): {
+  score: number;
+  corrections: ClientGrammarCorrection[];
+  grammarIssueCount: number;
+  spellingIssueCount: number;
+  styleIssueCount: number;
+  correctedAnswer: string;
+} {
+  const trimmed = fullText.trim();
+  if (!trimmed) {
+    return { score: 100, corrections: [], grammarIssueCount: 0, spellingIssueCount: 0, styleIssueCount: 0, correctedAnswer: '' };
+  }
 
-  // Calibrated Error-Density Grammar Score:
-  // Instead of subtracting arbitrary fixed amounts that artificially crash longer texts,
-  // evaluate error frequency relative to word volume (standard in CEFR / TOEFL evaluation).
+  const sentences = splitIntoSentences(fullText);
+  const allCorrections: ClientGrammarCorrection[] = [];
+  const correctedSentences: string[] = [];
+
+  for (let i = 0; i < sentences.length; i++) {
+    const sent = sentences[i];
+    const sentCorrections = analyzeSingleSentence(sent, i === 0);
+    allCorrections.push(...sentCorrections);
+    const corrSent = generateFullCorrectedAnswer(sent, sentCorrections);
+    correctedSentences.push(corrSent);
+  }
+
+  const words = fullText.match(/[A-Za-z']+/g) || [];
+  const grammarCorrections = allCorrections.filter((c) => c.category === 'grammar');
+  const spellingCorrections = allCorrections.filter((c) => c.category === 'spelling');
+  const styleCorrections = allCorrections.filter((c) => c.category === 'style');
+
+  // Calibrated Error-Density Grammar Score
   let score: number;
-  if (uniqueCorrections.length === 0) {
+  if (allCorrections.length === 0) {
     score = words.length >= 25 ? 98 : 95;
   } else {
     const totalDeductions = (grammarCorrections.length * 5) + (spellingCorrections.length * 3) + (styleCorrections.length * 1.5);
@@ -1193,15 +1224,15 @@ export function analyzeGrammar(text: string): {
     score = Math.max(28, Math.min(96, Math.round(96 - (density * 0.52))));
   }
 
-  if (words.length < 8 && uniqueCorrections.length > 0) {
+  if (words.length < 8 && allCorrections.length > 0) {
     score = Math.min(score, 48);
   }
 
-  const correctedAnswer = generateFullCorrectedAnswer(text, uniqueCorrections);
+  const correctedAnswer = correctedSentences.join(' ');
 
   return {
     score,
-    corrections: uniqueCorrections,
+    corrections: allCorrections,
     grammarIssueCount: grammarCorrections.length,
     spellingIssueCount: spellingCorrections.length,
     styleIssueCount: styleCorrections.length,

@@ -40,7 +40,7 @@ export interface VoiceAnalysisResult {
 
 export interface TextAnalysisResult {
   score: number;
-  corrections: { original: string; corrected: string; reason: string; rule?: string; errorType?: string }[];
+  corrections: { original: string; corrected: string; reason: string; rule?: string; errorType?: string; sentence?: string }[];
   vocabularySuggestions: string[];
   betterAlternative: string;
   correctedAnswer: string;
@@ -71,6 +71,7 @@ function dynamicTextAnalysis(question: string, text: string): TextAnalysisResult
       reason: c.reason,
       rule: c.rule,
       errorType: c.errorType || 'Grammar',
+      sentence: c.sentence,
     })),
     vocabularySuggestions: analysis.vocabularySuggestions,
     betterAlternative: analysis.betterAlternative,
@@ -93,7 +94,7 @@ function dynamicTextAnalysis(question: string, text: string): TextAnalysisResult
 
 interface BackendTextAnalysisResponse {
   score: number;
-  corrections: { original: string; corrected: string; reason: string; rule: string; error_type?: string }[];
+  corrections: { original: string; corrected: string; reason: string; rule: string; error_type?: string; sentence?: string }[];
   vocabulary_suggestions: string[];
   better_alternative: string;
   corrected_answer?: string;
@@ -337,6 +338,7 @@ export const practiceService = {
           reason: c.reason,
           rule: c.rule,
           errorType: c.error_type || 'Grammar',
+          sentence: c.sentence,
         })),
         vocabularySuggestions: data.vocabulary_suggestions,
         betterAlternative: data.better_alternative,

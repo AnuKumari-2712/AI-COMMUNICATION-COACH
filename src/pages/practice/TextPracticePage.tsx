@@ -471,6 +471,11 @@ export default function TextPracticePage() {
                         <span className="rounded bg-success-500/15 px-1.5 py-0.5 font-medium text-success-300">{c.corrected}</span>
                       </p>
                       <p className="mt-1.5 text-xs text-base-400">{c.reason}</p>
+                      {c.sentence && (
+                        <p className="mt-2 rounded-lg bg-base-900/60 px-2.5 py-1.5 text-[11px] text-base-400 italic">
+                          <span className="not-italic font-medium text-base-500">Sentence context: </span>&ldquo;{c.sentence}&rdquo;
+                        </p>
+                      )}
                     </div>
                   ))
                 ) : (

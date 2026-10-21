@@ -204,3 +204,33 @@ def test_introduction_and_behavioral_mistakes_detected():
     assert "revert" in corrected or "reply" in corrected
     assert "feedback" in corrected
 
+
+def test_per_sentence_independence_and_sentence_context():
+    """
+    Verifies that every sentence is checked independently, c.sentence is populated,
+    and multiple errors within a single sentence are all detected without early termination.
+    """
+    text = (
+        "he dont have many project and i wants to improves it. "
+        "she is good in coding and there is two bug in the system."
+    )
+    analysis = grammar_rules.analyze(text)
+    corrections = analysis["corrections"]
+
+    # Check that c.sentence is attached to all corrections
+    for c in corrections:
+        assert c.sentence != "", f"Correction missing sentence context: {c}"
+        assert c.error_type in [
+            "Grammar", "Tense", "Subject-Verb Agreement", "Verb Form", "Article",
+            "Preposition", "Singular / Plural", "Pronoun", "Spelling", "Punctuation",
+            "Capitalization", "Sentence Structure", "Word Choice", "Unnatural Expression"
+        ]
+
+    # Sentence 1 mistakes: "he dont", "many project", "i", "wants", "to improves"
+    s1_corrections = [c for c in corrections if "he dont" in c.sentence.lower()]
+    assert len(s1_corrections) >= 4, f"Expected >= 4 errors in sentence 1, found {len(s1_corrections)}"
+
+    # Sentence 2 mistakes: "good in coding", "there is two"
+    s2_corrections = [c for c in corrections if "she is good" in c.sentence.lower()]
+    assert len(s2_corrections) >= 2, f"Expected >= 2 errors in sentence 2, found {len(s2_corrections)}"
+

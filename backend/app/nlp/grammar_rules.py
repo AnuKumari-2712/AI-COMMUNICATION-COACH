@@ -230,24 +230,24 @@ _RULE_ERROR_TYPE_MAP: dict[str, str] = {
     "subject_verb_agreement": "Subject-Verb Agreement",
     "plural_agreement": "Singular / Plural",
     "verb_form": "Verb Form",
-    "modal_of": "Modal Verb Usage",
-    "modal_usage": "Modal Verb Usage",
-    "double_negative": "Double Negative",
-    "double_comparative": "Comparative Adjective",
+    "modal_of": "Verb Form",
+    "modal_usage": "Verb Form",
+    "double_negative": "Sentence Structure",
+    "double_comparative": "Grammar",
     "preposition": "Preposition",
-    "article_usage": "Article Usage",
+    "article_usage": "Article",
     "capitalization": "Capitalization",
     "punctuation": "Punctuation",
     "spelling": "Spelling",
-    "homophone": "Homophone",
-    "formality": "Formality & Style",
-    "repeated_word": "Repeated Word",
-    "tense_consistency": "Tense Consistency",
+    "homophone": "Word Choice",
+    "formality": "Unnatural Expression",
+    "repeated_word": "Sentence Structure",
+    "tense_consistency": "Tense",
     "word_choice": "Word Choice",
     "noun_countability": "Singular / Plural",
-    "redundancy": "Word Choice / Redundancy",
-    "collocation": "Word Choice & Collocation",
-    "pronoun_usage": "Pronoun & Style",
+    "redundancy": "Word Choice",
+    "collocation": "Unnatural Expression",
+    "pronoun_usage": "Pronoun",
 }
 
 _COMMON_MISSPELLINGS = {
@@ -331,13 +331,22 @@ _POINTS_PER_ERROR_RATE = 50.0
 
 
 def _sentences(text: str) -> list[str]:
+    if not text or not text.strip():
+        return []
     nlp = get_nlp()
-    if nlp is not None and text.strip():
-        doc = nlp(text)
-        sents = [s.text.strip() for s in doc.sents if s.text.strip()]
+    abbr_pat = re.compile(
+        r"\b(B\.Tech|M\.Tech|B\.Sc|M\.Sc|Ph\.D\.|Ph\.D|B\.E\.|B\.E|M\.E\.|M\.E|B\.Com|M\.Com|B\.A\.|B\.A|M\.A\.|M\.A|BCA|MCA|MBA|Dr\.|Mr\.|Mrs\.|Ms\.|Prof\.|e\.g\.|i\.e\.|etc\.|vs\.|U\.S\.|U\.K\.)",
+        re.IGNORECASE,
+    )
+    protected = abbr_pat.sub(lambda m: m.group(0).replace(".", "__DOT__"), text)
+    protected = re.sub(r"(\d+)\.(\d+)", r"\1__DOT__\2", protected)
+
+    if nlp is not None:
+        doc = nlp(protected)
+        sents = [s.text.replace("__DOT__", ".").strip() for s in doc.sents if s.text.strip()]
         if sents:
             return sents
-    return [s.strip() for s in _SENTENCE_SPLIT.split(text) if s.strip()]
+    return [s.replace("__DOT__", ".").strip() for s in _SENTENCE_SPLIT.split(protected) if s.strip()]
 
 
 def _sentence_containing(sentences: list[str], span_text: str) -> str:
@@ -845,38 +854,47 @@ def analyze(text: str, assume_unpunctuated: bool = False) -> dict:
             sentence_count = estimated
 
     corrections: list[Correction] = []
-    for fn in (
-        _fix_double_negative,
-        _fix_i_has,
-        _fix_neither_plural,
-        _fix_repeated_word,
-        _fix_simple_typos,
-        _fix_common_errors,
-        _fix_punctuation,
-        _fix_misspellings,
-    ):
-        corrections.extend(fn(text))
-    corrections.extend(_tense_consistency(text, sentences))
+    corrected_sentences: list[str] = []
 
-    # Attach full-sentence context and error_type to every correction
-    for c in corrections:
-        if not c.sentence:
-            c.sentence = _sentence_containing(sentences, c.original)
-        if not hasattr(c, "error_type") or not c.error_type or c.error_type == "Grammar":
-            c.error_type = _RULE_ERROR_TYPE_MAP.get(c.rule, "Grammar")
+    for sent in sentences:
+        sent_corrections: list[Correction] = []
+        for fn in (
+            _fix_double_negative,
+            _fix_i_has,
+            _fix_neither_plural,
+            _fix_repeated_word,
+            _fix_simple_typos,
+            _fix_common_errors,
+            _fix_punctuation,
+            _fix_misspellings,
+        ):
+            sent_corrections.extend(fn(sent))
 
-    # Deduplicate corrections while preserving distinct occurrences across sentences
-    unique_corrections: list[Correction] = []
-    seen = set()
-    for c in corrections:
-        key = (c.original.lower(), c.corrected.lower(), c.sentence.lower())
-        if key not in seen:
-            seen.add(key)
-            unique_corrections.append(c)
+        # Attach full-sentence context and error_type to every correction
+        for c in sent_corrections:
+            c.sentence = sent
+            if not hasattr(c, "error_type") or not c.error_type or c.error_type == "Grammar":
+                c.error_type = _RULE_ERROR_TYPE_MAP.get(c.rule, "Grammar")
 
-    corrections = unique_corrections
+        # Deduplicate corrections within this sentence
+        unique_sent_corrections: list[Correction] = []
+        seen = set()
+        for c in sent_corrections:
+            key = (c.original.lower(), c.corrected.lower())
+            if key not in seen:
+                seen.add(key)
+                unique_sent_corrections.append(c)
 
-    corrected_answer = generate_corrected_answer(text, corrections) if word_count > 0 else ""
+        corr_sent = generate_corrected_answer(sent, unique_sent_corrections)
+        corrected_sentences.append(corr_sent)
+        corrections.extend(unique_sent_corrections)
+
+    # Tense consistency across sentences (spaCy)
+    for c in _tense_consistency(text, sentences):
+        c.error_type = "Tense"
+        corrections.append(c)
+
+    corrected_answer = " ".join(corrected_sentences) if word_count > 0 else ""
 
     if word_count == 0:
         return GrammarAnalysis(
