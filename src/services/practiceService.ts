@@ -10,7 +10,7 @@ export interface VoiceAnalysisResult {
   grammar: number;
   vocabulary: number;
   fluency: number;
-  pronunciation: number;
+  pronunciation: number | null;
   pace: number;
   fillerWordCount: number;
   confidence: number;
@@ -27,6 +27,7 @@ export interface VoiceAnalysisResult {
   offline: boolean;
   /** Pronunciation is a transcript-only proxy in this project — never a real audio measurement. Always false. */
   pronunciationReliable: boolean;
+  pronunciationAvailable?: boolean;
   pronunciationMethod: string;
   wordsPerMinute: number;
   /** "measured" = real WAV pause analysis; "estimated" = transcript-based approximation. */
@@ -36,6 +37,13 @@ export interface VoiceAnalysisResult {
   ambiguousFillerCount: number;
   fillerExcludedExamples: string[];
   mostFrequentFiller: string | null;
+  corrections?: { original: string; corrected: string; reason: string; rule?: string; errorType?: string; sentence?: string }[];
+  correctedAnswer?: string;
+  vocabularySuggestions?: string[];
+  repeatedWords?: string[];
+  scoreReasons?: Record<string, string>;
+  confidenceSignals?: string[];
+  sufficientData?: boolean;
 }
 
 export interface TextAnalysisResult {
@@ -149,7 +157,7 @@ interface BackendVoiceAnalysisResponse {
   grammar_score: number;
   vocabulary_score: number;
   fluency_score: number;
-  pronunciation_score: number;
+  pronunciation_score: number | null;
   confidence_score: number;
   pace_score: number;
   filler_word_count: number;
@@ -157,11 +165,18 @@ interface BackendVoiceAnalysisResponse {
   pace_source: 'measured' | 'estimated';
   reference_range_wpm: string;
   pronunciation_reliable: boolean;
+  pronunciation_available?: boolean;
   pronunciation_method: string;
   high_confidence_filler_count: number;
   ambiguous_filler_count: number;
   filler_excluded_examples: string[];
   most_frequent_filler: string | null;
+  corrections?: { original: string; corrected: string; explanation?: string; reason?: string; rule: string; error_type?: string; sentence?: string }[];
+  corrected_answer?: string;
+  vocabulary_suggestions?: string[];
+  score_reasons?: Record<string, string>;
+  confidence_signals?: string[];
+  sufficient_data?: boolean;
 }
 
 export const practiceService = {
@@ -273,6 +288,7 @@ export const practiceService = {
           transcriptSource: data.transcript_source,
           offline: false,
           pronunciationReliable: data.pronunciation_reliable,
+          pronunciationAvailable: data.pronunciation_available ?? false,
           pronunciationMethod: data.pronunciation_method,
           wordsPerMinute: data.words_per_minute,
           paceSource: data.pace_source,
@@ -281,6 +297,19 @@ export const practiceService = {
           ambiguousFillerCount: data.ambiguous_filler_count,
           fillerExcludedExamples: data.filler_excluded_examples,
           mostFrequentFiller: data.most_frequent_filler,
+          corrections: (data.corrections || []).map((c) => ({
+            original: c.original,
+            corrected: c.corrected,
+            reason: c.reason || c.explanation || '',
+            rule: c.rule,
+            errorType: c.error_type || 'Grammar',
+            sentence: c.sentence,
+          })),
+          correctedAnswer: data.corrected_answer || '',
+          vocabularySuggestions: data.vocabulary_suggestions || [],
+          scoreReasons: data.score_reasons || {},
+          confidenceSignals: data.confidence_signals || [],
+          sufficientData: data.sufficient_data ?? true,
         };
       } catch {
         // fall through to dynamic client evaluation below
@@ -305,6 +334,7 @@ export const practiceService = {
         transcriptSource: clientVoice.transcriptSource,
         offline: false,
         pronunciationReliable: clientVoice.pronunciationReliable,
+        pronunciationAvailable: clientVoice.pronunciationAvailable,
         pronunciationMethod: clientVoice.pronunciationMethod,
         wordsPerMinute: clientVoice.wordsPerMinute,
         paceSource: clientVoice.paceSource,
@@ -313,6 +343,20 @@ export const practiceService = {
         ambiguousFillerCount: clientVoice.ambiguousFillerCount,
         fillerExcludedExamples: clientVoice.fillerExcludedExamples,
         mostFrequentFiller: clientVoice.mostFrequentFiller,
+        corrections: clientVoice.corrections.map((c) => ({
+          original: c.original,
+          corrected: c.corrected,
+          reason: c.reason,
+          rule: c.rule,
+          errorType: c.errorType || 'Grammar',
+          sentence: c.sentence,
+        })),
+        correctedAnswer: clientVoice.correctedAnswer,
+        vocabularySuggestions: clientVoice.vocabularySuggestions,
+        repeatedWords: clientVoice.repeatedWords,
+        scoreReasons: clientVoice.scoreReasons,
+        confidenceSignals: clientVoice.confidenceSignals,
+        sufficientData: clientVoice.sufficientData,
       },
       600,
     );

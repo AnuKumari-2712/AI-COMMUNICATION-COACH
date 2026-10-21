@@ -54,11 +54,19 @@ export interface ClientVoiceAnalysis {
   grammarScore: number;
   vocabularyScore: number;
   confidenceScore: number;
-  pronunciationScore: number;
+  pronunciationScore: number | null;
   pronunciationReliable: boolean;
+  pronunciationAvailable: boolean;
   pronunciationMethod: string;
   source: 'real' | 'mock';
   transcriptSource: 'browser' | 'server' | 'sample';
+  corrections: ClientGrammarCorrection[];
+  correctedAnswer: string;
+  vocabularySuggestions: string[];
+  repeatedWords: string[];
+  scoreReasons: Record<string, string>;
+  confidenceSignals: string[];
+  sufficientData: boolean;
 }
 
 const STOPWORDS = new Set([
@@ -1682,6 +1690,8 @@ export function detectFillerWords(transcript: string): {
 
 /**
  * Real voice analysis on actual duration and microphone transcript.
+ * Sentence-by-sentence analysis, honest evidence-based scores,
+ * transparent reasons, and realistic pronunciation status.
  */
 export function performClientVoiceAnalysis(
   durationSeconds: number,
@@ -1689,44 +1699,186 @@ export function performClientVoiceAnalysis(
   transcriptSource: 'browser' | 'server' | 'sample' = 'browser'
 ): ClientVoiceAnalysis {
   const cleanText = transcript.trim();
-  const words = cleanText ? cleanText.split(/\s+/) : [];
+  const words = cleanText ? cleanText.split(/\s+/).filter(Boolean) : [];
   const wordCount = words.length;
   const durationSafe = Math.max(1, durationSeconds);
-
   const wordsPerMinute = wordCount > 0 ? Math.round((wordCount / durationSafe) * 60) : 0;
+  const roundedDuration = Math.round(durationSeconds);
 
-  let paceScore = 85;
-  if (wordsPerMinute === 0) {
-    paceScore = 50;
-  } else if (wordsPerMinute >= 120 && wordsPerMinute <= 165) {
-    paceScore = 95;
-  } else if (wordsPerMinute >= 100 && wordsPerMinute < 120) {
-    paceScore = 82;
-  } else if (wordsPerMinute > 165 && wordsPerMinute <= 190) {
-    paceScore = 78;
-  } else if (wordsPerMinute < 100) {
-    paceScore = Math.max(45, 60 + Math.round((wordsPerMinute / 100) * 20));
-  } else {
-    paceScore = Math.max(45, 95 - (wordsPerMinute - 165));
+  // Case 1: Empty transcript (no speech detected)
+  if (wordCount === 0) {
+    return {
+      transcript: '(No speech detected in audio recording)',
+      wordCount: 0,
+      durationSeconds: roundedDuration,
+      wordsPerMinute: 0,
+      paceScore: 0,
+      paceSource: 'estimated',
+      referenceRangeWpm: '130-160',
+      fillerWordCount: 0,
+      highConfidenceFillerCount: 0,
+      ambiguousFillerCount: 0,
+      fillerExcludedExamples: [],
+      mostFrequentFiller: null,
+      fluencyScore: 0,
+      grammarScore: 0,
+      vocabularyScore: 0,
+      confidenceScore: 0,
+      pronunciationScore: null,
+      pronunciationReliable: false,
+      pronunciationAvailable: false,
+      pronunciationMethod: 'Unavailable — No audio phoneme model evaluated on silent recording.',
+      source: 'mock',
+      transcriptSource,
+      corrections: [],
+      correctedAnswer: '',
+      vocabularySuggestions: [],
+      repeatedWords: [],
+      scoreReasons: {
+        grammar: 'No spoken answer was detected to evaluate grammar.',
+        vocabulary: 'No words were spoken to evaluate vocabulary.',
+        fluency: 'Fluency cannot be calculated without spoken words.',
+        pronunciation: 'Audio did not contain measurable phonemes or words.',
+        pace: 'No words detected across the recording duration.',
+        confidence: 'No speech signals detected in recording.',
+      },
+      confidenceSignals: ['No voice activity or speech content detected in recording.'],
+      sufficientData: false,
+    };
   }
 
-  const fillers = cleanText ? detectFillerWords(cleanText) : { count: 0, highConfidenceCount: 0, ambiguousCount: 0, mostFrequent: null, excluded: [] };
+  // Detect Fillers
+  const fillers = detectFillerWords(cleanText);
 
-  const fillerPenalty = fillers.count * 6;
-  const fluencyScore = Math.max(45, Math.min(98, Math.round(paceScore * 0.6 + Math.max(0, 100 - fillerPenalty) * 0.4)));
+  // Analyze Grammar sentence-by-sentence
+  const grammar = analyzeGrammar(cleanText);
+  const sentences = splitIntoSentences(cleanText);
+  const sentenceCount = Math.max(1, sentences.length);
 
-  const grammar = cleanText ? analyzeGrammar(cleanText) : { score: 75 };
-  const vocab = cleanText ? analyzeVocabulary(cleanText) : { score: 70 };
+  // Analyze Vocabulary
+  const vocab = analyzeVocabulary(cleanText);
 
+  // Case 2: Short Utterance (< 4 words)
+  if (wordCount < 4) {
+    return {
+      transcript: cleanText,
+      wordCount,
+      durationSeconds: roundedDuration,
+      wordsPerMinute,
+      paceScore: 40,
+      paceSource: 'estimated',
+      referenceRangeWpm: '130-160',
+      fillerWordCount: fillers.count,
+      highConfidenceFillerCount: fillers.highConfidenceCount,
+      ambiguousFillerCount: fillers.ambiguousCount,
+      fillerExcludedExamples: fillers.excluded,
+      mostFrequentFiller: fillers.mostFrequent,
+      fluencyScore: 45,
+      grammarScore: grammar.corrections.length > 0 ? 40 : 50,
+      vocabularyScore: 40,
+      confidenceScore: 40,
+      pronunciationScore: null,
+      pronunciationReliable: false,
+      pronunciationAvailable: false,
+      pronunciationMethod: 'Phoneme-level audio acoustic alignment is not active for this recording.',
+      source: 'real',
+      transcriptSource,
+      corrections: grammar.corrections,
+      correctedAnswer: grammar.correctedAnswer,
+      vocabularySuggestions: vocab.suggestions,
+      repeatedWords: vocab.repeatedWords,
+      scoreReasons: {
+        grammar: grammar.corrections.length > 0
+          ? `${grammar.corrections.length} issue(s) detected in short utterance.`
+          : 'Short speech sample (< 4 words) — insufficient data for full grammar evaluation.',
+        vocabulary: 'Short speech sample (< 4 words) — insufficient data to evaluate vocabulary richness.',
+        fluency: `Short utterance (${wordCount} words) is insufficient to measure conversational rhythm.`,
+        pronunciation: 'Unavailable — Acoustic phoneme alignment requires multi-sentence speech input.',
+        pace: `${wordsPerMinute} WPM (sample too short for reliable speaking cadence assessment).`,
+        confidence: 'Short response provides insufficient sample size for speaking confidence measurement.',
+      },
+      confidenceSignals: ['Short utterance (< 4 words) provides insufficient sample size for speaking confidence.'],
+      sufficientData: false,
+    };
+  }
+
+  // Case 3: Standard Speech (>= 4 words)
+  // Speaking pace scoring
+  let paceScore = 80;
+  if (wordsPerMinute >= 125 && wordsPerMinute <= 165) {
+    paceScore = 94;
+  } else if (wordsPerMinute >= 105 && wordsPerMinute < 125) {
+    paceScore = 84;
+  } else if (wordsPerMinute > 165 && wordsPerMinute <= 185) {
+    paceScore = 80;
+  } else if (wordsPerMinute >= 80 && wordsPerMinute < 105) {
+    paceScore = 68;
+  } else if (wordsPerMinute > 185 && wordsPerMinute <= 210) {
+    paceScore = 65;
+  } else if (wordsPerMinute < 80) {
+    paceScore = Math.max(35, Math.round(35 + (wordsPerMinute / 80) * 30));
+  } else {
+    paceScore = Math.max(35, Math.round(90 - (wordsPerMinute - 165) * 0.8));
+  }
+
+  // Fluency: combination of pace and filler penalty
+  const fillerPenalty = Math.min(50, fillers.count * 7);
+  const fluencyScore = Math.max(35, Math.min(95, Math.round(paceScore * 0.55 + Math.max(0, 100 - fillerPenalty) * 0.45)));
+
+  // Vocabulary score from rich analysis
+  const vocabularyScore = vocab.score;
+
+  // Grammar score from calibrated density
+  const grammarScore = grammar.score;
+
+  // Observable Confidence Signals
+  const confidenceSignals: string[] = [];
+  if (wordsPerMinute >= 120 && wordsPerMinute <= 165) {
+    confidenceSignals.push(`Steady, confident conversational tempo (${wordsPerMinute} WPM) within the 130–160 WPM benchmark.`);
+  } else if (wordsPerMinute < 110) {
+    confidenceSignals.push(`Deliberate / slower speaking tempo (${wordsPerMinute} WPM) suggests cautious delivery.`);
+  } else {
+    confidenceSignals.push(`Accelerated speaking tempo (${wordsPerMinute} WPM) may indicate nervous rushing.`);
+  }
+
+  if (fillers.count === 0) {
+    confidenceSignals.push('Clean delivery stream with zero filler word hesitations.');
+  } else if (fillers.count <= 2) {
+    confidenceSignals.push(`Minimal filler usage (${fillers.count} filler word${fillers.count > 1 ? 's' : ''}).`);
+  } else {
+    confidenceSignals.push(`Elevated filler hesitations (${fillers.count} fillers, most frequent: "${fillers.mostFrequent || 'um'}") impacting verbal authority.`);
+  }
+
+  if (grammar.corrections.length === 0) {
+    confidenceSignals.push(`Cohesive sentence structure maintained across ${sentenceCount} sentence${sentenceCount > 1 ? 's' : ''}.`);
+  } else {
+    confidenceSignals.push(`${grammar.corrections.length} grammatical or syntactic issue(s) detected across ${sentenceCount} sentence${sentenceCount > 1 ? 's' : ''}.`);
+  }
+
+  // Confidence Score derived from observable metrics
+  const fillerScoreComponent = Math.max(0, 100 - fillers.count * 8);
   const confidenceScore = Math.max(
-    45,
-    Math.min(96, Math.round(fluencyScore * 0.4 + paceScore * 0.3 + (cleanText ? vocab.score : 60) * 0.3))
+    35,
+    Math.min(95, Math.round(fluencyScore * 0.35 + paceScore * 0.25 + fillerScoreComponent * 0.25 + (vocabularyScore >= 70 ? 15 : 10)))
   );
 
+  const scoreReasons: Record<string, string> = {
+    grammar: grammar.corrections.length === 0
+      ? `No grammatical or syntactic issues detected across ${sentenceCount} sentence${sentenceCount > 1 ? 's' : ''}.`
+      : `${grammar.corrections.length} issue(s) detected across ${sentenceCount} sentence${sentenceCount > 1 ? 's' : ''}, calibrated to error density.`,
+    vocabulary: vocab.repeatedWords.length > 0
+      ? `Lexical diversity score of ${vocabularyScore}%. Repetitive phrasing on (${vocab.repeatedWords.join(', ')}).`
+      : `Lexical diversity score of ${vocabularyScore}%. Clear vocabulary register.`,
+    fluency: `Spoken delivery at ${wordsPerMinute} WPM with ${fillers.count} filler word(s) detected.`,
+    pace: `${wordsPerMinute} WPM (target conversational range: 130–160 WPM).`,
+    confidence: `Derived from cadence (${wordsPerMinute} WPM), fluency (${fluencyScore}), and ${fillers.count === 0 ? 'absence of filler hesitations' : fillers.count + ' hesitation marker(s)'}.`,
+    pronunciation: 'Phoneme-level audio acoustic alignment is unavailable for browser recordings — not falsely estimated.',
+  };
+
   return {
-    transcript: cleanText || '(No speech detected in audio recording)',
+    transcript: cleanText,
     wordCount,
-    durationSeconds: Math.round(durationSeconds),
+    durationSeconds: roundedDuration,
     wordsPerMinute,
     paceScore,
     paceSource: 'estimated',
@@ -1737,13 +1889,21 @@ export function performClientVoiceAnalysis(
     fillerExcludedExamples: fillers.excluded,
     mostFrequentFiller: fillers.mostFrequent,
     fluencyScore,
-    grammarScore: grammar.score,
-    vocabularyScore: vocab.score,
+    grammarScore,
+    vocabularyScore,
     confidenceScore,
-    pronunciationScore: Math.min(92, Math.max(65, Math.round(confidenceScore * 0.5 + fluencyScore * 0.5))),
+    pronunciationScore: null,
     pronunciationReliable: false,
-    pronunciationMethod: 'Estimated from cadence and articulation consistency — not a phoneme-level audio model.',
-    source: cleanText ? 'real' : 'mock',
+    pronunciationAvailable: false,
+    pronunciationMethod: 'Phoneme-level audio acoustic alignment is not active for this recording. Only text transcript and temporal cadence were measured.',
+    source: 'real',
     transcriptSource,
+    corrections: grammar.corrections,
+    correctedAnswer: grammar.correctedAnswer,
+    vocabularySuggestions: vocab.suggestions,
+    repeatedWords: vocab.repeatedWords,
+    scoreReasons,
+    confidenceSignals,
+    sufficientData: true,
   };
 }

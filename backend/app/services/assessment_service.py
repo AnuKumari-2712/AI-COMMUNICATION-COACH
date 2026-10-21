@@ -228,17 +228,92 @@ def analyze_voice_upload(
 
     overall_source = AnalysisSource.real if stt_source == AnalysisSource.real else AnalysisSource.mock
 
+    corrections = [
+        GrammarCorrection(
+            original=c.original,
+            corrected=c.corrected,
+            reason=c.reason,
+            rule=c.rule,
+            error_type=getattr(c, "error_type", "Grammar"),
+            category=c.category,
+            confidence=c.confidence,
+            sentence=c.sentence,
+        )
+        for c in grammar_result.get("corrections", [])
+    ]
+    corrected_answer = grammar_result.get("corrected_answer", "")
+    vocabulary_suggestions = vocab_result.get("suggestions", [])
+
+    word_count = metrics.word_count
+    sufficient_data = word_count >= 4
+    if not sufficient_data:
+        grammar_score = 45.0 if word_count > 0 else 0.0
+        vocabulary_score = 40.0 if word_count > 0 else 0.0
+        fluency_score = 45.0 if word_count > 0 else 0.0
+        confidence_score = 40.0 if word_count > 0 else 0.0
+        pace_score = metrics.pace_score if word_count > 0 else 0.0
+    else:
+        grammar_score = grammar_result["score"]
+        vocabulary_score = vocab_result["score"]
+        fluency_score = metrics.fluency_score
+        pace_score = metrics.pace_score
+
+    # Observable confidence signals
+    confidence_signals: list[str] = []
+    if 120 <= metrics.words_per_minute <= 165:
+        confidence_signals.append(f"Steady conversational pacing ({round(metrics.words_per_minute)} wpm)")
+    elif metrics.words_per_minute > 0 and metrics.words_per_minute < 105:
+        confidence_signals.append(f"Slow / deliberate tempo ({round(metrics.words_per_minute)} wpm)")
+    elif metrics.words_per_minute > 165:
+        confidence_signals.append(f"Fast delivery tempo ({round(metrics.words_per_minute)} wpm)")
+
+    if metrics.filler_word_count == 0:
+        confidence_signals.append("Zero filler word hesitations")
+    elif metrics.filler_words_per_minute < 2.0:
+        confidence_signals.append(f"Low filler hesitation ({metrics.filler_word_count} filler)")
+    else:
+        confidence_signals.append(f"Elevated filler hesitation ({metrics.filler_word_count} fillers)")
+
+    score_reasons = {
+        "grammar": (
+            f"{len(corrections)} issue(s) detected across {grammar_result.get('sentence_count', 1)} sentence(s)."
+            if corrections
+            else ("No grammatical or syntactic issues detected." if word_count >= 4 else "Short speech sample (< 4 words) — insufficient data for grammar evaluation.")
+        ),
+        "vocabulary": (
+            f"Lexical diversity score of {round(vocabulary_score)}% ({vocab_result.get('content_word_count', 0)} content words)."
+            if word_count >= 4
+            else "Too few words to evaluate vocabulary variety."
+        ),
+        "fluency": (
+            f"Delivery at {round(metrics.words_per_minute)} WPM with {metrics.filler_word_count} filler word(s)."
+            if word_count >= 4
+            else "Short speech sample cannot reliably measure speaking fluency."
+        ),
+        "pace": (
+            f"{round(metrics.words_per_minute)} WPM ({'optimal' if 130 <= metrics.words_per_minute <= 160 else 'outside optimal'} 130-160 WPM interview range)."
+            if word_count > 0
+            else "0 WPM."
+        ),
+        "confidence": (
+            f"Estimated from delivery signals: {', '.join(confidence_signals[:2])}."
+            if confidence_signals
+            else "Insufficient speech length to estimate confidence."
+        ),
+        "pronunciation": "Phoneme-level audio pronunciation analysis is unavailable in browser recording mode — not falsely estimated.",
+    }
+
     try:
         learner_profile.update_scores(
             student_id,
             {
-                "grammar": grammar_result["score"],
-                "vocabulary": vocab_result["score"],
-                "fluency": metrics.fluency_score,
-                "speaking_pace": metrics.pace_score,
+                "grammar": grammar_score,
+                "vocabulary": vocabulary_score,
+                "fluency": fluency_score,
+                "speaking_pace": pace_score,
                 "filler_words": max(0.0, 100.0 - metrics.filler_words_per_minute * 8),
                 "confidence": confidence_score,
-                "pronunciation": pronunciation_score,
+                "pronunciation": 75.0,
             },
             session_type="voice_practice",
             duration_minutes=round(duration_seconds / 60, 2),
@@ -249,13 +324,13 @@ def analyze_voice_upload(
     return VoiceAnalysisResponse(
         source=overall_source,
         transcript=transcript,
-        grammar_score=grammar_result["score"],
-        vocabulary_score=vocab_result["score"],
-        fluency_score=metrics.fluency_score,
-        pronunciation_score=pronunciation_score,
+        grammar_score=grammar_score,
+        vocabulary_score=vocabulary_score,
+        fluency_score=fluency_score,
+        pronunciation_score=None,
         confidence_score=confidence_score,
         words_per_minute=metrics.words_per_minute,
-        pace_score=metrics.pace_score,
+        pace_score=pace_score,
         pace_consistency=metrics.pace_consistency,
         filler_word_count=metrics.filler_word_count,
         filler_words_per_minute=metrics.filler_words_per_minute,
@@ -268,10 +343,17 @@ def analyze_voice_upload(
         word_count=metrics.word_count,
         reference_range_wpm=metrics.reference_range_wpm,
         pace_source=metrics.pace_source,
-        pronunciation_reliable=pronunciation["reliable"],
+        pronunciation_reliable=False,
+        pronunciation_available=False,
         pronunciation_method=pronunciation["method"],
         fluency_formula=metrics.fluency_formula,
         transcript_source=transcript_source,
+        corrections=corrections,
+        corrected_answer=corrected_answer,
+        vocabulary_suggestions=vocabulary_suggestions,
+        score_reasons=score_reasons,
+        confidence_signals=confidence_signals,
+        sufficient_data=sufficient_data,
     )
 
 

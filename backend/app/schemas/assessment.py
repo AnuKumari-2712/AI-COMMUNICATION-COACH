@@ -89,7 +89,7 @@ class VoiceAnalysisResponse(BaseModel):
     grammar_score: float = Field(ge=0, le=100)
     vocabulary_score: float = Field(ge=0, le=100)
     fluency_score: float = Field(ge=0, le=100)
-    pronunciation_score: float = Field(ge=0, le=100)
+    pronunciation_score: float | None = Field(default=None, ge=0, le=100)
     confidence_score: float = Field(ge=0, le=100)
     words_per_minute: float = Field(ge=0)
     pace_score: float = Field(ge=0, le=100)
@@ -119,6 +119,14 @@ class VoiceAnalysisResponse(BaseModel):
     # browser, "server" = recognized by the backend, "sample" = recognition
     # failed and this is a canned sentence, not the user's words.
     transcript_source: Literal["browser", "server", "sample"] = "server"
+    # Actionable sentence-by-sentence feedback & evidence fields
+    corrections: list[GrammarCorrection] = []
+    corrected_answer: str = ""
+    vocabulary_suggestions: list[str] = []
+    score_reasons: dict[str, str] = Field(default_factory=dict)
+    pronunciation_available: bool = False
+    confidence_signals: list[str] = Field(default_factory=list)
+    sufficient_data: bool = True
 
 
 class ExplainMistakeRequest(BaseModel):
