@@ -283,8 +283,9 @@ export default function TextPracticePage() {
   };
 
   const handleCopyCorrected = () => {
-    if (!result?.correctedAnswer) return;
-    navigator.clipboard.writeText(result.correctedAnswer);
+    const textToCopy = result?.correctedText || result?.correctedAnswer;
+    if (!textToCopy) return;
+    navigator.clipboard.writeText(textToCopy);
     setCopiedCorrected(true);
     setTimeout(() => setCopiedCorrected(false), 2000);
   };
@@ -448,36 +449,167 @@ export default function TextPracticePage() {
 
             <Card className="lg:col-span-2">
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <CardTitle>Grammar & Style Corrections</CardTitle>
-                  <span className="text-xs text-base-400">
-                    {result.corrections.length} {result.corrections.length === 1 ? 'issue' : 'issues'} detected
-                  </span>
+                  <Badge
+                    variant={(result.totalMistakes ?? result.corrections.length) === 0 ? 'success' : 'warning'}
+                    size="sm"
+                    className="text-xs"
+                  >
+                    {(result.totalMistakes ?? result.corrections.length) === 0
+                      ? '0 mistakes detected'
+                      : `${result.totalMistakes ?? result.corrections.length} ${(result.totalMistakes ?? result.corrections.length) === 1 ? 'mistake' : 'mistakes'} detected across ${
+                          (result.sentences?.length ?? 0) > 0
+                            ? `${result.sentences!.length} ${result.sentences!.length === 1 ? 'sentence' : 'sentences'}`
+                            : 'your answer'
+                        }`}
+                  </Badge>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                {result.corrections.length > 0 ? (
-                  result.corrections.map((c, i) => (
-                    <div key={i} className="rounded-xl border border-white/5 bg-base-800/60 p-3.5">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <Badge variant="outline" size="sm" className="border-accent-500/30 text-[10px] font-semibold uppercase tracking-wider text-accent-400">
-                          {c.errorType || 'Grammar'}
-                        </Badge>
-                        <span className="text-[10px] text-base-500 font-mono">#{i + 1}</span>
-                      </div>
-                      <p className="text-sm">
-                        <span className="rounded bg-danger-500/15 px-1.5 py-0.5 text-danger-300 line-through">{c.original}</span>
-                        {' → '}
-                        <span className="rounded bg-success-500/15 px-1.5 py-0.5 font-medium text-success-300">{c.corrected}</span>
-                      </p>
-                      <p className="mt-1.5 text-xs text-base-400">{c.reason}</p>
-                      {c.sentence && (
-                        <p className="mt-2 rounded-lg bg-base-900/60 px-2.5 py-1.5 text-[11px] text-base-400 italic">
-                          <span className="not-italic font-medium text-base-500">Sentence context: </span>&ldquo;{c.sentence}&rdquo;
-                        </p>
-                      )}
+                {/* Full Corrected Version Box at Top */}
+                {(result.correctedText || result.correctedAnswer) && (
+                  <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                    <div className="mb-2 flex items-center justify-between gap-2 border-b border-emerald-500/20 pb-2">
+                      <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-300">
+                        <CheckCircle2 className="size-4 text-emerald-400" /> Fully Corrected Answer
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCopyCorrected}
+                        className="h-7 px-2.5 text-xs text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20"
+                      >
+                        {copiedCorrected ? (
+                          <>
+                            <Check className="size-3 text-emerald-400" /> Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="size-3" /> Copy
+                          </>
+                        )}
+                      </Button>
                     </div>
-                  ))
+                    <p className="text-xs font-normal leading-relaxed text-emerald-100 whitespace-pre-wrap">
+                      {result.correctedText || result.correctedAnswer}
+                    </p>
+                  </div>
+                )}
+
+                {/* Sentence-by-Sentence Analysis */}
+                {result.sentences && result.sentences.length > 0 ? (
+                  <div className="space-y-3">
+                    {result.sentences.map((sent, sIdx) => {
+                      const hasErrors = sent.has_errors || (sent.mistakes && sent.mistakes.length > 0);
+                      return (
+                        <div
+                          key={sIdx}
+                          className={`rounded-xl border p-4 transition-all ${
+                            hasErrors
+                              ? 'border-white/10 bg-base-800/80 shadow-sm'
+                              : 'border-emerald-500/25 bg-emerald-500/5'
+                          }`}
+                        >
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-base-200">
+                              Sentence #{sIdx + 1}
+                            </span>
+                            {hasErrors ? (
+                              <Badge variant="warning" size="sm" className="text-[10px]">
+                                {sent.mistakes.length} {sent.mistakes.length === 1 ? 'mistake' : 'mistakes'}
+                              </Badge>
+                            ) : (
+                              <Badge variant="success" size="sm" className="flex items-center gap-1 text-[10px]">
+                                <CheckCircle2 className="size-3 text-emerald-400" /> No mistakes in this sentence
+                              </Badge>
+                            )}
+                          </div>
+
+                          {/* Original Sentence */}
+                          <div className="mt-2 space-y-1">
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-base-400">Original</span>
+                            <p className={`rounded-lg p-2.5 text-xs font-mono leading-relaxed ${
+                              hasErrors ? 'border border-white/5 bg-base-900/70 text-base-200' : 'text-base-300'
+                            }`}>
+                              {sent.original}
+                            </p>
+                          </div>
+
+                          {/* Corrected Sentence */}
+                          {hasErrors && (
+                            <div className="mt-2 space-y-1">
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Corrected</span>
+                              <p className="rounded-lg border border-emerald-500/25 bg-emerald-950/20 p-2.5 text-xs font-medium leading-relaxed text-emerald-200">
+                                {sent.corrected}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Mistakes Identified */}
+                          {hasErrors && sent.mistakes && sent.mistakes.length > 0 && (
+                            <div className="mt-3 space-y-2 border-t border-white/5 pt-2.5">
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-base-400">
+                                Mistakes Identified:
+                              </span>
+                              <div className="space-y-2">
+                                {sent.mistakes.map((m, mIdx) => (
+                                  <div
+                                    key={mIdx}
+                                    className="rounded-lg border border-white/5 bg-base-900/60 p-2.5 text-xs"
+                                  >
+                                    <div className="mb-1 flex items-center justify-between gap-2">
+                                      <Badge
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-accent-500/30 text-[10px] font-semibold uppercase tracking-wider text-accent-400"
+                                      >
+                                        {m.type}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-xs">
+                                      <span className="rounded bg-danger-500/15 px-1.5 py-0.5 font-mono text-danger-300 line-through">
+                                        {m.wrong}
+                                      </span>
+                                      <span className="text-base-400 mx-1.5">→</span>
+                                      <span className="rounded bg-success-500/15 px-1.5 py-0.5 font-mono font-medium text-success-300">
+                                        {m.correct}
+                                      </span>
+                                    </p>
+                                    <p className="mt-1 text-[11px] leading-relaxed text-base-400">{m.explanation}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : result.corrections.length > 0 ? (
+                  <div className="space-y-3">
+                    {result.corrections.map((c, i) => (
+                      <div key={i} className="rounded-xl border border-white/5 bg-base-800/60 p-3.5">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <Badge variant="outline" size="sm" className="border-accent-500/30 text-[10px] font-semibold uppercase tracking-wider text-accent-400">
+                            {c.errorType || 'Grammar'}
+                          </Badge>
+                          <span className="text-[10px] text-base-500 font-mono">#{i + 1}</span>
+                        </div>
+                        <p className="text-sm">
+                          <span className="rounded bg-danger-500/15 px-1.5 py-0.5 text-danger-300 line-through">{c.original}</span>
+                          {' → '}
+                          <span className="rounded bg-success-500/15 px-1.5 py-0.5 font-medium text-success-300">{c.corrected}</span>
+                        </p>
+                        <p className="mt-1.5 text-xs text-base-400">{c.reason}</p>
+                        {c.sentence && (
+                          <p className="mt-2 rounded-lg bg-base-900/60 px-2.5 py-1.5 text-[11px] text-base-400 italic">
+                            <span className="not-italic font-medium text-base-500">Sentence context: </span>&ldquo;{c.sentence}&rdquo;
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   <div className="flex items-center gap-3 rounded-xl border border-success-500/20 bg-success-500/10 p-4 text-sm text-success-300">
                     <CheckCircle2 className="size-5 shrink-0" />

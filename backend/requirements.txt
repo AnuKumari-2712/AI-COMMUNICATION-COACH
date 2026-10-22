@@ -9,6 +9,7 @@ python-dotenv==1.0.1
 
 # NLP
 spacy==3.8.3
+anthropic>=0.40.0
 
 # ML / personalization engine
 scikit-learn==1.6.0

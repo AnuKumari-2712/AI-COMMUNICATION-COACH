@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # Speech recognition
     stt_language: str = "en-IN"
 
+    # LLM Grammar Checker (Anthropic Claude)
+    anthropic_api_key: str | None = None
+    grammar_model: str = "claude-sonnet-5-5"
+
 
 @lru_cache
 def get_settings() -> Settings:

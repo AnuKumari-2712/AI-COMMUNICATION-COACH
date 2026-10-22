@@ -134,3 +134,18 @@ export interface ToastItem {
   description?: string;
   variant: 'success' | 'error' | 'warning' | 'info';
 }
+
+export interface SentenceMistake {
+  wrong: string;
+  correct: string;
+  type: string;
+  explanation: string;
+}
+
+export interface SentenceAnalysis {
+  original: string;
+  corrected: string;
+  has_errors: boolean;
+  mistakes: SentenceMistake[];
+}
+

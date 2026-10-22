@@ -5,6 +5,8 @@
  * and voice transcripts without returning canned/bogus mock data.
  */
 
+import type { SentenceAnalysis, SentenceMistake } from '@/types';
+
 export interface ClientGrammarCorrection {
   original: string;
   corrected: string;
@@ -24,6 +26,9 @@ export interface ClientTextAnalysis {
   clarityScore: number;
   relevanceScore: number;
   corrections: ClientGrammarCorrection[];
+  sentences?: SentenceAnalysis[];
+  totalMistakes?: number;
+  correctedText?: string;
   vocabularySuggestions: string[];
   repeatedWords: string[];
   betterAlternative: string;
@@ -1595,6 +1600,23 @@ export function performClientTextAnalysis(question: string, answer: string): Cli
   );
 
   const wordCount = answer.trim().split(/\s+/).filter(Boolean).length;
+  const sentencesList = splitIntoSentences(answer);
+  const sentenceAnalyses: SentenceAnalysis[] = sentencesList.map((sent) => {
+    const sentCorrs = grammar.corrections.filter((c) => c.sentence === sent || (!c.sentence && sent.toLowerCase().includes(c.original.toLowerCase())));
+    const mistakes: SentenceMistake[] = sentCorrs.map((c) => ({
+      wrong: c.original,
+      correct: c.corrected,
+      type: c.errorType || RULE_ERROR_TYPE_MAP[c.rule] || 'Grammar',
+      explanation: c.reason,
+    }));
+    const correctedSent = generateFullCorrectedAnswer(sent, sentCorrs);
+    return {
+      original: sent,
+      corrected: correctedSent,
+      has_errors: mistakes.length > 0,
+      mistakes,
+    };
+  });
 
   return {
     score: overallScore,
@@ -1612,6 +1634,9 @@ export function performClientTextAnalysis(question: string, answer: string): Cli
       category: c.category,
       confidence: c.confidence,
     })),
+    sentences: sentenceAnalyses,
+    totalMistakes: grammar.corrections.length,
+    correctedText: grammar.correctedAnswer,
     vocabularySuggestions: vocab.suggestions,
     repeatedWords: vocab.repeatedWords,
     betterAlternative: alternative,

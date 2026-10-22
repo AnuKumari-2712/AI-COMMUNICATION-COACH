@@ -27,6 +27,20 @@ class GrammarCorrection(BaseModel):
     sentence: str = ""
 
 
+class SentenceMistake(BaseModel):
+    wrong: str
+    correct: str
+    type: str
+    explanation: str
+
+
+class SentenceAnalysis(BaseModel):
+    original: str
+    corrected: str
+    has_errors: bool
+    mistakes: list[SentenceMistake] = []
+
+
 class TextAnalysisResponse(BaseModel):
     source: AnalysisSource
     # MODULE 11 (see AUDIT.md): score-like fields below carry explicit
@@ -39,6 +53,9 @@ class TextAnalysisResponse(BaseModel):
     structure_score: float = Field(ge=0, le=100)
     clarity_score: float = Field(ge=0, le=100)
     corrections: list[GrammarCorrection]
+    sentences: list[SentenceAnalysis] = []
+    total_mistakes: int = Field(default=0, ge=0)
+    corrected_text: str = ""
     vocabulary_suggestions: list[str]
     repeated_words: list[str]
     better_alternative: str

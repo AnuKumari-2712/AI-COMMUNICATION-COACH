@@ -349,6 +349,9 @@ def _sentences(text: str) -> list[str]:
     return [s.replace("__DOT__", ".").strip() for s in _SENTENCE_SPLIT.split(protected) if s.strip()]
 
 
+split_sentences = _sentences
+
+
 def _sentence_containing(sentences: list[str], span_text: str) -> str:
     for sent in sentences:
         if span_text.lower() in sent.lower():

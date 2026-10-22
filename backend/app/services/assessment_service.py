@@ -9,11 +9,13 @@ import re
 import tempfile
 
 from app.ml.transformer_confidence import score_confidence
-from app.nlp import grammar_rules, relevance_analysis, text_analysis
+from app.nlp import grammar_rules, llm_grammar, relevance_analysis, text_analysis
 from app.personalization import learner_profile
 from app.schemas.assessment import (
     ExplainMistakeResponse,
     GrammarCorrection,
+    SentenceAnalysis,
+    SentenceMistake,
     TextAnalysisResponse,
     VoiceAnalysisResponse,
 )
@@ -108,29 +110,143 @@ _RULE_EXPLANATIONS = {
 
 
 def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisResponse:
-    grammar_result = grammar_rules.analyze(answer)
+    used_llm = False
+    llm_result = None
+
+    try:
+        llm_result = llm_grammar.check_grammar(answer)
+        used_llm = True
+    except Exception as e:
+        logger.warning("LLM grammar checker failed or unconfigured (%s), falling back to rule-based.", e)
+
+    if used_llm and llm_result is not None:
+        total_mistakes = llm_result["total_mistakes"]
+        sentences_data = llm_result["sentences"]
+        corrected_text = llm_result["corrected_text"]
+        num_sentences = max(1, len(sentences_data))
+
+        # Formula: 1 mistake per sentence = 75, 2 mistakes = 50, 4+ mistakes = 0, 0 mistakes = 100
+        grammar_score = max(0.0, min(100.0, round(100.0 - (total_mistakes / num_sentences) * 25.0, 1)))
+        grammar_formula = (
+            f"score = max(0, min(100, 100 - ({total_mistakes} mistakes / {num_sentences} sentences) * 25.0)) "
+            f"= {grammar_score} (LLM Claude grammar analysis)."
+        )
+        grammar_sufficient_data = bool(answer.strip())
+
+        sentences = [
+            SentenceAnalysis(
+                original=s["original"],
+                corrected=s["corrected"],
+                has_errors=s["has_errors"],
+                mistakes=[
+                    SentenceMistake(
+                        wrong=m["wrong"],
+                        correct=m["correct"],
+                        type=m["type"],
+                        explanation=m["explanation"],
+                    )
+                    for m in s.get("mistakes", [])
+                ],
+            )
+            for s in sentences_data
+        ]
+
+        # Flatten into GrammarCorrection for backwards compatibility
+        corrections: list[GrammarCorrection] = []
+        for s in sentences:
+            for m in s.mistakes:
+                corrections.append(
+                    GrammarCorrection(
+                        original=m.wrong,
+                        corrected=m.correct,
+                        reason=m.explanation,
+                        rule=m.type.lower().replace(" ", "_"),
+                        error_type=m.type,
+                        category="grammar",
+                        confidence="high",
+                        sentence=s.original,
+                    )
+                )
+
+        grammar_issue_count = total_mistakes
+        spelling_issue_count = sum(1 for c in corrections if "spelling" in c.error_type.lower())
+        style_issue_count = sum(1 for c in corrections if "style" in c.error_type.lower() or "unnatural" in c.error_type.lower())
+    else:
+        grammar_result = grammar_rules.analyze(answer)
+        grammar_score = grammar_result["score"]
+        grammar_formula = grammar_result["formula"]
+        grammar_sufficient_data = grammar_result["sufficient_data"]
+        grammar_issue_count = grammar_result["grammar_issue_count"]
+        spelling_issue_count = grammar_result["spelling_issue_count"]
+        style_issue_count = grammar_result["style_issue_count"]
+        corrected_text = grammar_result.get("corrected_answer", "")
+
+        corrections = [
+            GrammarCorrection(
+                original=c.original,
+                corrected=c.corrected,
+                reason=c.reason,
+                rule=c.rule,
+                error_type=getattr(c, "error_type", "Grammar"),
+                category=c.category,
+                confidence=c.confidence,
+                sentence=c.sentence,
+            )
+            for c in grammar_result["corrections"]
+        ]
+        total_mistakes = len(corrections)
+
+        # Build sentence breakdown from rule analyzer
+        split_sents = grammar_rules.split_sentences(answer) if answer.strip() else []
+        sentences = []
+        for sent in split_sents:
+            sent_corrs = [c for c in grammar_result["corrections"] if c.sentence == sent or (not c.sentence and c.original.lower() in sent.lower())]
+            sent_mistakes = [
+                SentenceMistake(
+                    wrong=c.original,
+                    correct=c.corrected,
+                    type=getattr(c, "error_type", "Grammar"),
+                    explanation=c.reason,
+                )
+                for c in sent_corrs
+            ]
+            corr_sent = grammar_rules.generate_corrected_answer(sent, sent_corrs) if sent_corrs else sent
+            sentences.append(
+                SentenceAnalysis(
+                    original=sent,
+                    corrected=corr_sent,
+                    has_errors=len(sent_mistakes) > 0,
+                    mistakes=sent_mistakes,
+                )
+            )
+
+        if not sentences and answer.strip():
+            sentences = [
+                SentenceAnalysis(
+                    original=answer,
+                    corrected=corrected_text,
+                    has_errors=len(corrections) > 0,
+                    mistakes=[
+                        SentenceMistake(
+                            wrong=c.original,
+                            correct=c.corrected,
+                            type=c.error_type,
+                            explanation=c.reason,
+                        )
+                        for c in corrections
+                    ],
+                )
+            ]
+
     vocab_result = text_analysis.vocabulary_analysis(answer)
     structure_result = text_analysis.structure_analysis(answer)
     clarity_result = text_analysis.clarity_analysis(answer)
     alternative = text_analysis.better_alternative(answer, question)
-
-    # MODULE 7: `question` was already accepted by this endpoint (used only
-    # to phrase `better_alternative`) but was never actually compared
-    # against the answer — there was no relevance metric at all, so a
-    # completely off-topic answer could score well on every other metric.
     relevance_result = relevance_analysis.analyze_relevance(question, answer)
 
-    # MODULE 10: `overall` used to be a fixed grammar/vocabulary/structure/
-    # clarity blend with no formula shown, and never included
-    # relevance_score at all — a completely off-topic answer with clean
-    # grammar could still score well overall. Now uses the shared, documented
-    # weighting engine, and automatically excludes (with renormalization,
-    # not silent inclusion) any component whose own analysis flagged
-    # insufficient data rather than pretending a low-confidence signal is
-    # as trustworthy as the others.
     overall_result = compute_weighted_score(
         [
-            {"name": "grammar", "score": grammar_result["score"], "weight": 0.25, "reliable": grammar_result["sufficient_data"]},
+            {"name": "grammar", "score": grammar_score, "weight": 0.25, "reliable": grammar_sufficient_data},
             {"name": "vocabulary", "score": vocab_result["score"], "weight": 0.20, "reliable": vocab_result["sufficient_data"]},
             {"name": "structure", "score": structure_result["score"], "weight": 0.20, "reliable": True},
             {"name": "clarity", "score": clarity_result["score"], "weight": 0.15, "reliable": True},
@@ -139,25 +255,11 @@ def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisRes
     )
     overall = overall_result["score"]
 
-    corrections = [
-        GrammarCorrection(
-            original=c.original,
-            corrected=c.corrected,
-            reason=c.reason,
-            rule=c.rule,
-            error_type=getattr(c, "error_type", "Grammar"),
-            category=c.category,
-            confidence=c.confidence,
-            sentence=c.sentence,
-        )
-        for c in grammar_result["corrections"]
-    ]
-
     try:
         learner_profile.update_scores(
             student_id,
             {
-                "grammar": grammar_result["score"],
+                "grammar": grammar_score,
                 "vocabulary": vocab_result["score"],
                 "response_structure": structure_result["score"],
             },
@@ -169,21 +271,24 @@ def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisRes
     return TextAnalysisResponse(
         source=AnalysisSource.real,
         score=overall,
-        grammar_score=grammar_result["score"],
+        grammar_score=grammar_score,
         vocabulary_score=vocab_result["score"],
         structure_score=structure_result["score"],
         clarity_score=clarity_result["score"],
         corrections=corrections,
+        sentences=sentences,
+        total_mistakes=total_mistakes,
+        corrected_text=corrected_text,
         vocabulary_suggestions=vocab_result["suggestions"],
         repeated_words=vocab_result["repeated_words"],
         better_alternative=alternative,
-        corrected_answer=grammar_result.get("corrected_answer", ""),
+        corrected_answer=corrected_text,
         word_count=len(answer.split()),
-        grammar_issue_count=grammar_result["grammar_issue_count"],
-        spelling_issue_count=grammar_result["spelling_issue_count"],
-        style_issue_count=grammar_result["style_issue_count"],
-        grammar_score_formula=grammar_result["formula"],
-        grammar_sufficient_data=grammar_result["sufficient_data"],
+        grammar_issue_count=grammar_issue_count,
+        spelling_issue_count=spelling_issue_count,
+        style_issue_count=style_issue_count,
+        grammar_score_formula=grammar_formula,
+        grammar_sufficient_data=grammar_sufficient_data,
         lexical_diversity=vocab_result["lexical_diversity"],
         content_word_count=vocab_result["content_word_count"],
         vocabulary_score_formula=vocab_result["formula"],

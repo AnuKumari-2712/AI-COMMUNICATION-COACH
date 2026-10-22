@@ -4,7 +4,7 @@ import { vocabWords, grammarQuestions, currentStudent } from '@/data/mockData';
 import { getCurrentStudentId } from '@/lib/auth';
 import { audioFileName } from '@/lib/audioToWav';
 import { performClientTextAnalysis, performClientVoiceAnalysis } from '@/lib/clientAnalysis';
-import type { GrammarQuestion, SkillScores, VocabWord } from '@/types';
+import type { GrammarQuestion, SentenceAnalysis, SentenceMistake, SkillScores, VocabWord } from '@/types';
 
 export interface VoiceAnalysisResult {
   grammar: number;
@@ -49,6 +49,9 @@ export interface VoiceAnalysisResult {
 export interface TextAnalysisResult {
   score: number;
   corrections: { original: string; corrected: string; reason: string; rule?: string; errorType?: string; sentence?: string }[];
+  sentences?: SentenceAnalysis[];
+  totalMistakes?: number;
+  correctedText?: string;
   vocabularySuggestions: string[];
   betterAlternative: string;
   correctedAnswer: string;
@@ -81,6 +84,9 @@ function dynamicTextAnalysis(question: string, text: string): TextAnalysisResult
       errorType: c.errorType || 'Grammar',
       sentence: c.sentence,
     })),
+    sentences: analysis.sentences,
+    totalMistakes: analysis.totalMistakes ?? analysis.corrections.length,
+    correctedText: analysis.correctedText || analysis.correctedAnswer,
     vocabularySuggestions: analysis.vocabularySuggestions,
     betterAlternative: analysis.betterAlternative,
     correctedAnswer: analysis.correctedAnswer,
@@ -103,6 +109,9 @@ function dynamicTextAnalysis(question: string, text: string): TextAnalysisResult
 interface BackendTextAnalysisResponse {
   score: number;
   corrections: { original: string; corrected: string; reason: string; rule: string; error_type?: string; sentence?: string }[];
+  sentences?: SentenceAnalysis[];
+  total_mistakes?: number;
+  corrected_text?: string;
   vocabulary_suggestions: string[];
   better_alternative: string;
   corrected_answer?: string;
@@ -386,7 +395,10 @@ export const practiceService = {
         })),
         vocabularySuggestions: data.vocabulary_suggestions,
         betterAlternative: data.better_alternative,
-        correctedAnswer: data.corrected_answer || '',
+        correctedAnswer: data.corrected_answer || data.corrected_text || '',
+        correctedText: data.corrected_text || data.corrected_answer || '',
+        sentences: data.sentences || [],
+        totalMistakes: data.total_mistakes ?? data.corrections.length,
         source: 'real',
         grammarScore: data.grammar_score,
         vocabularyScore: data.vocabulary_score,
