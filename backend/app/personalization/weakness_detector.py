@@ -28,11 +28,21 @@ ABSOLUTE_STRENGTH_CEILING = 80.0
 
 def detect(scores: SkillScores) -> dict:
     values = scores.model_dump()
-    mean_score = sum(values.values()) / len(values)
+    active_values = {k: v for k, v in values.items() if v > 0.0}
+    if not active_values:
+        return {
+            "mean_score": 0.0,
+            "weaknesses": [],
+            "strengths": [],
+            "weakness_labels": [],
+            "strength_labels": [],
+        }
+
+    mean_score = sum(active_values.values()) / len(active_values)
 
     weaknesses = []
     strengths = []
-    for key, value in values.items():
+    for key, value in active_values.items():
         if value < ABSOLUTE_WEAKNESS_FLOOR and value < mean_score - RELATIVE_MARGIN:
             weaknesses.append({"skill": key, "label": _LABELS[key], "score": value})
         elif value >= ABSOLUTE_STRENGTH_CEILING and value > mean_score + RELATIVE_MARGIN:

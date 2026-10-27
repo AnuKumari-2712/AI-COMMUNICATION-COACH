@@ -16,6 +16,24 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+export interface SystemHealth {
+  status: string;
+  use_mock_ai: boolean;
+  spacy_model_loaded: boolean;
+  transformer_confidence_enabled: boolean;
+  engines?: {
+    claude: boolean;
+    t5: boolean;
+    whisper: boolean;
+    spacy: boolean;
+  };
+}
+
+export async function getBackendHealth(): Promise<SystemHealth> {
+  const res = await apiClient.get<SystemHealth>('/health', { timeout: 8000 });
+  return res.data;
+}
+
 /**
  * Fire-and-forget request sent when the app loads so a sleeping backend starts waking
  * up while the user is still on the landing/login page, instead of on their first
@@ -24,3 +42,4 @@ apiClient.interceptors.request.use((config) => {
 export function wakeBackend(): void {
   void apiClient.get('/health', { timeout: 90000 }).catch(() => undefined);
 }
+

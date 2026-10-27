@@ -6,8 +6,11 @@ import App from './App.tsx';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ToastProvider } from '@/hooks/useToast';
 import { Toaster } from '@/components/ui/Toaster';
+import { BackendStatusBanner } from '@/components/shared/BackendStatusBanner';
 import { wakeBackend } from '@/services/apiClient';
 
+// Fire a ping immediately so a sleeping Render backend starts waking while
+// the user is still reading the landing/login page.
 wakeBackend();
 
 createRoot(document.getElementById('root')!).render(
@@ -17,6 +20,7 @@ createRoot(document.getElementById('root')!).render(
         <AuthProvider>
           <App />
           <Toaster />
+          <BackendStatusBanner />
         </AuthProvider>
       </ToastProvider>
     </BrowserRouter>

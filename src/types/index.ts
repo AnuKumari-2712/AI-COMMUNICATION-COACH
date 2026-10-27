@@ -24,6 +24,7 @@ export interface StudentProfile {
   streakDays: number;
   totalPracticeMinutes: number;
   joinedAt: string;
+  exercisesCompleted?: number;
   scores: SkillScores;
 }
 

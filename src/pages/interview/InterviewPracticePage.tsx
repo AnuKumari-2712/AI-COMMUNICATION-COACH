@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot, Mic, Square, ArrowRight, Clock, HelpCircle, Gauge, MessageSquareText, ShieldCheck, Upload, FileText } from 'lucide-react';
+import { Bot, Mic, Square, ArrowRight, Clock, HelpCircle, Gauge, MessageSquareText, ShieldCheck, Upload, FileText, Target, Sparkles } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, Badge, Button, Modal, Input } from '@/components/ui';
 import { ProgressBar } from '@/components/ui/ProgressBar';
@@ -9,6 +9,7 @@ import { DataSourceBadge } from '@/components/shared/DataSourceBadge';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { useToast } from '@/hooks/useToast';
 import { interviewService, type AnswerFeedback, type InterviewSession } from '@/services/interviewService';
+import { AnswerCorrectionBox } from '@/components/shared/AnswerCorrectionBox';
 import { formatDuration } from '@/lib/utils';
 import type { InterviewCategory } from '@/types';
 
@@ -100,7 +101,22 @@ export default function InterviewPracticePage() {
     setScoring(false);
     recorder.reset();
 
-    if (qIndex + 1 >= session.questions.length) {
+    let questionsList = session.questions;
+    if (feedback.followupQuestion) {
+      const followup = {
+        id: feedback.followupQuestion.id,
+        text: feedback.followupQuestion.text,
+        isFollowup: true,
+        engine: feedback.followupEngine,
+      };
+      if (!questionsList.some((q) => q.id === followup.id)) {
+        questionsList = [...questionsList];
+        questionsList.splice(qIndex + 1, 0, followup);
+        setSession({ ...session, questions: questionsList });
+      }
+    }
+
+    if (qIndex + 1 >= questionsList.length) {
       setSubmitting(true);
       const result = await interviewService.submitInterview(session);
       setSubmitting(false);
@@ -221,7 +237,18 @@ export default function InterviewPracticePage() {
               <Bot className="size-9" />
             </div>
             <p className="text-sm font-semibold text-base-50">AI Interviewer</p>
-            <Badge variant="accent" size="sm" className="mt-1.5">{active.title}</Badge>
+            {question.isFollowup ? (
+              <div className="mt-1.5 flex flex-col items-center gap-1">
+                <Badge variant="accent" size="sm" className="animate-pulse-soft">
+                  Tailored Follow-up
+                </Badge>
+                <Badge variant="outline" size="sm" className="text-[10px]">
+                  {question.engine === 'claude' ? 'Claude AI' : 'Heuristic Follow-up'}
+                </Badge>
+              </div>
+            ) : (
+              <Badge variant="accent" size="sm" className="mt-1.5">{active.title}</Badge>
+            )}
             <p className="mt-5 text-sm leading-relaxed text-base-200">{question.text}</p>
           </div>
         </Card>
@@ -250,32 +277,81 @@ export default function InterviewPracticePage() {
           <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-base-400">
             {lastMetrics.feedback ? 'Last Answer Metrics' : 'Live Metrics'}
           </p>
-          <div className="space-y-4">
+          <div className="space-y-3">
             {[
-              { icon: ShieldCheck, label: 'Confidence', value: lastMetrics.confidence || 71 },
-              { icon: Gauge, label: 'Fluency', value: lastMetrics.fluency || 64 },
-              { icon: MessageSquareText, label: 'Answer Structure', value: lastMetrics.structure || 68 },
+              { icon: ShieldCheck, label: 'Confidence', value: lastMetrics.confidence || 71, engine: undefined },
+              { icon: Gauge, label: 'Fluency', value: lastMetrics.fluency || 64, engine: undefined },
+              {
+                icon: Target,
+                label: 'Relevance',
+                value: lastMetrics.relevanceScore !== undefined ? lastMetrics.relevanceScore : 75,
+                engine: lastMetrics.relevanceEngine,
+              },
+              {
+                icon: Sparkles,
+                label: 'Vocabulary',
+                value: lastMetrics.vocabulary || 70,
+                engine: lastMetrics.vocabEngine,
+              },
+              { icon: MessageSquareText, label: 'Structure', value: lastMetrics.structure || 68, engine: undefined },
             ].map((m) => (
               <div key={m.label}>
-                <div className="mb-1.5 flex items-center justify-between text-xs text-base-300">
-                  <span className="flex items-center gap-1.5"><m.icon className="size-3.5" /> {m.label}</span>
+                <div className="mb-1 flex items-center justify-between text-xs text-base-300">
+                  <span className="flex items-center gap-1.5">
+                    <m.icon className="size-3.5 text-accent-400" /> {m.label}
+                    {m.engine && (
+                      <Badge variant={m.engine === 'claude' ? 'accent' : 'outline'} size="sm" className="text-[9px] py-0 px-1">
+                        {m.engine === 'claude' ? 'Claude' : 'Heuristic'}
+                      </Badge>
+                    )}
+                  </span>
                   <span className="font-medium text-base-100">{Math.round(m.value)}%</span>
                 </div>
                 <ProgressBar value={m.value} size="sm" tone="accent" />
               </div>
             ))}
-            <div className="rounded-xl border border-white/5 bg-base-800/60 p-3">
-              <p className="text-xs text-base-400">Filler words detected</p>
-              <p className="font-display text-xl font-semibold text-warning-400">{lastMetrics.fillerWordCount}</p>
+            <div className="rounded-xl border border-white/5 bg-base-800/60 p-2.5">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-base-400">Filler words</p>
+                <p className="font-display text-base font-semibold text-warning-400">{lastMetrics.fillerWordCount}</p>
+              </div>
             </div>
+            {lastMetrics.relevanceReason && (
+              <div className="rounded-xl border border-white/5 bg-base-800/60 p-2.5 text-[11px] text-base-300">
+                <strong className="text-accent-300">Relevance:</strong> {lastMetrics.relevanceReason}
+              </div>
+            )}
             {lastMetrics.feedback && (
-              <div className="rounded-xl border border-accent-500/20 bg-accent-500/5 p-3">
-                <p className="text-xs text-base-300">{lastMetrics.feedback}</p>
+              <div className="rounded-xl border border-accent-500/20 bg-accent-500/5 p-2.5 text-xs text-base-300">
+                {lastMetrics.feedback}
+              </div>
+            )}
+            {lastMetrics.followupQuestion && (
+              <div className="rounded-xl border border-accent-500/30 bg-accent-500/10 p-2.5">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-accent-300">Follow-up Generated</span>
+                  <Badge variant={lastMetrics.followupEngine === 'claude' ? 'accent' : 'outline'} size="sm" className="text-[9px]">
+                    {lastMetrics.followupEngine === 'claude' ? 'Claude AI' : 'Rule-based'}
+                  </Badge>
+                </div>
+                <p className="text-xs text-base-100 italic">&ldquo;{lastMetrics.followupQuestion.text}&rdquo;</p>
               </div>
             )}
           </div>
         </Card>
       </div>
+
+      {/* Spoken Answer, Corrected Version, and Mistakes Box */}
+      {(lastMetrics.transcript || lastMetrics.correctedAnswer || (lastMetrics.corrections && lastMetrics.corrections.length > 0)) && (
+        <div className="mt-6">
+          <AnswerCorrectionBox
+            transcript={lastMetrics.transcript}
+            correctedAnswer={lastMetrics.correctedAnswer}
+            corrections={lastMetrics.corrections}
+            engine="gemini"
+          />
+        </div>
+      )}
     </div>
   );
 }

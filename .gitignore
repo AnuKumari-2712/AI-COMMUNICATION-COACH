@@ -12,10 +12,13 @@ backend/**/__pycache__/
 backend/*.pyc
 backend/.env
 backend/data/
+backend/models/
+models/
 
 # Editors / OS
 .vscode/
 .idea/
+.claude/
 .DS_Store
 Thumbs.db
 

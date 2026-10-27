@@ -3,6 +3,7 @@ import { RadialProgress } from '@/components/ui/RadialProgress';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '@/components/ui';
 import { scoreTone } from '@/lib/utils';
 import type { VoiceAnalysisResult } from '@/services/practiceService';
+import { AnswerCorrectionBox } from '@/components/shared/AnswerCorrectionBox';
 import {
   CheckCircle2,
   Copy,
@@ -15,6 +16,7 @@ import {
   Volume2,
   Clock,
   HelpCircle,
+  Target,
 } from 'lucide-react';
 
 export function VoiceAnalysisResults({ result }: { result: VoiceAnalysisResult }) {
@@ -60,7 +62,7 @@ export function VoiceAnalysisResults({ result }: { result: VoiceAnalysisResult }
       isAvailable: isPronunciationAvailable,
       displayValue: isPronunciationAvailable ? undefined : 'N/A',
       tone: isPronunciationAvailable && result.pronunciation !== null ? scoreTone(result.pronunciation) : ('neutral' as const),
-      note: isPronunciationAvailable ? 'Acoustic alignment' : 'Not measured (Audio model offline)',
+      note: isPronunciationAvailable ? 'Approximate (recognition confidence)' : 'Not measured (Acoustic model offline)',
     },
     {
       label: 'Pace',
@@ -167,25 +169,112 @@ export function VoiceAnalysisResults({ result }: { result: VoiceAnalysisResult }
         </Card>
       </div>
 
-      {/* Grammar & Style Corrections Section */}
+      {/* Answer, Corrected Version, and Mistakes Box */}
+      <AnswerCorrectionBox
+        transcript={result.transcript}
+        correctedAnswer={result.correctedAnswer}
+        corrections={
+          result.corrections && result.corrections.length > 0
+            ? result.corrections
+            : (result.sentences || []).flatMap((s) =>
+                (s.mistakes || []).map((m) => ({
+                  original: m.wrong,
+                  corrected: m.correct,
+                  reason: m.explanation,
+                  errorType: m.type,
+                  sentence: s.original,
+                }))
+              )
+        }
+        engine={result.grammarEngine || 'gemini'}
+      />
       <Card className="p-5">
         <CardHeader className="p-0 pb-4">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-3">
             <div className="flex items-center gap-2">
               <Sparkles className="size-5 text-accent-400" />
-              <CardTitle className="text-base font-semibold text-base-50">Grammar & Style Corrections</CardTitle>
+              <CardTitle className="text-base font-semibold text-base-50">Sentence-by-Sentence Grammar & Style</CardTitle>
             </div>
-            <Badge
-              variant={corrections.length === 0 ? 'success' : 'outline'}
-              size="sm"
-              className={corrections.length > 0 ? 'border-accent-500/30 text-accent-300' : ''}
-            >
-              {corrections.length} {corrections.length === 1 ? 'issue' : 'issues'} detected
-            </Badge>
+            <div className="flex items-center gap-2">
+              {result.grammarEngine === 'claude' && (
+                <Badge variant="accent" size="sm" className="text-[10px]">
+                  Claude AI Engine
+                </Badge>
+              )}
+              {result.grammarEngine === 't5' && (
+                <Badge variant="success" size="sm" className="text-[10px]">
+                  T5 Model
+                </Badge>
+              )}
+              {result.grammarEngine === 'rules' && (
+                <Badge variant="outline" size="sm" className="text-[10px]">
+                  Rule Engine
+                </Badge>
+              )}
+              <Badge
+                variant={corrections.length === 0 ? 'success' : 'outline'}
+                size="sm"
+                className={corrections.length > 0 ? 'border-accent-500/30 text-accent-300' : ''}
+              >
+                {corrections.length} {corrections.length === 1 ? 'issue' : 'issues'} detected
+              </Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0 space-y-3">
-          {corrections.length > 0 ? (
+          {result.sentences && result.sentences.length > 0 ? (
+            result.sentences.map((s, idx) => (
+              <div key={idx} className="rounded-xl border border-white/5 bg-base-800/60 p-4 transition-colors hover:border-white/10">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-base-400">Sentence #{idx + 1}</span>
+                  {!s.has_errors ? (
+                    <Badge variant="success" size="sm" className="text-[10px]">
+                      <Check className="size-3 mr-1" /> Grammatically Correct
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" size="sm" className="border-warning-500/30 text-warning-400 text-[10px]">
+                      {s.mistakes?.length || 1} Issue{(s.mistakes?.length || 1) > 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="space-y-1.5 text-sm">
+                  <p className="text-base-300">
+                    <span className="text-xs text-base-500 font-medium">Original: </span>
+                    {s.original}
+                  </p>
+                  {s.has_errors && (
+                    <p className="text-success-300 font-medium">
+                      <span className="text-xs text-base-500 font-medium">Corrected: </span>
+                      {s.corrected}
+                    </p>
+                  )}
+                </div>
+
+                {s.mistakes && s.mistakes.length > 0 && (
+                  <div className="mt-3 space-y-2 border-t border-white/5 pt-2.5">
+                    {s.mistakes.map((m, mIdx) => (
+                      <div key={mIdx} className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded bg-danger-500/15 px-1.5 py-0.5 text-danger-300 line-through">
+                            {m.wrong}
+                          </span>
+                          <span>→</span>
+                          <span className="rounded bg-success-500/15 px-1.5 py-0.5 font-medium text-success-300">
+                            {m.correct}
+                          </span>
+                          <Badge variant="outline" size="sm" className="text-[9px]">
+                            {m.type}
+                          </Badge>
+                        </div>
+                        {m.explanation && <p className="mt-1 text-base-400 text-[11px]">{m.explanation}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          ) : corrections.length > 0 ? (
             corrections.map((c, i) => (
               <div key={i} className="rounded-xl border border-white/5 bg-base-800/60 p-3.5 transition-colors hover:border-white/10">
                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -229,6 +318,35 @@ export function VoiceAnalysisResults({ result }: { result: VoiceAnalysisResult }
         </CardContent>
       </Card>
 
+      {/* Unclear Words from Recognition Confidence */}
+      {result.unclearWords && result.unclearWords.length > 0 && (
+        <Card className="border-warning-500/20 bg-warning-500/5 p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-3">
+            <div className="flex items-center gap-2 text-warning-400">
+              <Volume2 className="size-5" />
+              <h3 className="font-display text-base font-semibold text-base-50">Possibly Unclear Pronunciation</h3>
+            </div>
+            <Badge variant="outline" size="sm" className="border-warning-500/30 text-warning-300 text-[10px]">
+              {result.unclearWords.length} word{result.unclearWords.length > 1 ? 's' : ''} &lt; 60% confidence
+            </Badge>
+          </div>
+          <p className="text-xs text-base-300 mb-3">
+            These words had lower acoustic confidence during speech recognition. Consider articulating them more clearly:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {result.unclearWords.map((item, idx) => (
+              <div key={idx} className="flex items-center gap-2 rounded-lg border border-white/5 bg-base-900/80 px-3 py-1.5 text-xs">
+                <span className="font-semibold text-base-100">&ldquo;{item.word}&rdquo;</span>
+                <span className="text-[10px] text-warning-400 font-mono">{Math.round(item.confidence)}% conf</span>
+                {item.start !== undefined && (
+                  <span className="text-[10px] text-base-500">{item.start.toFixed(1)}s</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Fully Corrected Version */}
       {result.correctedAnswer && (
         <Card className="border-emerald-500/30 bg-emerald-500/5 p-5">
@@ -270,15 +388,53 @@ export function VoiceAnalysisResults({ result }: { result: VoiceAnalysisResult }
         </Card>
       )}
 
+      {/* Speaking Prompt Relevance (if prompt provided) */}
+      {result.relevanceReason && result.relevanceEngine !== 'none' && (
+        <Card className="p-5 border-accent-500/25 bg-accent-500/5">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-accent-400">
+              <Target className="size-5" />
+              <h3 className="font-display text-base font-semibold text-base-50">Speaking Prompt Relevance</h3>
+              <Badge
+                variant={result.relevanceEngine === 'claude' ? 'accent' : 'outline'}
+                size="sm"
+                className="text-[10px]"
+              >
+                {result.relevanceEngine === 'claude' ? 'Claude AI' : 'Heuristic Match'}
+              </Badge>
+            </div>
+            {result.relevanceScore !== undefined && (
+              <span className="font-display text-xl font-semibold text-accent-300">
+                {Math.round(result.relevanceScore)}%
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-base-200 bg-base-900/60 rounded-lg p-2.5 border border-white/5">
+            <strong className="text-accent-300">AI Assessment:</strong> {result.relevanceReason}
+          </p>
+        </Card>
+      )}
+
       {/* Vocabulary Suggestions & Repeated Words */}
       {((result.vocabularySuggestions && result.vocabularySuggestions.length > 0) ||
         (result.repeatedWords && result.repeatedWords.length > 0)) && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {result.vocabularySuggestions && result.vocabularySuggestions.length > 0 && (
             <Card className="p-5">
-              <div className="mb-3 flex items-center gap-2 text-accent-400">
-                <Lightbulb className="size-5" />
-                <h3 className="font-display text-base font-semibold text-base-50">Vocabulary Suggestions</h3>
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-accent-400">
+                  <Lightbulb className="size-5" />
+                  <h3 className="font-display text-base font-semibold text-base-50">Vocabulary Suggestions</h3>
+                </div>
+                {result.vocabEngine && (
+                  <Badge
+                    variant={result.vocabEngine === 'claude' ? 'accent' : 'outline'}
+                    size="sm"
+                    className="text-[10px]"
+                  >
+                    {result.vocabEngine === 'claude' ? 'Claude AI' : 'Rule Heuristics'}
+                  </Badge>
+                )}
               </div>
               <ul className="space-y-2">
                 {result.vocabularySuggestions.map((s, i) => (
@@ -407,16 +563,49 @@ export function VoiceAnalysisResults({ result }: { result: VoiceAnalysisResult }
       <Card className="p-5">
         <div className="mb-2 flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-wide text-base-400">Spoken Transcript</p>
-          <Badge variant="outline" size="sm" className="text-[10px]">
-            {result.transcriptSource === 'browser' ? 'Browser Speech-to-Text' : 'Server STT'}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {result.transcriptEngine === 'whisper' && (
+              <Badge variant="success" size="sm" className="text-[10px]">
+                Faster-Whisper AI
+              </Badge>
+            )}
+            {result.transcriptEngine === 'google' && (
+              <Badge variant="accent" size="sm" className="text-[10px]">
+                Google Web Speech
+              </Badge>
+            )}
+            {result.transcriptEngine === 'browser' && (
+              <Badge variant="outline" size="sm" className="text-[10px]">
+                Browser Speech API
+              </Badge>
+            )}
+            {result.transcriptEngine === 'failed' && (
+              <Badge variant="danger" size="sm" className="text-[10px]">
+                Recognition Failed
+              </Badge>
+            )}
+            {!result.transcriptEngine && (
+              <Badge variant="outline" size="sm" className="text-[10px]">
+                {result.transcriptSource === 'browser' ? 'Browser Speech-to-Text' : 'Server STT'}
+              </Badge>
+            )}
+          </div>
         </div>
         <div className="rounded-xl border border-white/5 bg-base-900/70 p-4">
-          <p className="text-sm leading-relaxed text-base-200">{result.transcript}</p>
+          <p className="text-sm leading-relaxed text-base-200">
+            {result.transcriptEngine === 'failed'
+              ? 'Could not understand the audio, please try again.'
+              : result.transcript}
+          </p>
         </div>
         {result.transcriptSource === 'browser' && (
           <p className="mt-2 text-[11px] text-base-500">
             Transcribed in real time by your browser&apos;s Web Speech API. Feedback is analyzed on the recognized transcript.
+          </p>
+        )}
+        {result.transcriptEngine === 'whisper' && (
+          <p className="mt-2 text-[11px] text-base-500">
+            Transcribed with local Whisper model (word timestamps and hesitation prompts enabled).
           </p>
         )}
       </Card>

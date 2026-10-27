@@ -1,12 +1,13 @@
-// This service prefers the real FastAPI backend and falls back to
-// src/data/mockData.ts whenever the backend is unreachable — every getter
-// below follows the same try backend / catch -> mock pattern so the app
-// never breaks when the backend isn't running, and never presents mock
-// output as real analysis (see the `source` field returned alongside data).
+// This service has two modes:
+//   REAL mode (logged-in user): every getter calls the backend and throws on
+//     failure — mock data is NEVER returned for a logged-in user.
+//   DEMO mode (no auth token): every getter falls back to src/data/mockData.ts
+//     with a clearly labelled "mock" source, so the app is usable as a demo
+//     for visitors who haven't signed up yet.
+import axios from 'axios';
 import { apiClient } from './apiClient';
 import { mockDelay } from './mockDelay';
 import {
-  currentStudent,
   skillDistribution,
   trendData,
   weeklyActivity,
@@ -132,17 +133,11 @@ function mapPracticeHistory(history: BackendLearnerProfile['practice_history']):
     .slice(0, 8);
 }
 
-function computeStreakDays(history: BackendLearnerProfile['practice_history']): number {
-  if (!history.length) return 0;
-  const days = Array.from(new Set(history.map((h) => new Date(h.timestamp).toDateString())));
-  return days.length;
-}
-
 function mapProfile(p: BackendLearnerProfile): StudentProfile {
   const s = p.scores;
-  const overall = Math.round(
-    (s.grammar + s.vocabulary + s.fluency + s.speaking_pace + s.filler_words + s.confidence + s.pronunciation + s.response_structure) / 8,
-  );
+  const values = [s.grammar, s.vocabulary, s.fluency, s.speaking_pace, s.filler_words, s.confidence, s.pronunciation, s.response_structure];
+  const activeValues = values.filter((v) => v > 0);
+  const overall = activeValues.length > 0 ? Math.round(activeValues.reduce((a, b) => a + b, 0) / activeValues.length) : 0;
   const currentLevel = LEVEL_MAP[p.current_level] ?? 'Intermediate';
 
   return {
@@ -155,9 +150,10 @@ function mapProfile(p: BackendLearnerProfile): StudentProfile {
     careerGoal: p.career_goal,
     currentLevel,
     targetLevel: TARGET_MAP[currentLevel],
-    streakDays: computeStreakDays(p.practice_history),
+    streakDays: p.streak_days,
     totalPracticeMinutes: p.total_practice_minutes,
     joinedAt: p.practice_history[0]?.timestamp ?? new Date().toISOString(),
+    exercisesCompleted: p.practice_history.length,
     scores: {
       overall,
       grammar: s.grammar,
@@ -194,22 +190,87 @@ function mapWeekPlan(days: BackendWeekDay[]): DayPlan[] {
   }));
 }
 
+/** Returns true when the user has an auth token in localStorage (i.e. they're logged in). */
+function isLoggedIn(): boolean {
+  return !!localStorage.getItem('auth_token');
+}
+
+/**
+ * Extracts a human-readable error message from an Axios error or generic error.
+ */
+function extractErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const detail = (error.response?.data as { detail?: string } | undefined)?.detail;
+    if (detail) return detail;
+    if (!error.response) return 'Backend is unreachable. Please check your connection.';
+    return `Backend error ${error.response.status}: ${error.response.statusText}`;
+  }
+  return error instanceof Error ? error.message : 'An unexpected error occurred.';
+}
+
+/**
+ * withFallback — ONLY falls back to mock when the user is NOT logged in.
+ * For logged-in users, errors are re-thrown so the UI can show a real error.
+ */
 async function withFallback<T>(call: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
   try {
     return await call();
-  } catch {
+  } catch (err) {
+    if (isLoggedIn()) {
+      // Re-throw so callers can show the real error message, not silently serve mock data.
+      throw err;
+    }
+    // Unauthenticated demo mode: silent fallback is acceptable.
     return fallback();
   }
 }
 
 export const studentService = {
+  /**
+   * Fetch the real profile from the backend.
+   * Throws on any backend error — never returns mock data.
+   * Used by useAuth for logged-in users.
+   */
+  getProfileReal: async (): Promise<StudentProfile> => {
+    const { data } = await apiClient.get<BackendLearnerProfile>('/students/me');
+    return mapProfile(data);
+  },
+
   getProfile: (): Promise<StudentProfile & { source: 'real' | 'mock' }> =>
     withFallback<StudentProfile & { source: 'real' | 'mock' }>(
       async () => {
         const { data } = await apiClient.get<BackendLearnerProfile>('/students/me');
         return { ...mapProfile(data), source: 'real' as const };
       },
-      async () => ({ ...(await mockDelay(currentStudent, 400)), source: 'mock' as const }),
+      async () => {
+        // Demo mode only: return the named demo profile.
+        const mockProfile: StudentProfile = {
+          id: 'demo-student',
+          name: 'Demo Student',
+          email: 'demo@example.com',
+          college: 'Sample University',
+          course: 'B.Tech Computer Science',
+          year: '3rd Year',
+          careerGoal: 'Software Engineer',
+          currentLevel: 'Intermediate',
+          targetLevel: 'Advanced',
+          streakDays: 0,
+          totalPracticeMinutes: 0,
+          joinedAt: new Date().toISOString(),
+          scores: {
+            overall: 0,
+            grammar: 0,
+            vocabulary: 0,
+            fluency: 0,
+            pronunciation: 0,
+            confidence: 0,
+            speakingPace: 0,
+            fillerWords: 0,
+            structure: 0,
+          },
+        };
+        return { ...(await mockDelay(mockProfile, 400)), source: 'mock' as const };
+      },
     ),
 
   updateProfile: async (patch: Partial<StudentProfile>): Promise<StudentProfile> => {
@@ -222,12 +283,13 @@ export const studentService = {
         career_goal: patch.careerGoal,
       });
       return mapProfile(data);
-    } catch {
-      return mockDelay({ ...currentStudent, ...patch }, 500);
+    } catch (err) {
+      if (isLoggedIn()) throw err;
+      return mockDelay({ id: 'demo-student', name: 'Demo Student', email: '', college: '', course: '', year: '', careerGoal: '', currentLevel: 'Intermediate', targetLevel: 'Advanced', streakDays: 0, totalPracticeMinutes: 0, joinedAt: new Date().toISOString(), scores: { overall: 0, grammar: 0, vocabulary: 0, fluency: 0, pronunciation: 0, confidence: 0, speakingPace: 0, fillerWords: 0, structure: 0 }, ...patch }, 500);
     }
   },
 
-  /** Real per-session trend once the student has 2+ sessions (see backend student_service.analytics_trend); falls back to a smooth 7-week demo curve otherwise. */
+  /** Real per-session trend once the student has 2+ sessions; 404 → fallback to demo curve for unauthenticated visitors only. */
   getTrend: (): Promise<TrendPoint[]> =>
     withFallback(
       async () => {
@@ -237,7 +299,7 @@ export const studentService = {
       () => mockDelay(trendData, 400),
     ),
 
-  /** Real practice minutes/sessions per day for the last 7 days; falls back to a representative demo week. */
+  /** Real practice minutes/sessions per day for the last 7 days; 404 → fallback for unauthenticated visitors only. */
   getWeeklyActivity: (): Promise<WeeklyActivityPoint[]> =>
     withFallback(
       async () => {
@@ -253,7 +315,7 @@ export const studentService = {
         const { data } = await apiClient.get<{ topics: string[] }>('/students/me/revision-queue');
         return data.topics;
       },
-      () => mockDelay(['Filler Words', 'Tense Consistency'], 300),
+      () => mockDelay([], 300),
     ),
 
   clearRevisionTopic: async (topic: string): Promise<string[]> => {
@@ -265,7 +327,7 @@ export const studentService = {
     }
   },
 
-  /** Every value here is computed from the student's real profile (streak, session counts, score history) — never a static list when the backend is up. */
+  /** Every value here is computed from the student's real profile. */
   getAchievements: (): Promise<{ items: Achievement[]; source: 'real' | 'mock' }> =>
     withFallback<{ items: Achievement[]; source: 'real' | 'mock' }>(
       async () => {
@@ -283,25 +345,16 @@ export const studentService = {
     }
   },
 
-  /** Real recent sessions (type, relative date, session score) from practice_history; falls back to a short representative demo list. */
+  /** Real recent sessions; for unauthenticated visitors falls back to a short demo list. */
   getPracticeHistory: (): Promise<{ items: PracticeHistoryEntry[]; source: 'real' | 'mock' }> =>
     withFallback<{ items: PracticeHistoryEntry[]; source: 'real' | 'mock' }>(
       async () => {
         const { data } = await apiClient.get<BackendLearnerProfile>('/students/me');
         const items = mapPracticeHistory(data.practice_history);
-        if (!items.length) throw new Error('no history yet');
         return { items, source: 'real' as const };
       },
       async () => ({
-        items: await mockDelay(
-          [
-            { label: 'Mock HR Interview', date: 'Today', score: 82 },
-            { label: 'Voice Practice Session', date: 'Yesterday', score: 74 },
-            { label: 'Grammar Drill', date: '2 days ago', score: 68 },
-            { label: 'Vocabulary Session', date: '3 days ago', score: 91 },
-          ],
-          400,
-        ),
+        items: await mockDelay([], 400),
         source: 'mock' as const,
       }),
     ),
@@ -364,4 +417,7 @@ export const studentService = {
         return { strengths, improvementAreas, recommendations, source: 'mock' as const };
       },
     ),
+
+  /** Extracts an error message from a caught error for display in the UI. */
+  extractErrorMessage,
 };

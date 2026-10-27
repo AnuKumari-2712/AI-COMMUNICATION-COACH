@@ -39,6 +39,11 @@ export default function AnalyticsPage() {
     });
   }, []);
 
+  const exercisesCount = profile?.exercisesCompleted ?? (profile?.source === 'mock' ? 186 : 0);
+  const improvementRate = trend.length >= 2
+    ? Math.round(((trend[trend.length - 1].overall - trend[0].overall) / (trend[0].overall || 1)) * 100)
+    : (profile?.source === 'mock' ? 24 : 0);
+
   return (
     <div>
       <PageHeader
@@ -69,8 +74,16 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard index={0} icon={<Flame className="size-5" />} label="Current Streak" value={profile?.streakDays ?? 0} suffix="days" tone="warning" />
         <StatCard index={1} icon={<Clock className="size-5" />} label="Practice Time" value={Math.round((profile?.totalPracticeMinutes ?? 0) / 60)} suffix="hrs" tone="accent" />
-        <StatCard index={2} icon={<TrendingUp className="size-5" />} label="Exercises Completed" value={186} tone="success" />
-        <StatCard index={3} icon={<Compass className="size-5" />} label="Improvement Rate" value="24" suffix="%" trend={24} tone="success" />
+        <StatCard index={2} icon={<TrendingUp className="size-5" />} label="Exercises Completed" value={exercisesCount} tone="success" />
+        <StatCard
+          index={3}
+          icon={<Compass className="size-5" />}
+          label="Improvement Rate"
+          value={exercisesCount > 0 ? `${improvementRate > 0 ? '+' : ''}${improvementRate}` : 'N/A'}
+          suffix={exercisesCount > 0 ? '%' : undefined}
+          trend={exercisesCount > 0 ? improvementRate : undefined}
+          tone="success"
+        />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">

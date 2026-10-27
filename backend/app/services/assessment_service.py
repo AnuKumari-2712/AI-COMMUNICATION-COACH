@@ -9,7 +9,7 @@ import re
 import tempfile
 
 from app.ml.transformer_confidence import score_confidence
-from app.nlp import grammar_rules, llm_grammar, relevance_analysis, text_analysis
+from app.nlp import grammar_rules, llm_grammar, llm_vocab_relevance, relevance_analysis, text_analysis
 from app.personalization import learner_profile
 from app.schemas.assessment import (
     ExplainMistakeResponse,
@@ -110,139 +110,65 @@ _RULE_EXPLANATIONS = {
 
 
 def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisResponse:
-    used_llm = False
-    llm_result = None
+    grammar_res = llm_grammar.check_grammar(answer)
+    engine_used = grammar_res.get("grammar_engine", "rules")
+    total_mistakes = grammar_res["total_mistakes"]
+    sentences_data = grammar_res["sentences"]
+    corrected_text = grammar_res["corrected_text"]
+    sentence_count = max(1, grammar_res.get("sentence_count", len(sentences_data)))
 
-    try:
-        llm_result = llm_grammar.check_grammar(answer)
-        used_llm = True
-    except Exception as e:
-        logger.warning("LLM grammar checker failed or unconfigured (%s), falling back to rule-based.", e)
+    # Formula: based on total_mistakes per sentence count
+    grammar_score = max(0.0, min(100.0, round(100.0 - (total_mistakes / sentence_count) * 25.0, 1)))
+    grammar_formula = (
+        f"score = max(0, min(100, 100 - ({total_mistakes} mistakes / {sentence_count} sentences) * 25.0)) "
+        f"= {grammar_score} ({engine_used.capitalize()} grammar engine)."
+    )
+    grammar_sufficient_data = bool(answer.strip())
 
-    if used_llm and llm_result is not None:
-        total_mistakes = llm_result["total_mistakes"]
-        sentences_data = llm_result["sentences"]
-        corrected_text = llm_result["corrected_text"]
-        num_sentences = max(1, len(sentences_data))
-
-        # Formula: 1 mistake per sentence = 75, 2 mistakes = 50, 4+ mistakes = 0, 0 mistakes = 100
-        grammar_score = max(0.0, min(100.0, round(100.0 - (total_mistakes / num_sentences) * 25.0, 1)))
-        grammar_formula = (
-            f"score = max(0, min(100, 100 - ({total_mistakes} mistakes / {num_sentences} sentences) * 25.0)) "
-            f"= {grammar_score} (LLM Claude grammar analysis)."
-        )
-        grammar_sufficient_data = bool(answer.strip())
-
-        sentences = [
-            SentenceAnalysis(
-                original=s["original"],
-                corrected=s["corrected"],
-                has_errors=s["has_errors"],
-                mistakes=[
-                    SentenceMistake(
-                        wrong=m["wrong"],
-                        correct=m["correct"],
-                        type=m["type"],
-                        explanation=m["explanation"],
-                    )
-                    for m in s.get("mistakes", [])
-                ],
-            )
-            for s in sentences_data
-        ]
-
-        # Flatten into GrammarCorrection for backwards compatibility
-        corrections: list[GrammarCorrection] = []
-        for s in sentences:
-            for m in s.mistakes:
-                corrections.append(
-                    GrammarCorrection(
-                        original=m.wrong,
-                        corrected=m.correct,
-                        reason=m.explanation,
-                        rule=m.type.lower().replace(" ", "_"),
-                        error_type=m.type,
-                        category="grammar",
-                        confidence="high",
-                        sentence=s.original,
-                    )
-                )
-
-        grammar_issue_count = total_mistakes
-        spelling_issue_count = sum(1 for c in corrections if "spelling" in c.error_type.lower())
-        style_issue_count = sum(1 for c in corrections if "style" in c.error_type.lower() or "unnatural" in c.error_type.lower())
-    else:
-        grammar_result = grammar_rules.analyze(answer)
-        grammar_score = grammar_result["score"]
-        grammar_formula = grammar_result["formula"]
-        grammar_sufficient_data = grammar_result["sufficient_data"]
-        grammar_issue_count = grammar_result["grammar_issue_count"]
-        spelling_issue_count = grammar_result["spelling_issue_count"]
-        style_issue_count = grammar_result["style_issue_count"]
-        corrected_text = grammar_result.get("corrected_answer", "")
-
-        corrections = [
-            GrammarCorrection(
-                original=c.original,
-                corrected=c.corrected,
-                reason=c.reason,
-                rule=c.rule,
-                error_type=getattr(c, "error_type", "Grammar"),
-                category=c.category,
-                confidence=c.confidence,
-                sentence=c.sentence,
-            )
-            for c in grammar_result["corrections"]
-        ]
-        total_mistakes = len(corrections)
-
-        # Build sentence breakdown from rule analyzer
-        split_sents = grammar_rules.split_sentences(answer) if answer.strip() else []
-        sentences = []
-        for sent in split_sents:
-            sent_corrs = [c for c in grammar_result["corrections"] if c.sentence == sent or (not c.sentence and c.original.lower() in sent.lower())]
-            sent_mistakes = [
+    sentences = [
+        SentenceAnalysis(
+            original=s["original"],
+            corrected=s["corrected"],
+            has_errors=s["has_errors"],
+            mistakes=[
                 SentenceMistake(
-                    wrong=c.original,
-                    correct=c.corrected,
-                    type=getattr(c, "error_type", "Grammar"),
-                    explanation=c.reason,
+                    wrong=m["wrong"],
+                    correct=m["correct"],
+                    type=m["type"],
+                    explanation=m["explanation"],
                 )
-                for c in sent_corrs
-            ]
-            corr_sent = grammar_rules.generate_corrected_answer(sent, sent_corrs) if sent_corrs else sent
-            sentences.append(
-                SentenceAnalysis(
-                    original=sent,
-                    corrected=corr_sent,
-                    has_errors=len(sent_mistakes) > 0,
-                    mistakes=sent_mistakes,
+                for m in s.get("mistakes", [])
+            ],
+        )
+        for s in sentences_data
+    ]
+
+    # Flatten into GrammarCorrection for backwards compatibility
+    corrections: list[GrammarCorrection] = []
+    for s in sentences:
+        for m in s.mistakes:
+            corrections.append(
+                GrammarCorrection(
+                    original=m.wrong,
+                    corrected=m.correct,
+                    reason=m.explanation,
+                    rule=m.type.lower().replace(" ", "_"),
+                    error_type=m.type,
+                    category="spelling" if "spelling" in m.type.lower() else "grammar",
+                    confidence="high",
+                    sentence=s.original,
                 )
             )
 
-        if not sentences and answer.strip():
-            sentences = [
-                SentenceAnalysis(
-                    original=answer,
-                    corrected=corrected_text,
-                    has_errors=len(corrections) > 0,
-                    mistakes=[
-                        SentenceMistake(
-                            wrong=c.original,
-                            correct=c.corrected,
-                            type=c.error_type,
-                            explanation=c.reason,
-                        )
-                        for c in corrections
-                    ],
-                )
-            ]
+    grammar_issue_count = total_mistakes
+    spelling_issue_count = sum(1 for c in corrections if "spelling" in c.error_type.lower())
+    style_issue_count = sum(1 for c in corrections if any(k in c.error_type.lower() for k in ["style", "informal", "unnatural", "word choice"]))
 
-    vocab_result = text_analysis.vocabulary_analysis(answer)
+    vocab_result = llm_vocab_relevance.get_vocabulary_analysis(answer)
     structure_result = text_analysis.structure_analysis(answer)
     clarity_result = text_analysis.clarity_analysis(answer)
     alternative = text_analysis.better_alternative(answer, question)
-    relevance_result = relevance_analysis.analyze_relevance(question, answer)
+    relevance_result = llm_vocab_relevance.get_relevance_analysis(question, answer)
 
     overall_result = compute_weighted_score(
         [
@@ -272,7 +198,9 @@ def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisRes
         source=AnalysisSource.real,
         score=overall,
         grammar_score=grammar_score,
+        grammar_engine=engine_used,
         vocabulary_score=vocab_result["score"],
+        vocab_engine=vocab_result.get("vocab_engine", "heuristic"),
         structure_score=structure_result["score"],
         clarity_score=clarity_result["score"],
         corrections=corrections,
@@ -294,6 +222,8 @@ def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisRes
         vocabulary_score_formula=vocab_result["formula"],
         vocabulary_sufficient_data=vocab_result["sufficient_data"],
         relevance_score=relevance_result["score"],
+        relevance_reason=relevance_result.get("relevance_reason", ""),
+        relevance_engine=relevance_result.get("relevance_engine", "heuristic"),
         relevance_addressed_keywords=relevance_result["addressed_keywords"],
         relevance_missing_keywords=relevance_result["missing_keywords"],
         relevance_score_formula=relevance_result["formula"],
@@ -309,6 +239,7 @@ def analyze_voice_upload(
     duration_seconds: float,
     language: str,
     client_transcript: str | None = None,
+    question: str | None = None,
 ) -> VoiceAnalysisResponse:
     # The server-side Google call proved unreliable from the deployed host (it
     # returned only the tail of longer clips for the same audio that transcribed
@@ -316,37 +247,100 @@ def analyze_voice_upload(
     # the user's own connection, use that; pace, pauses and fluency are still
     # measured from the uploaded audio.
     client_text = (client_transcript or "").strip()
+    words: list[dict] = []
     if client_text:
-        transcript, stt_source, transcript_source = client_text, AnalysisSource.real, "browser"
+        transcript, stt_source, transcript_source, transcript_engine = client_text, AnalysisSource.real, "browser", "browser"
+        try:
+            _, _ = stt.transcribe_wav(tmp_path, language=language)
+            words = getattr(stt, "last_words", [])
+        except Exception:
+            words = []
     else:
         transcript, stt_source = stt.transcribe_wav(tmp_path, language=language)
-        transcript_source = "server" if stt_source == AnalysisSource.real else "sample"
+        transcript_engine = getattr(stt, "last_transcript_engine", "whisper" if stt_source == AnalysisSource.real else "failed")
+        words = getattr(stt, "last_words", [])
+
+        if stt_source == AnalysisSource.real:
+            transcript_source = "server"
+            if transcript_engine not in ("whisper", "google"):
+                transcript_engine = "whisper"
+        else:
+            transcript_source = "sample"
+            transcript_engine = "failed"
+            if not transcript.strip() or transcript == stt.EMPTY_TRANSCRIPT_FALLBACK:
+                transcript = "(Could not understand the audio, please try again)"
     pause_analysis = analyze_wav_pauses(tmp_path)
+    if pause_analysis is None and words:
+        from app.speech.speech_metrics import compute_pauses_from_words
+        pause_analysis = compute_pauses_from_words(words, duration_seconds)
 
     metrics = compute_speech_metrics(transcript, duration_seconds, real_pause_analysis=pause_analysis)
-    grammar_result = grammar_rules.analyze(transcript, assume_unpunctuated=True)
-    vocab_result = text_analysis.vocabulary_analysis(transcript)
+
+    # Multi-engine grammar checking
+    grammar_res = llm_grammar.check_grammar(transcript)
+    engine_used = grammar_res.get("grammar_engine", "rules")
+    total_mistakes = grammar_res.get("total_mistakes", 0)
+    sentences_data = grammar_res.get("sentences", [])
+    corrected_answer = grammar_res.get("corrected_text", transcript)
+    sentence_count = max(1, grammar_res.get("sentence_count", len(sentences_data)))
+
+    sentences = [
+        SentenceAnalysis(
+            original=s["original"],
+            corrected=s["corrected"],
+            has_errors=s["has_errors"],
+            mistakes=[
+                SentenceMistake(
+                    wrong=m["wrong"],
+                    correct=m["correct"],
+                    type=m["type"],
+                    explanation=m["explanation"],
+                )
+                for m in s.get("mistakes", [])
+            ],
+        )
+        for s in sentences_data
+    ]
+
+    corrections = []
+    for s in sentences:
+        for m in s.mistakes:
+            corrections.append(
+                GrammarCorrection(
+                    original=m.wrong,
+                    corrected=m.correct,
+                    reason=m.explanation,
+                    rule=m.type.lower().replace(" ", "_"),
+                    error_type=m.type,
+                    category="spelling" if "spelling" in m.type.lower() else "grammar",
+                    confidence="high",
+                    sentence=s.original,
+                )
+            )
+
+    vocab_result = llm_vocab_relevance.get_vocabulary_analysis(transcript)
+    if question and question.strip():
+        relevance_res = llm_vocab_relevance.get_relevance_analysis(question, transcript)
+        relevance_score = relevance_res.get("score", 0.0)
+        relevance_reason = relevance_res.get("relevance_reason", "")
+        relevance_engine = relevance_res.get("relevance_engine", "none")
+    else:
+        relevance_score = 0.0
+        relevance_reason = "No speaking prompt provided for relevance assessment."
+        relevance_engine = "none"
+
     confidence_score, confidence_source = score_confidence(transcript)
 
-    pronunciation = pronunciation_proxy(vocab_result["average_word_length"], stt_used=(stt_source == AnalysisSource.real))
-    pronunciation_score = pronunciation["score"]
+    # Pronunciation via Whisper per-word confidence probabilities
+    from app.speech.speech_metrics import analyze_pronunciation_confidence
+    pron_analysis = analyze_pronunciation_confidence(words)
+    pronunciation_score = pron_analysis["score"]
+    pronunciation_available = pron_analysis["available"]
+    pronunciation_reliable = pron_analysis["reliable"]
+    pronunciation_method = pron_analysis["method"]
+    unclear_words = pron_analysis["unclear_words"]
 
     overall_source = AnalysisSource.real if stt_source == AnalysisSource.real else AnalysisSource.mock
-
-    corrections = [
-        GrammarCorrection(
-            original=c.original,
-            corrected=c.corrected,
-            reason=c.reason,
-            rule=c.rule,
-            error_type=getattr(c, "error_type", "Grammar"),
-            category=c.category,
-            confidence=c.confidence,
-            sentence=c.sentence,
-        )
-        for c in grammar_result.get("corrections", [])
-    ]
-    corrected_answer = grammar_result.get("corrected_answer", "")
     vocabulary_suggestions = vocab_result.get("suggestions", [])
 
     word_count = metrics.word_count
@@ -358,7 +352,7 @@ def analyze_voice_upload(
         confidence_score = 40.0 if word_count > 0 else 0.0
         pace_score = metrics.pace_score if word_count > 0 else 0.0
     else:
-        grammar_score = grammar_result["score"]
+        grammar_score = max(0.0, min(100.0, round(100.0 - (total_mistakes / sentence_count) * 25.0, 1)))
         vocabulary_score = vocab_result["score"]
         fluency_score = metrics.fluency_score
         pace_score = metrics.pace_score
@@ -381,7 +375,7 @@ def analyze_voice_upload(
 
     score_reasons = {
         "grammar": (
-            f"{len(corrections)} issue(s) detected across {grammar_result.get('sentence_count', 1)} sentence(s)."
+            f"{len(corrections)} issue(s) detected across {sentence_count} sentence(s) ({engine_used.capitalize()} engine)."
             if corrections
             else ("No grammatical or syntactic issues detected." if word_count >= 4 else "Short speech sample (< 4 words) — insufficient data for grammar evaluation.")
         ),
@@ -405,7 +399,7 @@ def analyze_voice_upload(
             if confidence_signals
             else "Insufficient speech length to estimate confidence."
         ),
-        "pronunciation": "Phoneme-level audio pronunciation analysis is unavailable in browser recording mode — not falsely estimated.",
+        "pronunciation": pronunciation_method,
     }
 
     try:
@@ -418,7 +412,7 @@ def analyze_voice_upload(
                 "speaking_pace": pace_score,
                 "filler_words": max(0.0, 100.0 - metrics.filler_words_per_minute * 8),
                 "confidence": confidence_score,
-                "pronunciation": 75.0,
+                "pronunciation": pronunciation_score if pronunciation_score is not None else 75.0,
             },
             session_type="voice_practice",
             duration_minutes=round(duration_seconds / 60, 2),
@@ -430,9 +424,10 @@ def analyze_voice_upload(
         source=overall_source,
         transcript=transcript,
         grammar_score=grammar_score,
+        grammar_engine=engine_used,
         vocabulary_score=vocabulary_score,
         fluency_score=fluency_score,
-        pronunciation_score=None,
+        pronunciation_score=pronunciation_score,
         confidence_score=confidence_score,
         words_per_minute=metrics.words_per_minute,
         pace_score=pace_score,
@@ -448,14 +443,22 @@ def analyze_voice_upload(
         word_count=metrics.word_count,
         reference_range_wpm=metrics.reference_range_wpm,
         pace_source=metrics.pace_source,
-        pronunciation_reliable=False,
-        pronunciation_available=False,
-        pronunciation_method=pronunciation["method"],
+        pronunciation_reliable=pronunciation_reliable,
+        pronunciation_available=pronunciation_available,
+        pronunciation_method=pronunciation_method,
         fluency_formula=metrics.fluency_formula,
         transcript_source=transcript_source,
+        transcript_engine=transcript_engine,
+        words=words,
+        unclear_words=unclear_words,
+        sentences=sentences,
         corrections=corrections,
         corrected_answer=corrected_answer,
         vocabulary_suggestions=vocabulary_suggestions,
+        vocab_engine=vocab_result.get("vocab_engine", "heuristic"),
+        relevance_score=relevance_score,
+        relevance_reason=relevance_reason,
+        relevance_engine=relevance_engine,
         score_reasons=score_reasons,
         confidence_signals=confidence_signals,
         sufficient_data=sufficient_data,

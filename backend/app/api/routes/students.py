@@ -9,7 +9,10 @@ router = APIRouter(prefix="/students", tags=["students"])
 
 @router.get("/me", response_model=LearnerProfile)
 def get_my_profile(student_id: str = Depends(get_current_student_id)):
-    return student_service.get_profile(student_id)
+    try:
+        return student_service.get_profile(student_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.patch("/me", response_model=LearnerProfile)

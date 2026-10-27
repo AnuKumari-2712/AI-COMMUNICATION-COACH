@@ -67,11 +67,12 @@ class GrammarAnalysis:
     corrected_answer: str = ""
 
 
-_DOUBLE_NEGATIVE = re.compile(r"\b(don't|doesn't|didn't|isn't|wasn't|can't|won't)\b\s+\w*\s*\b(no|none|nothing|nobody|never)\b", re.IGNORECASE)
+_DOUBLE_NEGATIVE = re.compile(r"\b(don't|dont|doesn't|doesnt|didn't|didnt|isn't|isnt|wasn't|wasnt|can't|cant|won't|wont)\b\s+\w*\s*\b(no|none|nothing|nobody|never)\b", re.IGNORECASE)
 _I_HAS = re.compile(r"\bI\s+(has|was is|don't has)\b", re.IGNORECASE)
 _NEITHER_PLURAL = re.compile(r"\b(neither|either|each|every one) of (the )?\w+ (were|are)\b", re.IGNORECASE)
 _REPEATED_WORD = re.compile(r"\b(\w+)\s+\1\b", re.IGNORECASE)
 _ALOT = re.compile(r"\balot\b", re.IGNORECASE)
+_WORK_ALOT_HARD = re.compile(r"\b(work|working|worked)\s+(?:a\s+lot|alot)\s+hard\b", re.IGNORECASE)
 _YOUR_GOING = re.compile(r"\byour\s+(going|coming|trying|looking|planning)\b", re.IGNORECASE)
 _THEIR_GOING = re.compile(r"\btheir\s+(going|coming|trying)\b", re.IGNORECASE)
 _KINDA_SORTA = re.compile(r"\b(kinda|sorta|gonna|wanna|dunno)\b", re.IGNORECASE)
@@ -341,6 +342,11 @@ def _sentences(text: str) -> list[str]:
     protected = abbr_pat.sub(lambda m: m.group(0).replace(".", "__DOT__"), text)
     protected = re.sub(r"(\d+)\.(\d+)", r"\1__DOT__\2", protected)
 
+    if _SENTENCE_SPLIT.search(protected):
+        sents = [s.replace("__DOT__", ".").strip() for s in _SENTENCE_SPLIT.split(protected) if s.strip()]
+        if sents:
+            return sents
+
     if nlp is not None:
         doc = nlp(protected)
         sents = [s.text.replace("__DOT__", ".").strip() for s in doc.sents if s.text.strip()]
@@ -510,6 +516,8 @@ def _fix_common_errors(text: str) -> list[Correction]:
         add(m.group(0), "I agree", "'Agree' is a verb, so don't use 'am' before it — say 'I agree'.", "verb_form")
     for m in _DISCUSS_ABOUT.finditer(text):
         add(m.group(0), m.group(1), f"'{m.group(1)}' already means 'talk about' — drop the extra 'about'.", "preposition")
+    for m in _WORK_ALOT_HARD.finditer(text):
+        add(m.group(0), "work very hard", "Incorrect word order and phrasing — use 'work very hard' or 'work a lot harder'.", "word_order")
 
     for m in _NAME_DREAM_ARE.finditer(text):
         fixed_verb = "is" if m.group(3).lower() == "are" else "was"

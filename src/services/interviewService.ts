@@ -4,7 +4,7 @@ import { interviewCategories } from '@/data/mockData';
 import { getCurrentStudentId } from '@/lib/auth';
 import { audioFileName } from '@/lib/audioToWav';
 import { performClientTextAnalysis, performClientVoiceAnalysis } from '@/lib/clientAnalysis';
-import type { InterviewCategory } from '@/types';
+import type { InterviewCategory, SentenceAnalysis } from '@/types';
 
 interface StoredSessionAnswer {
   questionId: string;
@@ -41,6 +41,8 @@ export interface InterviewResult {
 export interface InterviewQuestion {
   id: string;
   text: string;
+  isFollowup?: boolean;
+  engine?: 'gemini' | 'claude' | 'heuristic';
 }
 
 export interface InterviewSession {
@@ -53,12 +55,22 @@ export interface InterviewSession {
 export interface AnswerFeedback {
   grammar: number;
   vocabulary: number;
+  vocabEngine?: 'gemini' | 'claude' | 'heuristic';
   fluency: number;
   confidence: number;
   clarity: number;
   structure: number;
   fillerWordCount: number;
+  relevanceScore?: number;
+  relevanceReason?: string;
+  relevanceEngine?: 'gemini' | 'claude' | 'heuristic';
+  followupQuestion?: InterviewQuestion | null;
+  followupEngine?: 'gemini' | 'claude' | 'heuristic';
   feedback: string;
+  transcript?: string;
+  correctedAnswer?: string;
+  corrections?: { original: string; corrected: string; reason: string; rule?: string; errorType?: string; sentence?: string }[];
+  sentences?: SentenceAnalysis[];
 }
 
 interface BackendCategory {
@@ -79,12 +91,22 @@ interface BackendStartResponse {
 interface BackendAnswerResponse {
   grammar_score: number;
   vocabulary_score: number;
+  vocab_engine?: 'gemini' | 'claude' | 'heuristic';
   fluency_score: number;
   confidence_score: number;
   clarity_score: number;
   structure_score: number;
   filler_word_count: number;
+  relevance_score?: number;
+  relevance_reason?: string;
+  relevance_engine?: 'gemini' | 'claude' | 'heuristic';
+  followup_question?: { id: string; text: string; stage?: string } | null;
+  followup_engine?: 'gemini' | 'claude' | 'heuristic';
   feedback: string;
+  transcript?: string;
+  corrected_answer?: string;
+  corrections?: { original: string; corrected: string; reason: string; rule?: string; error_type?: string; sentence?: string }[];
+  sentences?: SentenceAnalysis[];
 }
 
 interface BackendResultResponse {
@@ -197,15 +219,43 @@ export const interviewService = {
             ? { speech_fluency_score: voice.fluency_score, speech_pause_count: voice.pause_count }
             : {}),
         });
+        const transcriptText = data.transcript || voice.transcript;
+        const correctedText = data.corrected_answer || (voice as any).correctedAnswer || transcriptText;
+        const mappedCorrections = (data.corrections || (voice as any).corrections || []).map((c: any) => ({
+          original: c.original,
+          corrected: c.corrected,
+          reason: c.reason,
+          rule: c.rule,
+          errorType: c.error_type || c.errorType || 'Grammar',
+          sentence: c.sentence,
+        }));
+
         return {
           grammar: data.grammar_score,
           vocabulary: data.vocabulary_score,
+          vocabEngine: (data.vocab_engine as any) || 'heuristic',
           fluency: data.fluency_score,
           confidence: data.confidence_score,
           clarity: data.clarity_score,
           structure: data.structure_score,
           fillerWordCount: data.filler_word_count,
+          relevanceScore: data.relevance_score,
+          relevanceReason: data.relevance_reason,
+          relevanceEngine: data.relevance_engine as any,
+          followupQuestion: data.followup_question
+            ? {
+                id: data.followup_question.id,
+                text: data.followup_question.text,
+                isFollowup: true,
+                engine: data.followup_engine as any,
+              }
+            : null,
+          followupEngine: data.followup_engine as any,
           feedback: data.feedback,
+          transcript: transcriptText,
+          correctedAnswer: correctedText,
+          corrections: mappedCorrections,
+          sentences: data.sentences || (voice as any).sentences || [],
         };
       } catch {
         // fall through to dynamic client evaluation below
@@ -264,6 +314,10 @@ export const interviewService = {
         structure: answerRecord.structure,
         fillerWordCount: answerRecord.fillerWordCount,
         feedback: dynamicFeedback,
+        transcript: cleanTranscript,
+        correctedAnswer: textRes?.correctedAnswer || cleanTranscript,
+        corrections: textRes?.corrections || [],
+        sentences: textRes?.sentences || [],
       },
       500,
     );

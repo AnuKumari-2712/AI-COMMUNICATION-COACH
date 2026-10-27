@@ -4,19 +4,24 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Card } from '@/components/ui';
 import { CommunicationOrb } from '@/components/three/CommunicationOrb';
 import { coachService } from '@/services/coachService';
+import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/types';
 
-const initialMessages: ChatMessage[] = [
-  {
-    id: 'm0',
-    role: 'coach',
-    content: "Hi Ananya! I'm your AI Communication Coach. I can help with grammar, vocabulary, fluency or interview prep — based on your recent sessions, want to work on reducing filler words today?",
-    timestamp: new Date().toISOString(),
-  },
-];
 
 export default function AICoachPage() {
+  const { student } = useAuth();
+  const firstName = student?.name ? student.name.split(' ')[0] : 'there';
+
+  const initialMessages: ChatMessage[] = [
+    {
+      id: 'm0',
+      role: 'coach',
+      content: `Hi ${firstName}! I'm Coach Aria, your AI Coach. Feel free to ask me ANY question — communication tips, English grammar, interview answers, coding/technical concepts, or general guidance. How can I help you today?`,
+      timestamp: new Date().toISOString(),
+    },
+  ];
+
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
@@ -44,13 +49,18 @@ export default function AICoachPage() {
 
   return (
     <div className="flex h-[calc(100vh-8.5rem)] flex-col lg:h-[calc(100vh-7rem)]">
-      <PageHeader eyebrow="Personal Coach" title="AI Coach" description="Ask anything about grammar, vocabulary, fluency or interview strategy." />
+      <PageHeader eyebrow="Personal AI Mentor" title="AI Coach" description="Ask ANY question — communication, interview answers, grammar, technical concepts, or general knowledge." />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
         <Card className="hidden flex-col items-center justify-center p-6 lg:flex">
           <CommunicationOrb active={thinking} className="h-48 w-48" />
           <p className="mt-4 font-display text-sm font-semibold text-base-50">Coach Aria</p>
-          <p className="mt-1 text-center text-xs text-base-400">Personalized using your learner profile — grammar 71, fluency 66, confidence 69.</p>
+          <p className="mt-1 text-center text-xs text-base-400">
+            {student?.scores
+              ? `Personalized using your learner profile — grammar ${Math.round(student.scores.grammar)}, fluency ${Math.round(student.scores.fluency)}, confidence ${Math.round(student.scores.confidence)}.`
+              : 'Personalized using your live learner profile.'}
+          </p>
+
           <div className="mt-5 w-full space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-base-500">Suggested Prompts</p>
             {prompts.map((p) => (

@@ -69,33 +69,88 @@ def _recognize(recognizer, sr, audio, language: str) -> str:
         return recognizer.recognize_google(audio, language=language)
 
 
-def transcribe_wav(file_path: str, language: str = "en-IN") -> tuple[str, AnalysisSource]:
-    try:
-        import speech_recognition as sr
-    except ImportError:
-        logger.warning("speech_recognition not installed — returning empty transcript.")
-        return EMPTY_TRANSCRIPT_FALLBACK, AnalysisSource.mock
+from app.speech import audio_utils
+from app.speech import whisper_stt
+
+
+def _recognize_google_chunks(file_path: str, language: str = "en-IN") -> str:
+    import speech_recognition as sr
 
     recognizer = sr.Recognizer()
+    pieces: list[str] = []
+    with sr.AudioFile(file_path) as source:
+        whole = recognizer.record(source)
+    edges = [0, *_chunk_boundaries(whole.frame_data, whole.sample_rate, whole.sample_width), len(whole.frame_data) // whole.sample_width]
+    for start, end in zip(edges, edges[1:]):
+        chunk = sr.AudioData(
+            whole.frame_data[start * whole.sample_width : end * whole.sample_width],
+            whole.sample_rate,
+            whole.sample_width,
+        )
+        try:
+            piece = _recognize(recognizer, sr, chunk, language)
+        except sr.UnknownValueError:
+            continue
+        if piece and piece.strip():
+            pieces.append(piece.strip())
+    text = " ".join(pieces).strip()
+    if not text:
+        raise ValueError("empty transcript")
+    return text
+
+
+def transcribe_audio(
+    file_path: str,
+    language: str = "en-IN",
+    enable_whisper: bool | None = None,
+) -> tuple[str, str, list[dict]]:
+    """
+    STT Fallback Chain:
+    1. Audio Conversion to 16kHz mono WAV (via audio_utils.convert_to_wav_16k).
+    2. Whisper STT (faster-whisper) with filler prompting and word timestamps.
+    3. Google Web Speech API fallback via speech_recognition.
+    4. Failure: returns ("", "failed", []). Never returns a silent fake transcript for real user audio!
+    """
+    converted_path = file_path
     try:
-        pieces: list[str] = []
-        with sr.AudioFile(file_path) as source:
-            whole = recognizer.record(source)
-        edges = [0, *_chunk_boundaries(whole.frame_data, whole.sample_rate, whole.sample_width), len(whole.frame_data) // whole.sample_width]
-        for start, end in zip(edges, edges[1:]):
-            chunk = sr.AudioData(
-                whole.frame_data[start * whole.sample_width : end * whole.sample_width], whole.sample_rate, whole.sample_width
-            )
-            try:
-                piece = _recognize(recognizer, sr, chunk, language)
-            except sr.UnknownValueError:
-                continue  # this piece had no intelligible speech — keep going
-            if piece.strip():
-                pieces.append(piece.strip())
-        text = " ".join(pieces)
-        if not text.strip():
-            raise ValueError("empty transcript")
+        converted_path = audio_utils.convert_to_wav_16k(file_path)
+    except Exception as exc:
+        logger.warning("Audio conversion to 16kHz WAV failed (%s). Proceeding with original path.", exc)
+
+    whisper_active = whisper_stt.is_whisper_enabled() if enable_whisper is None else enable_whisper
+    if whisper_active:
+        try:
+            whisper_res = whisper_stt.transcribe_whisper(converted_path, language="en")
+            w_text = whisper_res.get("text", "").strip()
+            if w_text:
+                logger.info("Speech transcribed successfully with faster-whisper.")
+                return w_text, "whisper", whisper_res.get("words", [])
+        except Exception as exc:
+            logger.warning("Whisper STT failed or unavailable (%s), falling back to Google Web Speech.", exc)
+
+    try:
+        google_text = _recognize_google_chunks(converted_path, language=language)
+        if google_text.strip():
+            logger.info("Speech transcribed successfully with Google Web Speech.")
+            return google_text.strip(), "google", []
+    except Exception as exc:
+        logger.warning("Google Web Speech failed (%s).", exc)
+
+    logger.warning("All STT engines failed for audio %s.", file_path)
+    return "", "failed", []
+
+
+last_transcript_engine: str = "whisper"
+last_words: list[dict] = []
+
+
+def transcribe_wav(file_path: str, language: str = "en-IN") -> tuple[str, AnalysisSource]:
+    """Backward-compatible wrapper for transcribe_audio."""
+    global last_transcript_engine, last_words
+    text, engine, words = transcribe_audio(file_path, language=language)
+    last_transcript_engine = engine
+    last_words = words
+    if engine in ("whisper", "google") and text:
         return text, AnalysisSource.real
-    except Exception as exc:  # noqa: BLE001 - any STT failure should degrade gracefully
-        logger.warning("Speech-to-text failed (%s) — returning empty transcript.", exc)
-        return EMPTY_TRANSCRIPT_FALLBACK, AnalysisSource.mock
+    return EMPTY_TRANSCRIPT_FALLBACK, AnalysisSource.mock
+

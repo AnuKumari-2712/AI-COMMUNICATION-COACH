@@ -65,7 +65,10 @@ export default function SignupPage() {
       setSuccess(true);
     } catch (error) {
       const detail = axios.isAxiosError(error) ? (error.response?.data as { detail?: string } | undefined)?.detail : undefined;
-      showToast({ title: 'Signup failed', description: detail ?? 'Please try again.', variant: 'error' });
+      const msg = detail ?? (axios.isAxiosError(error) && !error.response
+        ? 'Backend is unreachable. Please try again in a moment (it may be waking up).'
+        : 'Please try again.');
+      showToast({ title: 'Signup failed', description: msg, variant: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -94,7 +97,7 @@ export default function SignupPage() {
       <p className="mt-1.5 text-sm text-base-300">Start with a free personalized assessment.</p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-4" noValidate>
-        <Input label="Full Name" placeholder="Ananya Sharma" icon={<User className="size-4" />} error={errors.fullName?.message} {...register('fullName')} />
+        <Input label="Full Name" placeholder="Your full name" icon={<User className="size-4" />} error={errors.fullName?.message} {...register('fullName')} />
         <Input label="Email" type="email" placeholder="you@example.com" icon={<Mail className="size-4" />} error={errors.email?.message} {...register('email')} />
         <div>
           <Input label="Password" type="password" placeholder="••••••••" icon={<Lock className="size-4" />} error={errors.password?.message} {...register('password')} />

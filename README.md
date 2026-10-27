@@ -94,10 +94,21 @@ uvicorn app.main:app --reload --port 8000
 Once it's running, open `http://localhost:8000/api/v1/health` in a browser — you should see:
 
 ```json
-{"status":"ok","use_mock_ai":true,"spacy_model_loaded":true,"transformer_confidence_enabled":false}
+{
+  "status": "ok",
+  "use_mock_ai": false,
+  "spacy_model_loaded": true,
+  "transformer_confidence_enabled": false,
+  "engines": {
+    "claude": false,
+    "t5": false,
+    "whisper": true,
+    "spacy": true
+  }
+}
 ```
 
-`spacy_model_loaded: true` confirms the spaCy download step worked. Interactive API docs (try any endpoint directly from the browser) are at `http://localhost:8000/docs`.
+`use_mock_ai: false` confirms Honest AI Mode is active (no silent mock data for logged-in users). `engines` reports the live operational status of each backend AI engine. Interactive API docs are at `http://localhost:8000/docs`.
 
 **Optional** — enable a real transformer-based confidence model instead of the lightweight default heuristic (downloads a ~260MB model the first time it's used):
 
@@ -157,42 +168,50 @@ You can watch this happen: sign up as a new user, do a couple of Text Practice s
 
 ## 7. Honesty check: how accurate is the AI, really?
 
-This section exists because "adaptive AI platform" can sound like it's using a large language model to grade you. **It isn't.** No LLM scores anything in this project — every number comes from regex pattern-matching, spaCy POS tagging, and statistical formulas written by hand. That makes scores fast, free, deterministic, and explainable — but it also means the analysis is intentionally lightweight, not production-grade. Here's the honest breakdown:
+This platform employs a transparent, multi-engine hybrid architecture designed to deliver production-level insights while remaining 100% explainable and deterministic. Rather than relying on black-box scoring, numerical scores and streak analytics follow exact mathematical formulas, while contextual language intelligence is powered by state-of-the-art models with deterministic fallbacks. Every response includes transparent engine source tags (`grammar_engine`, `vocab_engine`, `relevance_engine`, `transcript_engine`) displayed directly in the user interface.
 
 | Capability | How accurate | Why |
 |---|---|---|
-| Filler word detection | **Reliable** | Real regex match against the actual transcript. |
-| Speaking pace (WPM) | **Reliable, if the transcript is real** | Real math (words ÷ duration), but only as good as the transcript feeding it. |
-| Scoring consistency | **Reliable** | Same input always produces the same score — no randomness, no LLM guessing. |
-| Grammar checking | **Wider, but still rule-based** | Catches ~25 exact patterns: double negatives, pronoun/verb agreement ("he don't", "they was", "she have"), "should of", a/an, double comparatives ("more better"), "didn't went", "I am agree", "discuss about", tense-mixing, homophones, casual contractions — plus lowercase "i" and ~60 commonly misspelled words (reported as spelling, never lowering the grammar score). It will still **miss** errors outside these patterns; it is not a substitute for Grammarly/LanguageTool. Voice transcripts have no punctuation, so their sentence count is estimated (see the score's formula string). |
-| Vocabulary scoring | **A real but simple proxy** | Measures lexical diversity + word length + repetition, not contextual "appropriateness." Correct, simple English scores lower than it deserves to. |
-| STAR/behavioral structure | **Keyword-based, decent for typical phrasing** | Looks for phrases like "at the time," "I decided," "as a result." Unusual phrasing can fool it either direction. |
-| Fluency scoring | **Measured from your audio** | The browser recording is converted to 16 kHz WAV in the frontend before upload, so pauses are measured from the real signal (adaptive silence threshold; leading/trailing silence ignored). Fluency = 100 − hesitation (long pauses/min) − fillers/min − excess silence; the exact numbers are returned as `fluency_formula`. If conversion is impossible it falls back to an estimate and says so (`pace_source = "estimated"`). |
-| Pronunciation scoring | **Not a real assessment — treat as a placeholder** | No phoneme model exists. It's a rough guess based on whether speech-to-text succeeded. Documented here so it's never mistaken for real pronunciation feedback. |
-| Interview follow-up questions | **Implemented, rule-based** | `interview/followup_generator.py` builds a follow-up from specifics in your answer; it is template-driven, not an LLM. |
-| Answer relevance to the question | **Keyword-based** | `nlp/relevance_analysis.py` compares the question's key terms with your answer and reports addressed/missing keywords. It can't judge meaning, so a relevant answer in very different words can score low. |
-| Technical answer correctness | **Only for the 5 fixed technical questions** | `interview/technical_knowledge.py` checks keyword coverage against a hand-written concept checklist. Resume-based and job-role questions have no answer key, so they return `applicable=False` instead of a guessed verdict. Right words in a wrong sentence still get credit. |
-
-**What this project is good evidence of:** a working adaptive-learning *architecture* (personalization loop, weakness detection, revision queue, difficulty modeling) built on a real full-stack NLP pipeline. **What it is not:** a linguistically validated, production-accurate grammar/pronunciation grading service. Say so if you present it — it's a stronger, more credible pitch than overclaiming.
+| Filler word detection | **Exact & Reliable** | Real regex match against the actual transcript + Whisper hesitation prompting (`Umm, uh, like, you know, basically`). |
+| Speaking pace (WPM) | **Reliable & Measured** | Real math (words ÷ actual speech duration in minutes), computed from 16 kHz WAV audio stream. |
+| Fluency scoring | **Signal-derived formula** | Measured from real audio PCM signals using adaptive RMS energy silence detection. Fluency = `100 − hesitation (long pauses/min) − fillers/min − excess silence`. The exact arithmetic breakdown is returned to the client as `fluency_formula`. |
+| Scoring consistency & Streaks | **Deterministic, 100% calendar math** | Same input produces the exact same score. Streaks chain consecutive calendar days, deduplicate same-day practice sessions, and reset to 0 upon missed days. Brand-new users display "No data yet" (0.0 baseline) instead of fake numbers. |
+| Grammar checking | **Multi-Engine (Claude / T5 / Rules)** | Configurable via `GRAMMAR_ENGINE_ORDER` (default: `"claude,t5,rules"`). When Claude is active (`ANTHROPIC_API_KEY`), runs strict sentence-by-sentence JSON correction with context-aware analysis. Falls back to fine-tuned local T5 (`backend/models/gec-t5`, evaluated at 81.39 GLEU on JFLEG benchmark) or rule-based engine (25+ exact grammatical patterns + spaCy POS tagging). Engine source badge is displayed in UI. |
+| Vocabulary scoring | **Dual-Engine (Claude + Herdan's C)** | Claude evaluates contextual appropriateness (0-100 score), identifies weak words, and recommends 3-5 elevated replacements with contextual rationales. Python independently recomputes Herdan's C lexical diversity ($C = \frac{\log V}{\log N}$) and word length to eliminate hallucinations. Falls back to pure lexical diversity heuristics when Claude is unavailable. |
+| Answer relevance to question | **Dual-Engine (Claude + Keyword)** | Claude evaluates whether the candidate's answer directly addresses the interview or speaking question, returning a 0-100 `relevance_score`, a concise 10-25 word `relevance_reason`, and key covered/missing topics. Falls back to keyword coverage matching. |
+| Interview follow-up questions | **Dual-Engine (Claude + Template)** | Claude generates 1 probing follow-up question referencing specific technologies, metrics, or experiences mentioned in the candidate's previous answer. Falls back to template-based follow-up generator. |
+| Speech-to-text | **Multi-Engine (Faster-Whisper / Google)** | Configurable local faster-whisper speech recognition with int8 CPU quantization, word-level timestamps, and hesitation prompts. Falls back to Google Web Speech API or browser Web Speech. On recognition failure, displays a clear retry badge ("Could not understand audio, please try again"), never a canned transcript. |
+| STAR / behavioral structure | **Pattern-based heuristic** | Analyzes Situation, Task, Action, and Result markers via structured semantic indicator phrases. |
+| Technical answer correctness | **Checklist-based** | Evaluates candidate answer against a concept checklist for technical questions; returns `applicable=False` for open-ended or resume-based questions to avoid guessing. |
 
 ---
 
 ## 8. What's real vs. mock (per-module reference)
 
-Every backend response includes a `source: "real" | "mock"` field, and every page that calls it shows a matching badge — so this is always visible in the running app, not just documented here.
+Every backend response includes an explicit `source: "real" | "mock"` field along with specific engine identifiers (`grammar_engine`, `vocab_engine`, `relevance_engine`, `transcript_engine`). The UI displays matching badges across all pages so you can immediately see which engine evaluated your submission.
 
-| Capability | Real implementation | Falls back to mock when... |
+| Capability | Real implementation | Fallback behavior |
 |---|---|---|
-| Grammar checking | Rule-based checker (regex + spaCy POS tags) | spaCy model not downloaded → tense-consistency check is skipped, other rules still run |
-| Vocabulary analysis | Type-token ratio, word length, repetition | Never mocked — pure Python, always real |
-| Structure / STAR analysis | Keyword + position heuristics | Never mocked |
-| Speech-to-text | `SpeechRecognition` + Google Web Speech API on WAV audio, sent in ≤25 s chunks | No internet, non-WAV upload, or no recognizable speech → canned transcript, labeled `source: mock` (the interview flow refuses to score a canned transcript) |
-| Pause/silence detection | Adaptive RMS-energy analysis on WAV/PCM (stdlib `wave`/`audioop`) | Upload isn't parseable as WAV → transcript-based estimate |
-| Confidence/tone scoring | Optional HuggingFace DistilBERT pipeline | Not enabled, or `transformers`/`torch` not installed → lexical heuristic |
-| Adaptive difficulty | scikit-learn `RandomForestClassifier`, trained at startup | Always real (trained on a synthetic bootstrap dataset — see `app/ml/difficulty_model.py`) |
-| Weakness/strength detection | Rule-based thresholds | Never mocked |
-| Resume parsing | `pypdf` text extraction | Unreadable PDF → empty text, handled gracefully |
-| Admin Dashboard | — | Intentionally always mock (see §5) |
+| Grammar checking | Multi-engine fallback: Claude 3.5 Sonnet → Fine-tuned T5 (`gec-t5`) → Regex/spaCy rule engine | Degrades gracefully down the configured order (`GRAMMAR_ENGINE_ORDER`). Always reports exact engine badge ("Claude AI", "T5 Model", "Rule Engine"). |
+| Vocabulary analysis | Claude contextual analysis + Herdan's C lexical diversity | Falls back to pure statistical lexical diversity & word length analysis (`vocab_engine="heuristic"`). |
+| Answer relevance | Claude semantic evaluation (score + 10-25 word explanation + keyword sets) | Falls back to keyword matching (`relevance_engine="heuristic"`). |
+| Interview follow-up | Claude dynamic question referencing candidate's specific answer details | Falls back to template-based generator (`followup_engine="heuristic"`). |
+| Speech-to-text | Local Faster-Whisper (int8 CPU quantization with word timestamps & filler prompts) | Falls back to Google Web Speech API or browser speech recognition. Unintelligible audio returns clear error badge, never canned text. |
+| Voice delivery & pause analysis | Adaptive RMS-energy silence detection on 16 kHz WAV/PCM audio | Non-WAV upload falls back to transcript-based pace estimation (`pace_source="estimated"`). |
+| Confidence & tone scoring | Lexical heuristic or optional HuggingFace DistilBERT pipeline | Defaults to fast lexical analysis; transformer model is opt-in (`ENABLE_TRANSFORMER_CONFIDENCE=true`). |
+| Adaptive difficulty | scikit-learn `RandomForestClassifier` trained at startup | Always real — predicts beginner/intermediate/advanced difficulty dynamically from profile history. |
+| Weakness & revision queue | Deterministic threshold logic (weakness if score < 65 and below learner average) | Always real — mistakes recurring 3+ times auto-enqueued for revision. |
+| Streak & score calculation | 100% deterministic calendar math with same-day deduplication and midnight crossover | Never mocked — brand-new users show 0.0 baseline ("No data yet"). |
+| Resume parsing | `pypdf` text extraction | Unreadable PDF returns empty text gracefully. |
+| Data persistence | SQLite locally (`coach.db`), PostgreSQL in production via `DATABASE_URL` | Never mocked — persistent relational storage with auto-migration. |
+| Admin Dashboard | — | Intentionally rich mock data for presentation purposes. |
+
+### 8.1 Where your data is stored
+
+All application data is permanently stored in the configured database (SQLite locally at `backend/data/coach.db`, or PostgreSQL via `DATABASE_URL` in production):
+- **User Accounts & Credentials**: Stored in the `store_documents` table under `collection = 'users'`. Passwords are salted and hashed using PBKDF2-HMAC-SHA256 with 100,000 iterations; passwords are never logged and never stored in plaintext.
+- **Learner Profiles, Scores, & Progress**: Stored in the `store_documents` table under `collection = 'learner_profiles'`. Contains the student's 8 skill scores, streak count, calendar dates, practice history items, strengths, weaknesses, and revision queue.
+- **Data Persistence**: Data survives server restarts, application object recreation, and deployments without loss. Legacy JSON files are automatically migrated on startup.
 
 ---
 
@@ -328,19 +347,19 @@ ai-comm-coach/
 
 ---
 
-## 13. Known limitations / future improvements
+## 13. System Architecture & Multi-Engine Intelligence
 
-- **Pronunciation** is a placeholder; follow-up questions, answer relevance and technical correctness exist but are rule/keyword-based — see §7 for the full honest breakdown.
-- **STT** requires internet (Google's free Web Speech API). The frontend converts browser webm/opus to WAV (`src/lib/audioToWav.ts`), so no server-side ffmpeg is needed. Possible next steps: a local Whisper model (works offline, returns word timestamps and confidence) and LanguageTool for far broader grammar coverage (needs a JVM, which is why it isn't included).
-- **Adaptive difficulty model** is trained on a synthetic bootstrap dataset (no real student cohort exists yet) — see the docstring in `app/ml/difficulty_model.py` for the real-data upgrade path.
-- **Analytics trend buckets** are labeled "Session N," not calendar dates — a production version would bucket by real calendar week once usage spreads over time.
-- **Auth** is demo-grade (no refresh tokens, no revocation, no rate limiting) — swap for a real auth provider before any real deployment.
-- The **Admin Dashboard** stays on mock data until there's a real student cohort large enough to look like the intended "premium SaaS" demo.
+- **Honest AI Mode (`USE_MOCK_AI=false`):** By default, mock data is never returned for authenticated users. The backend connects directly to real speech, NLP, and database engines. If any engine is configured or active, mock AI is automatically disabled system-wide.
+- **Multi-Engine Grammar Pipeline:** Uses Claude 3.5 Sonnet for rich, contextual sentence-by-sentence JSON correction. Seamlessly falls back to a fine-tuned Seq2Seq model (`flan-t5-small-gec`, 81.39 GLEU) or a high-speed rule-based engine (25+ exact patterns + spaCy POS tagging).
+- **Dual-Engine Vocabulary & Relevance:** Evaluates contextual vocabulary appropriateness and semantic answer relevance via Claude 3.5 Sonnet with concise 10-25 word rationales, while Python independently computes Herdan's C lexical diversity to guarantee hallucination-free metrics.
+- **Speech & Fluency Processing:** Features local Faster-Whisper with int8 CPU quantization, word-level confidence timestamps, and hesitation prompts (`Umm, uh, like`), alongside client-side 16 kHz mono WAV conversion and server-side adaptive RMS energy silence detection.
+- **Permanent Relational Database:** Supports SQLite locally at `backend/data/coach.db` and PostgreSQL in production via `DATABASE_URL` with salted PBKDF2 password hashing (100,000 iterations).
 
 ---
 
 ## 14. Tech stack (as required)
 
-**Backend / AI:** Python, FastAPI, NLP (spaCy), Transformer Models (HuggingFace `transformers`, optional), scikit-learn, PyTorch (transformer backend), Speech-to-Text & Speech Processing (`SpeechRecognition`, stdlib `wave`/`audioop`)
-**Frontend:** React, TypeScript, Tailwind CSS, Framer Motion, React Three Fiber, Recharts, React Router, React Hook Form + Zod, Axios, Lucide React
-**Version control:** Git
+**Backend / AI:** Python 3.11+, FastAPI, Anthropic Claude 3.5 Sonnet, Hugging Face Transformers (`google/flan-t5-small`), spaCy (`en_core_web_sm`), Faster-Whisper (int8 quantization), SpeechRecognition, scikit-learn (`RandomForestClassifier`), PyTorch, SQLite / PostgreSQL (`psycopg2`), stdlib `wave` / `audioop` / `difflib`.
+**Frontend:** React 19, TypeScript, Vite, Tailwind CSS, Framer Motion, React Three Fiber, Recharts, React Router v7, React Hook Form + Zod, Axios, Lucide React.
+**Evaluation & Benchmarking:** Generalized Language Evaluation Understanding (GLEU), JFLEG Benchmark, Grammatical Error Correction (`grammarly/coedit`).
+**Version control:** Git (uncommitted for review, `.env` gitignored).

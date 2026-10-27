@@ -5,7 +5,7 @@ makes personalization possible — see weakness_detector.py and
 exercise_generator.py, which both read from it.
 """
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from app.database.store import get_document, upsert_document, read_collection
 from app.personalization import weakness_detector
@@ -20,17 +20,50 @@ _REVISION_WINDOW = 5
 _REVISION_THRESHOLD = 3
 
 
-def compute_streak_days(practice_history: list[dict]) -> int:
-    """Consecutive calendar days (ending today or yesterday) with at least
-    one practice session — a real streak, not a session counter."""
+def _parse_entry_date(entry: dict) -> date | None:
+    raw = entry.get("timestamp")
+    if not raw:
+        return None
+    try:
+        if isinstance(raw, datetime):
+            return raw.date()
+        if isinstance(raw, date):
+            return raw
+        if isinstance(raw, str):
+            clean = raw.replace("Z", "+00:00")
+            return datetime.fromisoformat(clean).date()
+    except Exception:
+        return None
+    return None
+
+
+def compute_streak_days(practice_history: list[dict], reference_date: date | None = None) -> int:
+    """
+    Consecutive calendar days (ending today or yesterday) with at least one practice session.
+    Deterministic calculation:
+    - Multiple sessions on the same calendar day count as 1 day.
+    - Consecutive calendar days chain together.
+    - Streak breaks if the most recent session was more than 1 day before reference_date.
+    - Cross-midnight sessions (e.g. 23:55 on Day 1, 00:05 on Day 2) correctly count as 2 days.
+    """
     if not practice_history:
         return 0
-    days = sorted({datetime.fromisoformat(h["timestamp"]).date() for h in practice_history if "timestamp" in h}, reverse=True)
-    if not days:
+
+    session_dates = set()
+    for entry in practice_history:
+        d = _parse_entry_date(entry)
+        if d is not None:
+            session_dates.add(d)
+
+    if not session_dates:
         return 0
-    today = datetime.now(timezone.utc).date()
+
+    days = sorted(session_dates, reverse=True)
+    today = reference_date if reference_date is not None else datetime.now(timezone.utc).date()
+
     if (today - days[0]).days > 1:
         return 0  # most recent session was more than a day ago — streak broken
+
     streak = 1
     for i in range(1, len(days)):
         if (days[i - 1] - days[i]).days == 1:
@@ -42,12 +75,11 @@ def compute_streak_days(practice_history: list[dict]) -> int:
 
 def create_profile(full_name: str, email: str, college: str, course: str, year: str, career_goal: str) -> LearnerProfile:
     student_id = str(uuid.uuid4())
-    # A new student starts with a neutral baseline; the initial assessment
-    # (see assessment_service.run_initial_assessment) overwrites these with
-    # real measured scores within minutes of signup.
+    # A new student starts with 0.0 scores ("no data yet"); real practice sessions
+    # or the initial assessment will assign measured scores.
     baseline = SkillScores(
-        grammar=55, vocabulary=55, fluency=50, speaking_pace=55,
-        filler_words=55, confidence=50, pronunciation=55, response_structure=50,
+        grammar=0.0, vocabulary=0.0, fluency=0.0, speaking_pace=0.0,
+        filler_words=0.0, confidence=0.0, pronunciation=0.0, response_structure=0.0,
     )
     profile = LearnerProfile(
         student_id=student_id,
@@ -77,8 +109,8 @@ def get_or_create_demo_profile() -> LearnerProfile:
         return existing
     profile = LearnerProfile(
         student_id=demo_id,
-        full_name="Ananya Sharma",
-        email="ananya.sharma@example.edu",
+        full_name="Demo Student",
+        email="demo.student@example.edu",
         college="Vellore Institute of Technology",
         course="B.Tech Computer Science",
         year="3rd Year",
@@ -119,9 +151,14 @@ def update_scores(
         raise ValueError(f"No learner profile for student_id={student_id}")
 
     current = profile.scores.model_dump()
+    has_prior = len(profile.practice_history) > 0
     for key, value in new_scores.items():
         if key in current:
-            current[key] = round(current[key] * (1 - weight) + value * weight, 1)
+            # If user has no prior history or this metric is at baseline (0.0), set directly
+            if not has_prior or current[key] == 0.0:
+                current[key] = round(float(value), 1)
+            else:
+                current[key] = round(current[key] * (1 - weight) + float(value) * weight, 1)
     profile.scores = SkillScores(**current)
 
     analysis = weakness_detector.detect(profile.scores)

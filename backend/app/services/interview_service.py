@@ -15,9 +15,10 @@ from app.interview.followup_generator import generate_followup
 from app.interview.structure_analyzer import evaluate_star_format, evaluate_structure
 from app.interview.technical_knowledge import evaluate_technical_correctness
 from app.ml.transformer_confidence import score_confidence
-from app.nlp import grammar_rules, relevance_analysis, text_analysis
+from app.nlp import grammar_rules, llm_vocab_relevance, relevance_analysis, text_analysis
 from app.personalization import learner_profile
 from app.schemas.common import AnalysisSource
+from app.schemas.assessment import GrammarCorrection, SentenceAnalysis, SentenceMistake
 from app.schemas.interview import (
     AnswerStructureScore,
     InterviewAnswerResponse,
@@ -79,10 +80,63 @@ def answer_question(
         raise ValueError(f"Unknown interview session_id={session_id}")
 
     is_voice = mode == "voice"
-    # Voice answers are speech-to-text transcripts with no punctuation, so the
-    # grammar sentence count must be estimated (see grammar_rules.analyze).
-    grammar_result = grammar_rules.analyze(answer_text, assume_unpunctuated=is_voice)
-    vocab_result = text_analysis.vocabulary_analysis(answer_text)
+    corrected_answer = answer_text
+    corrections_list: list[GrammarCorrection] = []
+    sentences_list: list[SentenceAnalysis] = []
+
+    try:
+        grammar_res = llm_grammar.check_grammar(answer_text)
+        total_mistakes = grammar_res.get("total_mistakes", 0)
+        sentence_count = max(1, grammar_res.get("sentence_count", 1))
+        grammar_score = max(0.0, min(100.0, round(100.0 - (total_mistakes / sentence_count) * 20.0, 1)))
+        corrected_answer = grammar_res.get("corrected_text", answer_text)
+
+        for s in grammar_res.get("sentences", []):
+            mistakes = [
+                SentenceMistake(
+                    wrong=m.get("wrong", ""),
+                    correct=m.get("correct", ""),
+                    type=m.get("type", "grammar"),
+                    explanation=m.get("explanation", ""),
+                )
+                for m in s.get("mistakes", [])
+            ]
+            sentences_list.append(
+                SentenceAnalysis(
+                    original=s.get("original", ""),
+                    corrected=s.get("corrected", ""),
+                    has_errors=s.get("has_errors", False),
+                    mistakes=mistakes,
+                )
+            )
+            for m in mistakes:
+                corrections_list.append(
+                    GrammarCorrection(
+                        original=m.wrong,
+                        corrected=m.correct,
+                        reason=m.explanation,
+                        rule=m.type.lower().replace(" ", "_"),
+                        error_type=m.type,
+                        sentence=s.get("original", ""),
+                    )
+                )
+        grammar_result = {"score": grammar_score, "corrections": grammar_res.get("sentences", [])}
+    except Exception:
+        grammar_result = grammar_rules.analyze(answer_text, assume_unpunctuated=is_voice)
+        corrected_answer = grammar_result.get("corrected_answer", answer_text)
+        for c in grammar_result.get("corrections", []):
+            corrections_list.append(
+                GrammarCorrection(
+                    original=c.original,
+                    corrected=c.corrected,
+                    reason=c.reason,
+                    rule=getattr(c, "rule", "grammar"),
+                    error_type=getattr(c, "error_type", "Grammar"),
+                    sentence=getattr(c, "sentence", ""),
+                )
+            )
+
+    vocab_result = llm_vocab_relevance.get_vocabulary_analysis(answer_text)
     confidence_score, confidence_source = score_confidence(answer_text)
 
     # MODULE 7: question text was already available per-question (session
@@ -91,7 +145,7 @@ def answer_question(
     # completely off-topic answer could score well on every other metric
     # with nothing flagging it.
     question_text = session["questions"].get(question_id, "")
-    relevance_result = relevance_analysis.analyze_relevance(question_text, answer_text)
+    relevance_result = llm_vocab_relevance.get_relevance_analysis(question_text, answer_text)
 
     # MODULE 8: only the FIXED technical-interview questions (question_bank.py)
     # have a known-in-advance correct-answer shape to check against; dynamic
@@ -158,9 +212,16 @@ def answer_question(
     # hospital management system") — a vague answer honestly gets no
     # follow-up rather than a generic, disconnected one.
     followup_index = len(session["answers"])
-    followup = generate_followup(answer_text, session["followup_phrases_used"], template_index=followup_index)
+    followup = llm_vocab_relevance.get_followup_question(
+        question_text,
+        answer_text,
+        session["followup_phrases_used"],
+        template_index=followup_index,
+    )
     followup_question = None
+    followup_engine = "heuristic"
     if followup is not None:
+        followup_engine = followup.get("followup_engine", "heuristic")
         followup_id = f"{question_id}-followup"
         session["questions"][followup_id] = followup["question_text"]
         session["question_stages"][followup_id] = question_stage
@@ -209,6 +270,7 @@ def answer_question(
         source=AnalysisSource.real,
         grammar_score=grammar_result["score"],
         vocabulary_score=vocab_result["score"],
+        vocab_engine=vocab_result.get("vocab_engine", "heuristic"),
         fluency_score=fluency_score,
         fluency_source=fluency_source,
         confidence_score=confidence_score,
@@ -217,6 +279,8 @@ def answer_question(
         structure_score=structure_score,
         filler_word_count=filler_count,
         relevance_score=relevance_result["score"],
+        relevance_reason=relevance_result.get("relevance_reason", ""),
+        relevance_engine=relevance_result.get("relevance_engine", "heuristic"),
         relevance_addressed_keywords=relevance_result["addressed_keywords"],
         relevance_missing_keywords=relevance_result["missing_keywords"],
         relevance_sufficient_data=relevance_result["sufficient_data"],
@@ -226,7 +290,12 @@ def answer_question(
         technical_missing_concepts=technical_result["missing_concepts"],
         technical_explanation=technical_result["explanation"],
         followup_question=followup_question,
+        followup_engine=followup_engine,
         feedback=feedback,
+        transcript=answer_text,
+        corrected_answer=corrected_answer,
+        corrections=corrections_list,
+        sentences=sentences_list,
     )
 
 

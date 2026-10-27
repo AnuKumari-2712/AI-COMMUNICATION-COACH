@@ -9,7 +9,6 @@ import { Stepper } from '@/components/shared/Stepper';
 import { RadialProgress } from '@/components/ui/RadialProgress';
 import { CommunicationOrb } from '@/components/three/CommunicationOrb';
 import { cn, scoreTone } from '@/lib/utils';
-import { currentStudent } from '@/data/mockData';
 import { practiceService } from '@/services/practiceService';
 import { studentService } from '@/services/studentService';
 import type { SkillScores, StudentProfile } from '@/types';
@@ -38,14 +37,17 @@ export default function OnboardingPage() {
   const [assessmentAnswer, setAssessmentAnswer] = useState('');
   const [generating, setGenerating] = useState(false);
   const [profileReady, setProfileReady] = useState(false);
-  const [finalScores, setFinalScores] = useState<SkillScores>(currentStudent.scores);
-  const [personalInfo, setPersonalInfo] = useState<StudentProfile>(currentStudent);
+  const [finalScores, setFinalScores] = useState<SkillScores>({
+    overall: 0, grammar: 0, vocabulary: 0, fluency: 0, pronunciation: 0,
+    confidence: 0, speakingPace: 0, fillerWords: 0, structure: 0,
+  });
+  const [personalInfo, setPersonalInfo] = useState<Partial<StudentProfile>>({});
 
   useEffect(() => {
-    // Prefill step 1 with what was actually entered at signup, not the
-    // "Ananya Sharma" demo profile — this only matters once the auth chain
-    // has a real per-student profile to fetch (see src/services/authService.ts).
-    studentService.getProfile().then(setPersonalInfo);
+    // Pre-fill step 1 with the real profile from the backend (name, email, college, etc.)
+    studentService.getProfile().then(setPersonalInfo).catch(() => {
+      // If backend is unreachable, leave fields empty — user can fill them in.
+    });
   }, []);
 
   const toggleGoal = (id: string) =>

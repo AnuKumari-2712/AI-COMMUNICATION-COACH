@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.nlp.llm_grammar import _clean_json_text, check_grammar
+from app.nlp.llm_grammar import _clean_json_text, check_grammar, check_grammar_claude
 from app.services.assessment_service import analyze_text
 
 
@@ -47,17 +47,15 @@ def test_check_grammar_raises_when_no_api_key(monkeypatch):
     with patch("app.nlp.llm_grammar.get_settings") as mock_settings:
         mock_settings.return_value.anthropic_api_key = None
         with pytest.raises(ValueError, match="ANTHROPIC_API_KEY not configured"):
-            check_grammar("This are wrong.")
+            check_grammar_claude("This are wrong.")
 
 
 def test_check_grammar_empty_string(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-mock")
     res = check_grammar("   ")
-    assert res == {
-        "corrected_text": "",
-        "sentences": [],
-        "total_mistakes": 0,
-    }
+    assert res["corrected_text"] == ""
+    assert res["sentences"] == []
+    assert res["total_mistakes"] == 0
 
 
 def test_check_grammar_with_mock_client(monkeypatch):

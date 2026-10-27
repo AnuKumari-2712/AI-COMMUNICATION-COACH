@@ -14,8 +14,8 @@ import type {
 
 export const currentStudent: StudentProfile = {
   id: 'stu_001',
-  name: 'Ananya Sharma',
-  email: 'ananya.sharma@example.edu',
+  name: 'Demo Student',
+  email: 'demo@example.com',
   college: 'Vellore Institute of Technology',
   course: 'B.Tech Computer Science',
   year: '3rd Year',
@@ -170,7 +170,7 @@ export const testimonials: Testimonial[] = [
 ];
 
 export const adminStudents: AdminStudentRow[] = [
-  { id: 's1', name: 'Ananya Sharma', email: 'ananya.sharma@example.edu', score: 74, progress: 82, lastActive: '2 hours ago', status: 'Active' },
+  { id: 's1', name: 'Demo Student', email: 'demo@example.com', score: 74, progress: 82, lastActive: '2 hours ago', status: 'Active' },
   { id: 's2', name: 'Rahul Verma', email: 'rahul.verma@example.edu', score: 92, progress: 95, lastActive: '1 day ago', status: 'Active' },
   { id: 's3', name: 'Priya Nair', email: 'priya.nair@example.edu', score: 88, progress: 90, lastActive: '3 hours ago', status: 'Active' },
   { id: 's4', name: 'Devansh Gupta', email: 'devansh.gupta@example.edu', score: 65, progress: 48, lastActive: '5 days ago', status: 'At Risk' },

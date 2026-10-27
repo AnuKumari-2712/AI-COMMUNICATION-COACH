@@ -29,8 +29,6 @@ export const primaryNav: NavItem[] = [
   { label: 'Grammar', path: '/app/practice/grammar', icon: SpellCheck },
   { label: 'Fluency', path: '/app/practice/fluency', icon: Waves },
   { label: 'Interview', path: '/app/interview', icon: Briefcase },
-  { label: 'Learning Plan', path: '/app/learning-plan', icon: CalendarDays },
-  { label: 'Analytics', path: '/app/analytics', icon: BarChart3 },
   { label: 'Achievements', path: '/app/achievements', icon: Trophy },
   { label: 'AI Coach', path: '/app/coach', icon: Bot },
 ];
@@ -44,6 +42,6 @@ export const mobileNav: NavItem[] = [
   { label: 'Dashboard', path: '/app/dashboard', icon: LayoutDashboard },
   { label: 'Voice', path: '/app/practice/voice', icon: Mic },
   { label: 'Interview', path: '/app/interview', icon: Briefcase },
-  { label: 'Analytics', path: '/app/analytics', icon: BarChart3 },
+  { label: 'AI Coach', path: '/app/coach', icon: Bot },
   { label: 'Profile', path: '/app/profile', icon: User },
 ];

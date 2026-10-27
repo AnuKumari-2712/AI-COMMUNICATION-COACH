@@ -23,6 +23,11 @@ export interface VoiceAnalysisResult {
   source: 'real' | 'mock';
   /** Who produced the transcript: the user's browser, the backend, or a canned sample sentence. */
   transcriptSource: 'browser' | 'server' | 'sample';
+  transcriptEngine?: 'whisper' | 'google' | 'browser' | 'sample' | 'failed';
+  words?: { word: string; start: number; end: number; probability: number }[];
+  unclearWords?: { word: string; confidence: number; start: number; end: number }[];
+  sentences?: SentenceAnalysis[];
+  grammarEngine?: 'claude' | 't5' | 'rules';
   /** true only when the backend could not be reached at all and everything is local demo data. */
   offline: boolean;
   /** Pronunciation is a transcript-only proxy in this project — never a real audio measurement. Always false. */
@@ -40,6 +45,10 @@ export interface VoiceAnalysisResult {
   corrections?: { original: string; corrected: string; reason: string; rule?: string; errorType?: string; sentence?: string }[];
   correctedAnswer?: string;
   vocabularySuggestions?: string[];
+  vocabEngine?: 'claude' | 'heuristic';
+  relevanceScore?: number;
+  relevanceReason?: string;
+  relevanceEngine?: 'claude' | 'heuristic' | 'none';
   repeatedWords?: string[];
   scoreReasons?: Record<string, string>;
   confidenceSignals?: string[];
@@ -55,6 +64,7 @@ export interface TextAnalysisResult {
   vocabularySuggestions: string[];
   betterAlternative: string;
   correctedAnswer: string;
+  grammarEngine?: 'claude' | 't5' | 'rules';
   /** 'real' = analyzed by the FastAPI backend's NLP pipeline, 'mock' = local demo data (backend not running). */
   source: 'real' | 'mock';
   grammarScore: number;
@@ -65,6 +75,9 @@ export interface TextAnalysisResult {
   grammarSufficientData: boolean;
   vocabularySufficientData: boolean;
   relevanceScore: number;
+  relevanceReason?: string;
+  relevanceEngine?: 'claude' | 'heuristic';
+  vocabEngine?: 'claude' | 'heuristic';
   relevanceAddressedKeywords: string[];
   relevanceMissingKeywords: string[];
   relevanceSufficientData: boolean;
@@ -87,6 +100,7 @@ function dynamicTextAnalysis(question: string, text: string): TextAnalysisResult
     sentences: analysis.sentences,
     totalMistakes: analysis.totalMistakes ?? analysis.corrections.length,
     correctedText: analysis.correctedText || analysis.correctedAnswer,
+    grammarEngine: 'rules',
     vocabularySuggestions: analysis.vocabularySuggestions,
     betterAlternative: analysis.betterAlternative,
     correctedAnswer: analysis.correctedAnswer,
@@ -112,7 +126,9 @@ interface BackendTextAnalysisResponse {
   sentences?: SentenceAnalysis[];
   total_mistakes?: number;
   corrected_text?: string;
+  grammar_engine?: 'claude' | 't5' | 'rules';
   vocabulary_suggestions: string[];
+  vocab_engine?: 'claude' | 'heuristic';
   better_alternative: string;
   corrected_answer?: string;
   grammar_score: number;
@@ -122,6 +138,8 @@ interface BackendTextAnalysisResponse {
   grammar_sufficient_data: boolean;
   vocabulary_sufficient_data: boolean;
   relevance_score: number;
+  relevance_reason?: string;
+  relevance_engine?: 'claude' | 'heuristic';
   relevance_addressed_keywords: string[];
   relevance_missing_keywords: string[];
   relevance_sufficient_data: boolean;
@@ -162,9 +180,15 @@ interface BackendSkillScores {
 interface BackendVoiceAnalysisResponse {
   source: 'real' | 'mock';
   transcript_source: 'browser' | 'server' | 'sample';
+  transcript_engine?: 'whisper' | 'google' | 'browser' | 'sample' | 'failed';
+  words?: { word: string; start: number; end: number; probability: number }[];
+  unclear_words?: { word: string; confidence: number; start: number; end: number }[];
+  sentences?: SentenceAnalysis[];
+  grammar_engine?: 'claude' | 't5' | 'rules';
   transcript: string;
   grammar_score: number;
   vocabulary_score: number;
+  vocab_engine?: 'claude' | 'heuristic';
   fluency_score: number;
   pronunciation_score: number | null;
   confidence_score: number;
@@ -173,6 +197,9 @@ interface BackendVoiceAnalysisResponse {
   words_per_minute: number;
   pace_source: 'measured' | 'estimated';
   reference_range_wpm: string;
+  relevance_score?: number;
+  relevance_reason?: string;
+  relevance_engine?: 'claude' | 'heuristic' | 'none';
   pronunciation_reliable: boolean;
   pronunciation_available?: boolean;
   pronunciation_method: string;
@@ -274,19 +301,21 @@ export const practiceService = {
    * backend can transcribe and measure pauses on without ffmpeg. Only if that
    * conversion is impossible does the backend fall back to a labeled mock.
    */
-  analyzeVoiceRecording: async (durationSec: number, audioBlob?: Blob, browserTranscript?: string): Promise<VoiceAnalysisResult> => {
+  analyzeVoiceRecording: async (durationSec: number, audioBlob?: Blob, browserTranscript?: string, question?: string): Promise<VoiceAnalysisResult> => {
     if (audioBlob) {
       try {
         const form = new FormData();
         form.append('duration_seconds', String(durationSec));
         form.append('audio', audioBlob, audioFileName(audioBlob, 'recording'));
         if (browserTranscript?.trim()) form.append('transcript', browserTranscript.trim());
+        if (question?.trim()) form.append('question', question.trim());
         const { data } = await apiClient.post<BackendVoiceAnalysisResponse>('/assessment/voice', form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
         return {
           grammar: data.grammar_score,
           vocabulary: data.vocabulary_score,
+          vocabEngine: data.vocab_engine || 'heuristic',
           fluency: data.fluency_score,
           pronunciation: data.pronunciation_score,
           pace: data.pace_score,
@@ -295,6 +324,8 @@ export const practiceService = {
           transcript: data.transcript,
           source: data.source,
           transcriptSource: data.transcript_source,
+          transcriptEngine: data.transcript_engine || (data.transcript_source === 'browser' ? 'browser' : 'whisper'),
+          words: data.words || [],
           offline: false,
           pronunciationReliable: data.pronunciation_reliable,
           pronunciationAvailable: data.pronunciation_available ?? false,
@@ -302,6 +333,9 @@ export const practiceService = {
           wordsPerMinute: data.words_per_minute,
           paceSource: data.pace_source,
           referenceRangeWpm: data.reference_range_wpm,
+          relevanceScore: data.relevance_score,
+          relevanceReason: data.relevance_reason,
+          relevanceEngine: data.relevance_engine,
           highConfidenceFillerCount: data.high_confidence_filler_count,
           ambiguousFillerCount: data.ambiguous_filler_count,
           fillerExcludedExamples: data.filler_excluded_examples,
@@ -319,6 +353,9 @@ export const practiceService = {
           scoreReasons: data.score_reasons || {},
           confidenceSignals: data.confidence_signals || [],
           sufficientData: data.sufficient_data ?? true,
+          unclearWords: data.unclear_words || [],
+          sentences: data.sentences || [],
+          grammarEngine: data.grammar_engine || 'rules',
         };
       } catch {
         // fall through to dynamic client evaluation below
@@ -399,14 +436,18 @@ export const practiceService = {
         correctedText: data.corrected_text || data.corrected_answer || '',
         sentences: data.sentences || [],
         totalMistakes: data.total_mistakes ?? data.corrections.length,
+        grammarEngine: data.grammar_engine || 'rules',
         source: 'real',
         grammarScore: data.grammar_score,
         vocabularyScore: data.vocabulary_score,
+        vocabEngine: data.vocab_engine || 'heuristic',
         structureScore: data.structure_score,
         clarityScore: data.clarity_score,
         grammarSufficientData: data.grammar_sufficient_data,
         vocabularySufficientData: data.vocabulary_sufficient_data,
         relevanceScore: data.relevance_score,
+        relevanceReason: data.relevance_reason,
+        relevanceEngine: data.relevance_engine || 'heuristic',
         relevanceAddressedKeywords: data.relevance_addressed_keywords,
         relevanceMissingKeywords: data.relevance_missing_keywords,
         relevanceSufficientData: data.relevance_sufficient_data,

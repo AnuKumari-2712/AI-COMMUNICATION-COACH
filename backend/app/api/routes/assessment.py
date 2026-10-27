@@ -45,6 +45,7 @@ async def analyze_voice(
     duration_seconds: float = Form(...),
     audio: UploadFile = File(...),
     transcript: str | None = Form(None),
+    question: str | None = Form(None),
 ):
     if duration_seconds <= 0:
         raise HTTPException(status_code=422, detail="duration_seconds must be positive — a real recording duration is required to compute pace/fluency metrics.")
@@ -60,7 +61,12 @@ async def analyze_voice(
     try:
         settings = get_settings()
         return assessment_service.analyze_voice_upload(
-            student_id, tmp_path, duration_seconds, settings.stt_language, client_transcript=transcript
+            student_id,
+            tmp_path,
+            duration_seconds,
+            settings.stt_language,
+            client_transcript=transcript,
+            question=question,
         )
     finally:
         os.remove(tmp_path)

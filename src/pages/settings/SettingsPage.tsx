@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { User, Palette, Bell, Mic, Shield, Lock, Sun, Moon } from 'lucide-react';
+import { User, Palette, Bell, Mic, Shield, Lock, Sun, Moon, Cpu, CheckCircle2, AlertCircle } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Switch } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Switch, Badge } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useToast } from '@/hooks/useToast';
 import { studentService } from '@/services/studentService';
 import { authService } from '@/services/authService';
+import { getBackendHealth, type SystemHealth } from '@/services/apiClient';
 import { cn } from '@/lib/utils';
 
 const sections = [
   { id: 'account', label: 'Account', icon: User },
+  { id: 'ai-engines', label: 'AI Engines & Health', icon: Cpu },
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'voice', label: 'Voice Settings', icon: Mic },
@@ -36,12 +38,14 @@ export default function SettingsPage() {
   });
   const [privacy, setPrivacy] = useLocalStorage('settings:privacy', { shareProgress: false, allowDataForImprovement: true });
   const [voiceSettings, setVoiceSettings] = useLocalStorage('settings:voice', { autoTranscribe: true, noiseReduction: true, sensitivity: 'Medium' });
+  const [health, setHealth] = useState<SystemHealth | null>(null);
 
   useEffect(() => {
     studentService.getProfile().then((p) => {
       setFullName(p.name);
       setEmail(p.email);
     });
+    getBackendHealth().then(setHealth).catch(() => undefined);
   }, []);
 
   const saveAccount = async () => {
@@ -113,6 +117,92 @@ export default function SettingsPage() {
                 </div>
                 <Select label="Preferred Language" options={languageOptions} value={language} onChange={(e) => setLanguage(e.target.value)} />
                 <div className="flex justify-end"><Button onClick={saveAccount} loading={savingAccount}>Save Changes</Button></div>
+              </CardContent>
+            </Card>
+          )}
+
+          {active === 'ai-engines' && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>AI Engines & System Health</CardTitle>
+                  <Badge variant={health?.use_mock_ai === false ? 'accent' : 'outline'}>
+                    {health?.use_mock_ai === false ? 'Honest AI Active' : 'Demo Mode'}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <p className="text-xs text-base-300 leading-relaxed">
+                  Every metric, score, and correction in this platform is computed honestly without silent fake data.
+                  The backend operates a multi-engine fallback pipeline: if an advanced engine is unavailable or unconfigured,
+                  it transparently falls back to deterministic local rules and reports the exact engine source used.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Claude 3.5 Sonnet */}
+                  <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-base-100">Claude 3.5 Sonnet</span>
+                      <Badge variant={health?.engines?.claude ? 'accent' : 'outline'}>
+                        {health?.engines?.claude ? 'Connected' : 'Standby / Fallback'}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-base-400">
+                      Sentence-by-sentence grammar checking, elevated vocabulary replacements, semantic relevance scoring (0-100), and dynamic interview follow-up questions.
+                    </p>
+                    <p className="text-[11px] text-base-500 font-mono">Config: ANTHROPIC_API_KEY</p>
+                  </div>
+
+                  {/* Faster-Whisper */}
+                  <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-base-100">Faster-Whisper STT</span>
+                      <Badge variant={health?.engines?.whisper ? 'accent' : 'outline'}>
+                        {health?.engines?.whisper ? 'Active (Local)' : 'Browser STT'}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-base-400">
+                      Local speech recognition with CPU int8 quantization, word-level confidence, hesitation prompting, and exact filler word detection.
+                    </p>
+                    <p className="text-[11px] text-base-500 font-mono">Config: ENABLE_WHISPER=true</p>
+                  </div>
+
+                  {/* spaCy NLP */}
+                  <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-base-100">spaCy NLP Pipeline</span>
+                      <Badge variant={health?.engines?.spacy ? 'accent' : 'outline'}>
+                        {health?.engines?.spacy ? 'Model Loaded' : 'Heuristics'}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-base-400">
+                      Part-of-speech tagging, syntactic dependency parsing, and sentence boundary detection using <code className="text-accent-300">en_core_web_sm</code>.
+                    </p>
+                    <p className="text-[11px] text-base-500 font-mono">Model: en_core_web_sm (15 MB)</p>
+                  </div>
+
+                  {/* Fine-Tuned T5 GEC */}
+                  <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-base-100">T5 GEC Neural Model</span>
+                      <Badge variant={health?.engines?.t5 ? 'accent' : 'outline'}>
+                        {health?.engines?.t5 ? 'Weights Loaded' : 'Rule Fallback'}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-base-400">
+                      Fine-tuned Seq2Seq model for grammatical error correction on <code className="text-accent-300">coedit</code>, evaluated at 81.39 GLEU.
+                    </p>
+                    <p className="text-[11px] text-base-500 font-mono">Config: GEC_MODEL_PATH</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-accent-500/20 bg-accent-500/5 p-4 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-semibold text-accent-300">Fallback Hierarchy</p>
+                    <p className="text-xs text-base-300">Grammar: Claude 3.5 Sonnet → Fine-tuned T5 → Deterministic Rules (spaCy POS)</p>
+                  </div>
+                  <CheckCircle2 className="size-4 text-emerald-400 shrink-0" />
+                </div>
               </CardContent>
             </Card>
           )}

@@ -6,6 +6,7 @@ import { RadialProgress } from '@/components/ui/RadialProgress';
 import { Waveform } from '@/components/shared/Waveform';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { practiceService, type VoiceAnalysisResult } from '@/services/practiceService';
+import { AnswerCorrectionBox } from '@/components/shared/AnswerCorrectionBox';
 import { formatDuration, scoreTone } from '@/lib/utils';
 
 const exercises = [
@@ -114,47 +115,70 @@ export default function FluencyPracticePage() {
           </Card>
 
           {result && (
-            <Card className="mt-6 p-6">
-              <h3 className="mb-4 font-display text-base font-semibold text-base-50">Fluency Report</h3>
-              {result.source === 'mock' && (
-                <p className="mb-4 rounded-lg border border-warning-500/20 bg-warning-500/5 p-3 text-xs text-base-300">
-                  {result.offline
-                    ? 'Demo data — backend offline.'
-                    : "Speech recognition couldn't transcribe this recording, so these numbers are based on a sample sentence, not what you said. Try again closer to the microphone."}
+            <>
+              <Card className="mt-6 p-6">
+                <h3 className="mb-4 font-display text-base font-semibold text-base-50">Fluency Report</h3>
+                {result.source === 'mock' && (
+                  <p className="mb-4 rounded-lg border border-warning-500/20 bg-warning-500/5 p-3 text-xs text-base-300">
+                    {result.offline
+                      ? 'Demo data — backend offline.'
+                      : "Speech recognition couldn't transcribe this recording, so these numbers are based on a sample sentence, not what you said. Try again closer to the microphone."}
+                  </p>
+                )}
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div className="flex flex-col items-center gap-2">
+                    <RadialProgress value={result.fluency} size={72} tone={scoreTone(result.fluency)} />
+                    <span className="text-xs text-base-300">Fluency</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-2">
+                    <RadialProgress value={result.pace} size={72} tone={scoreTone(result.pace)} />
+                    <span className="text-xs text-base-300">Pace Control</span>
+                  </div>
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    <span className="font-display text-2xl font-semibold text-warning-400">{result.fillerWordCount}</span>
+                    <span className="text-xs text-base-300">Filler Words</span>
+                  </div>
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    <span className="font-display text-2xl font-semibold text-accent-300">{Math.round(result.wordsPerMinute)}</span>
+                    <span className="text-xs text-base-300">
+                      Words / min {result.paceSource === 'measured' ? '(measured)' : '(estimated)'}
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-3 text-center text-xs text-base-500">
+                  Comfortable range: {result.referenceRangeWpm} wpm.{' '}
+                  {result.paceSource === 'measured'
+                    ? 'Measured from real pause/silence analysis of your recording.'
+                    : 'Estimated from your transcript — upload real WAV audio for a measured pace.'}
                 </p>
-              )}
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <div className="flex flex-col items-center gap-2">
-                  <RadialProgress value={result.fluency} size={72} tone={scoreTone(result.fluency)} />
-                  <span className="text-xs text-base-300">Fluency</span>
+                <div className="mt-5 flex justify-end">
+                  <Button variant="outline" size="sm" onClick={handleReset}>
+                    <RotateCcw className="size-4" /> Practice Another
+                  </Button>
                 </div>
-                <div className="flex flex-col items-center gap-2">
-                  <RadialProgress value={result.pace} size={72} tone={scoreTone(result.pace)} />
-                  <span className="text-xs text-base-300">Pace Control</span>
-                </div>
-                <div className="flex flex-col items-center justify-center gap-1">
-                  <span className="font-display text-2xl font-semibold text-warning-400">{result.fillerWordCount}</span>
-                  <span className="text-xs text-base-300">Filler Words</span>
-                </div>
-                <div className="flex flex-col items-center justify-center gap-1">
-                  <span className="font-display text-2xl font-semibold text-accent-300">{Math.round(result.wordsPerMinute)}</span>
-                  <span className="text-xs text-base-300">
-                    Words / min {result.paceSource === 'measured' ? '(measured)' : '(estimated)'}
-                  </span>
-                </div>
+              </Card>
+
+              <div className="mt-6">
+                <AnswerCorrectionBox
+                  transcript={result.transcript}
+                  correctedAnswer={result.correctedAnswer}
+                  corrections={
+                    result.corrections && result.corrections.length > 0
+                      ? result.corrections
+                      : (result.sentences || []).flatMap((s) =>
+                          (s.mistakes || []).map((m) => ({
+                            original: m.wrong,
+                            corrected: m.correct,
+                            reason: m.explanation,
+                            errorType: m.type,
+                            sentence: s.original,
+                          }))
+                        )
+                  }
+                  engine={result.grammarEngine || 'gemini'}
+                />
               </div>
-              <p className="mt-3 text-center text-xs text-base-500">
-                Comfortable range: {result.referenceRangeWpm} wpm.{' '}
-                {result.paceSource === 'measured'
-                  ? 'Measured from real pause/silence analysis of your recording.'
-                  : 'Estimated from your transcript — upload real WAV audio for a measured pace.'}
-              </p>
-              <div className="mt-5 flex justify-end">
-                <Button variant="outline" size="sm" onClick={handleReset}>
-                  <RotateCcw className="size-4" /> Practice Another
-                </Button>
-              </div>
-            </Card>
+            </>
           )}
         </div>
       </div>

@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Pencil, GraduationCap, Building2, Calendar, Target, Award } from 'lucide-react';
+import { Pencil, GraduationCap, Building2, Calendar, Target, Award, Loader2 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader, CardTitle, CardContent, Button, Modal, Input, Select, Badge } from '@/components/ui';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { DataSourceBadge } from '@/components/shared/DataSourceBadge';
 import { studentService, type PracticeHistoryEntry } from '@/services/studentService';
 import { useToast } from '@/hooks/useToast';
-import { currentStudent } from '@/data/mockData';
 import { scoreTone } from '@/lib/utils';
 import type { StudentProfile } from '@/types';
 
@@ -22,7 +21,9 @@ interface FormValues {
 }
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<StudentProfile>(currentStudent);
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   const [source, setSource] = useState<'real' | 'mock'>('mock');
   const [history, setHistory] = useState<PracticeHistoryEntry[]>([]);
   const [editOpen, setEditOpen] = useState(false);
@@ -30,20 +31,27 @@ export default function ProfilePage() {
   const { showToast } = useToast();
 
   const { register, handleSubmit, reset } = useForm<FormValues>({
-    defaultValues: { name: profile.name, college: profile.college, course: profile.course, year: profile.year, careerGoal: profile.careerGoal },
+    defaultValues: { name: '', college: '', course: '', year: '', careerGoal: '' },
   });
 
   useEffect(() => {
+    setProfileLoading(true);
     studentService.getProfile().then((p) => {
       setProfile(p);
       setSource(p.source);
       reset({ name: p.name, college: p.college, course: p.course, year: p.year, careerGoal: p.careerGoal });
+      setProfileLoading(false);
+    }).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Failed to load profile';
+      setProfileLoadError(msg);
+      setProfileLoading(false);
     });
     studentService.getPracticeHistory().then((res) => setHistory(res.items));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const openEdit = () => {
+    if (!profile) return;
     reset({ name: profile.name, college: profile.college, course: profile.course, year: profile.year, careerGoal: profile.careerGoal });
     setEditOpen(true);
   };
@@ -51,19 +59,19 @@ export default function ProfilePage() {
   const onSubmit = async (values: FormValues) => {
     setSaving(true);
     const updated = await studentService.updateProfile(values);
-    setProfile((prev) => ({ ...prev, ...updated }));
+    setProfile((prev) => (prev ? { ...prev, ...updated } : null));
     setSaving(false);
     setEditOpen(false);
     showToast({ title: 'Profile updated', variant: 'success' });
   };
 
-  const skillRows: { label: string; value: number }[] = [
+  const skillRows: { label: string; value: number }[] = profile ? [
     { label: 'Grammar', value: profile.scores.grammar },
     { label: 'Vocabulary', value: profile.scores.vocabulary },
     { label: 'Fluency', value: profile.scores.fluency },
     { label: 'Pronunciation', value: profile.scores.pronunciation },
     { label: 'Confidence', value: profile.scores.confidence },
-  ];
+  ] : [];
 
   return (
     <div>
@@ -73,6 +81,18 @@ export default function ProfilePage() {
         description="Your details, communication level and skill progress."
         actions={<DataSourceBadge source={source} />}
       />
+
+      {profileLoading && (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="size-8 animate-spin text-accent-400" />
+        </div>
+      )}
+      {profileLoadError && (
+        <div className="mb-4 rounded-xl border border-danger-500/30 bg-danger-500/10 p-4 text-sm text-danger-300">
+          Failed to load profile: {profileLoadError}
+        </div>
+      )}
+      {!profileLoading && profile && (
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="p-6 lg:col-span-1">
@@ -139,6 +159,7 @@ export default function ProfilePage() {
           </Card>
         </div>
       </div>
+      )} {/* end !profileLoading && profile */}
 
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Profile" description="Update your personal and academic details.">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

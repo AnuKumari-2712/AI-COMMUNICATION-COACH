@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Flame, Gauge, Clock, TrendingUp, CheckCircle2, Circle, ArrowRight, BookOpen, Mic, Briefcase, SpellCheck } from 'lucide-react';
+import { Flame, Gauge, Clock, TrendingUp, CheckCircle2, Circle, ArrowRight, BookOpen, Mic, Briefcase, SpellCheck, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatCard } from '@/components/shared/StatCard';
 import { SkillScoreCard } from '@/components/shared/SkillScoreCard';
@@ -22,6 +22,7 @@ export default function DashboardPage() {
   const { student: authStudent } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [activity, setActivity] = useState<WeeklyActivityPoint[]>([]);
@@ -29,22 +30,34 @@ export default function DashboardPage() {
   const [plan, setPlan] = useState<DayPlan | null>(null);
   const [dataSource, setDataSource] = useState<'real' | 'mock'>('mock');
 
-  useEffect(() => {
+  const loadData = () => {
+    setLoading(true);
+    setLoadError(null);
     Promise.all([
       studentService.getProfile(),
       studentService.getTrend(),
       studentService.getWeeklyActivity(),
       studentService.getSkillDistribution(),
       studentService.getTodaysPlan(),
-    ]).then(([p, t, a, d, plan]) => {
-      setProfile(p);
-      setTrend(t);
-      setActivity(a);
-      setDistribution(d);
-      setPlan(plan);
-      setDataSource(p.source);
-      setLoading(false);
-    });
+    ])
+      .then(([p, t, a, d, plan]) => {
+        setProfile(p);
+        setTrend(t);
+        setActivity(a);
+        setDistribution(d);
+        setPlan(plan);
+        setDataSource(p.source);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'Failed to load dashboard data';
+        setLoadError(msg);
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
   const [tasks, setTasks] = useState(plan?.tasks ?? []);
@@ -56,7 +69,7 @@ export default function DashboardPage() {
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const firstName = authStudent.name.split(' ')[0];
+  const firstName = authStudent?.name ? authStudent.name.split(' ')[0] : (profile?.name ? profile.name.split(' ')[0] : '');
 
   return (
     <div>
@@ -74,14 +87,34 @@ export default function DashboardPage() {
         }
       />
 
+      {loadError && (
+        <div className="mb-6 flex items-center justify-between rounded-xl border border-danger-500/30 bg-danger-500/10 p-4 text-sm text-danger-300">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="size-5 shrink-0 text-danger-400" />
+            <span>Could not load dashboard data: {loadError}</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={loadData}>
+            Retry
+          </Button>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {loading || !profile ? (
           Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
         ) : (
           <>
-            <StatCard index={0} icon={<Gauge className="size-5" />} label="Overall Communication Score" value={profile.scores.overall} suffix="/ 100" trend={6} tone="accent" />
-            <StatCard index={1} icon={<Flame className="size-5" />} label="Learning Streak" value={profile.streakDays} suffix="days" trend={12} tone="warning" />
-            <StatCard index={2} icon={<TrendingUp className="size-5" />} label="Weekly Progress" value="+9" suffix="pts" trend={9} tone="success" />
+            <StatCard
+              index={0}
+              icon={<Gauge className="size-5" />}
+              label="Overall Communication Score"
+              value={profile.scores.overall > 0 ? profile.scores.overall : 'No data yet'}
+              suffix={profile.scores.overall > 0 ? '/ 100' : undefined}
+              trend={profile.scores.overall > 0 ? 6 : undefined}
+              tone="accent"
+            />
+            <StatCard index={1} icon={<Flame className="size-5" />} label="Learning Streak" value={profile.streakDays} suffix="days" trend={profile.streakDays > 0 ? 12 : undefined} tone="warning" />
+            <StatCard index={2} icon={<TrendingUp className="size-5" />} label="Weekly Progress" value={profile.scores.overall > 0 ? '+9' : '0'} suffix="pts" trend={profile.scores.overall > 0 ? 9 : undefined} tone="success" />
             <StatCard index={3} icon={<Clock className="size-5" />} label="Practice Time" value={Math.round(profile.totalPracticeMinutes / 60)} suffix="hrs total" tone="accent" />
           </>
         )}

@@ -25,8 +25,20 @@ try:
 except ImportError:
     audioop = None
 import contextlib
+import logging
+import os
+import shutil
+import subprocess
+import tempfile
 import wave
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
+
+
+class AudioConversionError(RuntimeError):
+    """Raised when audio conversion fails or required tools are missing."""
+    pass
 
 
 @dataclass
@@ -131,3 +143,105 @@ def analyze_wav_pauses(
         long_pause_count=sum(1 for r in pauses if r >= long_windows),
         silence_threshold_used=round(threshold, 1),
     )
+
+
+def convert_to_wav_16k(input_path: str, output_path: str | None = None) -> str:
+    """
+    Ensures input audio file is in 16kHz mono 16-bit PCM WAV format.
+    - Returns input_path if already 16kHz mono WAV.
+    - If ffmpeg is in PATH, runs ffmpeg to convert webm/ogg/mp4/etc.
+    - If ffmpeg is missing:
+      - Uses stdlib wave/audioop for WAV files of different formats.
+      - Uses PyAV (av) if installed for compressed containers.
+      - Raises AudioConversionError with clear instructions to install ffmpeg.
+    """
+    if not os.path.exists(input_path):
+        raise FileNotFoundError(f"Audio file does not exist: {input_path}")
+
+    # Check if already 16kHz mono 16-bit WAV
+    try:
+        with contextlib.closing(wave.open(input_path, "rb")) as w:
+            if w.getnchannels() == 1 and w.getframerate() == 16000 and w.getsampwidth() == 2:
+                return input_path
+    except (wave.Error, EOFError, OSError):
+        pass
+
+    target_path = output_path
+    if not target_path:
+        fd, target_path = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+
+    # 1. Try ffmpeg if available in PATH
+    ffmpeg_bin = shutil.which("ffmpeg")
+    if ffmpeg_bin:
+        try:
+            cmd = [
+                ffmpeg_bin,
+                "-y",
+                "-i", input_path,
+                "-ar", "16000",
+                "-ac", "1",
+                "-c:a", "pcm_s16le",
+                target_path,
+            ]
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            if os.path.exists(target_path) and os.path.getsize(target_path) > 44:
+                return target_path
+        except (subprocess.CalledProcessError, OSError) as e:
+            logger.warning("ffmpeg conversion attempt failed: %s", e)
+
+    # 2. Try stdlib wave/audioop if it's already a WAV of different sample rate or channels
+    try:
+        with contextlib.closing(wave.open(input_path, "rb")) as w:
+            n_ch = w.getnchannels()
+            s_width = w.getsampwidth()
+            f_rate = w.getframerate()
+            frames = w.readframes(w.getnframes())
+
+        if audioop is not None and frames:
+            if s_width != 2:
+                frames = audioop.lin2lin(frames, s_width, 2)
+                s_width = 2
+            if n_ch > 1:
+                frames = audioop.tomono(frames, s_width, 0.5, 0.5)
+                n_ch = 1
+            if f_rate != 16000:
+                frames, _ = audioop.ratecv(frames, s_width, 1, f_rate, 16000, None)
+                f_rate = 16000
+
+            with contextlib.closing(wave.open(target_path, "wb")) as out_w:
+                out_w.setnchannels(1)
+                out_w.setsampwidth(2)
+                out_w.setframerate(16000)
+                out_w.writeframes(frames)
+            return target_path
+    except Exception:
+        pass
+
+    # 3. Try PyAV (av) if installed
+    try:
+        import av
+        container = av.open(input_path)
+        stream = next((s for s in container.streams if s.type == "audio"), None)
+        if stream is not None:
+            resampler = av.AudioResampler(format="s16", layout="mono", rate=16000)
+            with contextlib.closing(wave.open(target_path, "wb")) as out_w:
+                out_w.setnchannels(1)
+                out_w.setsampwidth(2)
+                out_w.setframerate(16000)
+                for packet in container.demux(stream):
+                    for frame in packet.decode():
+                        resampled = resampler.resample(frame)
+                        for r_frame in (resampled if isinstance(resampled, list) else [resampled]):
+                            if r_frame is not None:
+                                out_w.writeframes(r_frame.to_ndarray().tobytes())
+            if os.path.exists(target_path) and os.path.getsize(target_path) > 44:
+                return target_path
+    except Exception as exc:
+        logger.debug("PyAV audio decoding fallback failed: %s", exc)
+
+    raise AudioConversionError(
+        "Audio conversion requires ffmpeg (or av package). "
+        "Please install ffmpeg on your server/system or upload audio in WAV format."
+    )
+

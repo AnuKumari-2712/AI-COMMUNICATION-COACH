@@ -19,7 +19,7 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Badge, ProgressBar } 
 import { ScoreDonutChart } from '@/components/charts/ScoreDonutChart';
 import { practiceService, type TextAnalysisResult } from '@/services/practiceService';
 import { chartColors } from '@/lib/chartTheme';
-import { scoreTone } from '@/lib/utils';
+import { cn, scoreTone } from '@/lib/utils';
 
 export interface PracticeQuestion {
   id: string;
@@ -450,7 +450,30 @@ export default function TextPracticePage() {
             <Card className="lg:col-span-2">
               <CardHeader>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <CardTitle>Grammar & Style Corrections</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle>Grammar & Style Corrections</CardTitle>
+                    {result.grammarEngine && (
+                      <Badge
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          'text-[10px] font-semibold tracking-wide uppercase',
+                          result.grammarEngine === 'claude'
+                            ? 'border-purple-500/40 bg-purple-500/10 text-purple-300'
+                            : result.grammarEngine === 't5'
+                            ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300'
+                            : 'border-base-500/40 bg-base-500/10 text-base-300',
+                        )}
+                      >
+                        <Sparkles className="size-3 mr-1" />
+                        {result.grammarEngine === 'claude'
+                          ? 'Claude AI'
+                          : result.grammarEngine === 't5'
+                          ? 'T5 Model'
+                          : 'Rule Engine'}
+                      </Badge>
+                    )}
+                  </div>
                   <Badge
                     variant={(result.totalMistakes ?? result.corrections.length) === 0 ? 'success' : 'warning'}
                     size="sm"
@@ -539,7 +562,17 @@ export default function TextPracticePage() {
                           {/* Corrected Sentence */}
                           {hasErrors && (
                             <div className="mt-2 space-y-1">
-                              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Corrected</span>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Corrected</span>
+                                <button
+                                  type="button"
+                                  onClick={() => navigator.clipboard.writeText(sent.corrected)}
+                                  className="flex items-center gap-1 text-[10px] text-emerald-400/80 hover:text-emerald-300 transition-colors"
+                                  title="Copy corrected sentence"
+                                >
+                                  <Copy className="size-2.5" /> Copy
+                                </button>
+                              </div>
                               <p className="rounded-lg border border-emerald-500/25 bg-emerald-950/20 p-2.5 text-xs font-medium leading-relaxed text-emerald-200">
                                 {sent.corrected}
                               </p>
@@ -718,15 +751,30 @@ export default function TextPracticePage() {
               <div className="flex items-center gap-2 text-accent-400">
                 <Target className="size-5" />
                 <h3 className="font-display text-base font-semibold text-base-50">Answer Relevance</h3>
+                {result.relevanceEngine && (
+                  <Badge
+                    variant={result.relevanceEngine === 'claude' ? 'accent' : 'outline'}
+                    size="sm"
+                    className="text-[10px]"
+                  >
+                    {result.relevanceEngine === 'claude' ? 'Claude AI' : 'Keyword Match'}
+                  </Badge>
+                )}
               </div>
               <span className={`font-display text-xl font-semibold ${getScoreTextColor(result.relevanceScore)}`}>
                 {Math.round(result.relevanceScore)}%
               </span>
             </div>
-            <p className="mb-3 text-xs text-base-400">
-              Measures whether your answer directly addresses the interview question keywords and theme.
-              {!result.relevanceSufficientData && ' This response had too few words to judge topic relevance with certainty.'}
-            </p>
+            {result.relevanceReason ? (
+              <p className="mb-3 text-xs text-base-200 bg-base-900/60 rounded-lg p-2.5 border border-white/5">
+                <strong className="text-accent-300">AI Assessment:</strong> {result.relevanceReason}
+              </p>
+            ) : (
+              <p className="mb-3 text-xs text-base-400">
+                Measures whether your answer directly addresses the interview question keywords and theme.
+                {!result.relevanceSufficientData && ' This response had too few words to judge topic relevance with certainty.'}
+              </p>
+            )}
             {result.relevanceAddressedKeywords.length > 0 && (
               <div className="mb-2 flex flex-wrap items-center gap-1.5">
                 <span className="text-xs text-base-400">Addressed:</span>
@@ -792,9 +840,20 @@ export default function TextPracticePage() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card className="p-5">
-              <div className="mb-3 flex items-center gap-2 text-accent-400">
-                <Lightbulb className="size-5" />
-                <h3 className="font-display text-base font-semibold text-base-50">Vocabulary Suggestions</h3>
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-accent-400">
+                  <Lightbulb className="size-5" />
+                  <h3 className="font-display text-base font-semibold text-base-50">Vocabulary Suggestions</h3>
+                </div>
+                {result.vocabEngine && (
+                  <Badge
+                    variant={result.vocabEngine === 'claude' ? 'accent' : 'outline'}
+                    size="sm"
+                    className="text-[10px]"
+                  >
+                    {result.vocabEngine === 'claude' ? 'Claude AI' : 'Rule Heuristics'}
+                  </Badge>
+                )}
               </div>
               <ul className="space-y-2">
                 {result.vocabularySuggestions.map((s, i) => (

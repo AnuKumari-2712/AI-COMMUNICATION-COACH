@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.schemas.common import AnalysisSource
+from app.schemas.assessment import GrammarCorrection, SentenceAnalysis
 
 
 class InterviewCategory(BaseModel):
@@ -77,6 +78,9 @@ class InterviewAnswerResponse(BaseModel):
     relevance_addressed_keywords: list[str] = []
     relevance_missing_keywords: list[str] = []
     relevance_sufficient_data: bool = True
+    relevance_reason: str = ""
+    relevance_engine: Literal["gemini", "claude", "heuristic"] = "heuristic"
+    vocab_engine: Literal["gemini", "claude", "heuristic"] = "heuristic"
     # MODULE 8: only the fixed technical-interview questions have a known
     # concept checklist to verify against — see technical_knowledge.py.
     # applicable=False for any question without one (dynamic resume/job-role
@@ -91,7 +95,12 @@ class InterviewAnswerResponse(BaseModel):
     # nothing specific enough to follow up on, rather than a generic,
     # disconnected question.
     followup_question: InterviewQuestion | None = None
+    followup_engine: Literal["gemini", "claude", "heuristic"] = "heuristic"
     feedback: str
+    transcript: str = ""
+    corrected_answer: str = ""
+    corrections: list[GrammarCorrection] = []
+    sentences: list[SentenceAnalysis] = []
 
 
 class InterviewSubmitRequest(BaseModel):

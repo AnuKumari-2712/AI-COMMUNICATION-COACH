@@ -72,6 +72,88 @@ def _match_topic(message: str) -> str | None:
 
 
 def _generate_reply(profile: LearnerProfile, message: str) -> str:
+    system_prompt = f"""You are Coach Aria, an intelligent, versatile, and friendly AI Coach and personal mentor for {profile.full_name}.
+
+You can answer ANY question the user asks accurately, comprehensively, and helpfully:
+1. Communication & English: Grammar, vocabulary enhancements, fluency tips, pronunciation advice, and presentation techniques.
+2. Interview Preparation: Behavioral answers (using the STAR method), technical questions, model responses, and salary/career negotiation.
+3. General Knowledge & Learning: Coding/technical concepts, mathematics, science, writing/editing emails, general queries, and translations.
+
+User Profile Context:
+- Full Name: {profile.full_name}
+- Career Goal: {profile.career_goal or 'Professional Communicator'}
+- Current Level: {getattr(profile, 'current_level', 'medium')}
+- Focus Weaknesses: {', '.join(profile.weaknesses) if profile.weaknesses else 'None flagged yet'}
+
+Guidelines:
+1. Answer ANY question asked directly, accurately, and thoroughly. Never refuse questions or say you can only discuss communication drills.
+2. Use clear formatting with bold key points, bullet lists, and structured explanations.
+3. If the user asks in Hindi or Hinglish, respond in natural, friendly Hinglish/English.
+4. Be encouraging, clear, and actionable."""
+
+    from app.core.config import get_settings
+    import os
+
+    settings = get_settings()
+
+    # 1. Try Gemini first if GEMINI_API_KEY is configured
+    gemini_key = os.getenv("GEMINI_API_KEY") or getattr(settings, "gemini_api_key", None)
+    if gemini_key and gemini_key.strip():
+        try:
+            import requests
+            candidate_models = []
+            preferred_model = os.getenv("GEMINI_MODEL") or getattr(settings, "gemini_model", "gemini-3.5-flash")
+            for m in [preferred_model, "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemma-4-26b-a4b-it", "gemini-2.5-flash"]:
+                if m and m not in candidate_models:
+                    candidate_models.append(m)
+
+            payload = {
+                "system_instruction": {"parts": [{"text": system_prompt}]},
+                "contents": [{"parts": [{"text": message}]}],
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": 1024
+                }
+            }
+
+            for candidate in candidate_models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{candidate}:generateContent?key={gemini_key.strip()}"
+                try:
+                    resp = requests.post(url, json=payload, timeout=25)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts and parts[0].get("text"):
+                                return parts[0]["text"].strip()
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    # 2. Try Claude if ANTHROPIC_API_KEY is configured
+    try:
+        from anthropic import Anthropic
+        if settings.anthropic_api_key and settings.anthropic_api_key.strip():
+            client = Anthropic(api_key=settings.anthropic_api_key)
+            model_name = getattr(settings, "grammar_model", "claude-3-5-sonnet-20241022")
+            response = client.messages.create(
+                model=model_name,
+                max_tokens=800,
+                temperature=0.7,
+                system=system_prompt,
+                messages=[{"role": "user", "content": message}],
+            )
+            if response.content and len(response.content) > 0:
+                reply_text = response.content[0].text.strip()
+                if reply_text:
+                    return reply_text
+    except Exception:
+        pass
+
+
+    # 2. Rule-based intelligent fallback if Claude is unavailable
     lower = message.lower().strip()
 
     if any(g in lower for g in _GREETINGS) and len(lower) < 20:
@@ -101,3 +183,4 @@ def _generate_reply(profile: LearnerProfile, message: str) -> str:
 def chat(student_id: str, message: str) -> str:
     profile = learner_profile.get_profile(student_id) or learner_profile.get_or_create_demo_profile()
     return _generate_reply(profile, message)
+

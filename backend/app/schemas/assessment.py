@@ -56,6 +56,7 @@ class TextAnalysisResponse(BaseModel):
     sentences: list[SentenceAnalysis] = []
     total_mistakes: int = Field(default=0, ge=0)
     corrected_text: str = ""
+    grammar_engine: Literal["gemini", "claude", "t5", "rules"] = "rules"
     vocabulary_suggestions: list[str]
     repeated_words: list[str]
     better_alternative: str
@@ -84,6 +85,9 @@ class TextAnalysisResponse(BaseModel):
     relevance_missing_keywords: list[str] = []
     relevance_score_formula: str = ""
     relevance_sufficient_data: bool = True
+    relevance_reason: str = ""
+    relevance_engine: Literal["gemini", "claude", "heuristic"] = "heuristic"
+    vocab_engine: Literal["gemini", "claude", "heuristic"] = "heuristic"
     # MODULE 10 transparency — see scoring_engine.py::compute_weighted_score.
     # `score` above is now a documented, reproducible weighted blend of
     # grammar/vocabulary/structure/clarity/relevance; any component whose
@@ -136,10 +140,19 @@ class VoiceAnalysisResponse(BaseModel):
     # browser, "server" = recognized by the backend, "sample" = recognition
     # failed and this is a canned sentence, not the user's words.
     transcript_source: Literal["browser", "server", "sample"] = "server"
+    transcript_engine: Literal["whisper", "google", "browser", "sample", "failed"] = "whisper"
+    words: list[dict] = []
+    unclear_words: list[dict] = []
+    sentences: list[SentenceAnalysis] = []
+    grammar_engine: Literal["gemini", "claude", "t5", "rules"] = "rules"
     # Actionable sentence-by-sentence feedback & evidence fields
     corrections: list[GrammarCorrection] = []
     corrected_answer: str = ""
     vocabulary_suggestions: list[str] = []
+    vocab_engine: Literal["gemini", "claude", "heuristic"] = "heuristic"
+    relevance_score: float = Field(default=0.0, ge=0, le=100)
+    relevance_reason: str = ""
+    relevance_engine: Literal["gemini", "claude", "heuristic", "none"] = "none"
     score_reasons: dict[str, str] = Field(default_factory=dict)
     pronunciation_available: bool = False
     confidence_signals: list[str] = Field(default_factory=list)
