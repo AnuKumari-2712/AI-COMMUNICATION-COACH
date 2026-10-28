@@ -66,8 +66,8 @@ def _call_gemini_json_api(system_prompt: str, user_content: str) -> dict:
         raise ValueError("GEMINI_API_KEY not configured")
 
     candidate_models = []
-    preferred_model = os.getenv("GEMINI_MODEL") or getattr(settings, "gemini_model", "gemini-2.5-flash")
-    for m in [preferred_model, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
+    preferred_model = os.getenv("GEMINI_MODEL") or getattr(settings, "gemini_model", "gemini-3-flash-preview")
+    for m in [preferred_model, "gemini-3-flash-preview", "gemini-3.5-flash", "gemini-2.5-flash"]:
         if m and m not in candidate_models:
             candidate_models.append(m)
 

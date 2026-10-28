@@ -67,7 +67,7 @@ class Settings(BaseSettings):
 
     # AI NLP & Grammar Engines (Prompt 4, 7, 8 + Gemini)
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3-flash-preview"
     anthropic_api_key: str | None = None
     grammar_model: str = "claude-3-5-sonnet-20241022"
     gec_model_path: str = "models/gec-t5"

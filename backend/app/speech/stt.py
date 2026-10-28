@@ -124,11 +124,28 @@ def _recognize_gemini(file_path: str) -> str:
         },
     }
 
-    model = os.getenv("GEMINI_MODEL") or getattr(settings, "gemini_model", "gemini-2.5-flash")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key.strip()}"
-    resp = requests.post(url, json=payload, timeout=45)
-    if resp.status_code != 200:
-        raise ValueError(f"Gemini audio transcription failed ({resp.status_code}): {resp.text}")
+    candidate_models = []
+    preferred_model = os.getenv("GEMINI_MODEL") or getattr(settings, "gemini_model", "gemini-3-flash-preview")
+    for m in [preferred_model, "gemini-3-flash-preview", "gemini-3.5-flash", "gemini-2.5-flash"]:
+        if m and m not in candidate_models:
+            candidate_models.append(m)
+
+    resp = None
+    last_err = ""
+    for model in candidate_models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key.strip()}"
+        try:
+            r = requests.post(url, json=payload, timeout=45)
+            if r.status_code == 200:
+                resp = r
+                break
+            else:
+                last_err = f"model {model} returned {r.status_code}: {r.text}"
+        except Exception as e:
+            last_err = f"model {model} error: {e}"
+
+    if resp is None:
+        raise ValueError(f"Gemini audio transcription failed across all candidate models: {last_err}")
 
     data = resp.json()
     candidates = data.get("candidates", [])
@@ -136,6 +153,19 @@ def _recognize_gemini(file_path: str) -> str:
         raise ValueError("No candidates from Gemini audio transcription")
 
     text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+
+    # Reject prompt echo hallucinations on silent or empty audio
+    prompt_leak_phrases = [
+        "please transcribe",
+        "spoken words in this audio",
+        "output only the plain",
+        "do not add speaker tags",
+        "verbatim into english",
+    ]
+    lower_text = text.lower()
+    if any(phrase in lower_text for phrase in prompt_leak_phrases):
+        raise ValueError("Gemini returned prompt instructions instead of speech transcription")
+
     return text
 
 
