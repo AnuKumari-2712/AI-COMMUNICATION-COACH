@@ -23,11 +23,11 @@ export interface VoiceAnalysisResult {
   source: 'real' | 'mock';
   /** Who produced the transcript: the user's browser, the backend, or a canned sample sentence. */
   transcriptSource: 'browser' | 'server' | 'sample';
-  transcriptEngine?: 'whisper' | 'google' | 'browser' | 'sample' | 'failed';
+  transcriptEngine?: 'gemini' | 'whisper' | 'google' | 'browser' | 'sample' | 'failed';
   words?: { word: string; start: number; end: number; probability: number }[];
   unclearWords?: { word: string; confidence: number; start: number; end: number }[];
   sentences?: SentenceAnalysis[];
-  grammarEngine?: 'claude' | 't5' | 'rules';
+  grammarEngine?: 'gemini' | 'claude' | 't5' | 'rules';
   /** true only when the backend could not be reached at all and everything is local demo data. */
   offline: boolean;
   /** Pronunciation is a transcript-only proxy in this project — never a real audio measurement. Always false. */

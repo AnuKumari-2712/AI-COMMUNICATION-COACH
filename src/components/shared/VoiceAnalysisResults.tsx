@@ -196,6 +196,11 @@ export function VoiceAnalysisResults({ result }: { result: VoiceAnalysisResult }
               <CardTitle className="text-base font-semibold text-base-50">Sentence-by-Sentence Grammar & Style</CardTitle>
             </div>
             <div className="flex items-center gap-2">
+              {result.grammarEngine === 'gemini' && (
+                <Badge variant="accent" size="sm" className="text-[10px] bg-blue-500/20 border-blue-500/30 text-blue-300">
+                  Gemini AI Engine
+                </Badge>
+              )}
               {result.grammarEngine === 'claude' && (
                 <Badge variant="accent" size="sm" className="text-[10px]">
                   Claude AI Engine
@@ -564,6 +569,11 @@ export function VoiceAnalysisResults({ result }: { result: VoiceAnalysisResult }
         <div className="mb-2 flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-wide text-base-400">Spoken Transcript</p>
           <div className="flex items-center gap-2">
+            {result.transcriptEngine === 'gemini' && (
+              <Badge variant="accent" size="sm" className="text-[10px] bg-blue-500/20 border-blue-500/30 text-blue-300">
+                Gemini Multimodal STT
+              </Badge>
+            )}
             {result.transcriptEngine === 'whisper' && (
               <Badge variant="success" size="sm" className="text-[10px]">
                 Faster-Whisper AI

@@ -126,7 +126,7 @@ def _recognize_gemini(file_path: str) -> str:
 
     model = os.getenv("GEMINI_MODEL") or getattr(settings, "gemini_model", "gemini-2.5-flash")
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key.strip()}"
-    resp = requests.post(url, json=payload, timeout=25)
+    resp = requests.post(url, json=payload, timeout=45)
     if resp.status_code != 200:
         raise ValueError(f"Gemini audio transcription failed ({resp.status_code}): {resp.text}")
 
@@ -193,13 +193,17 @@ def transcribe_audio(
         logger.warning("Audio conversion to 16kHz WAV failed (%s). Proceeding with original path.", exc)
 
     # 1. Try Gemini Multimodal STT first (captures full sentences accurately)
-    try:
-        gemini_text = _recognize_gemini(converted_path)
-        if gemini_text and gemini_text.strip() and gemini_text.strip().lower() != "empty":
-            logger.info("Speech transcribed successfully with Gemini Multimodal STT.")
-            return gemini_text.strip(), "gemini", []
-    except Exception as exc:
-        logger.info("Gemini multimodal STT skipped/failed (%s), trying Whisper/Google...", exc)
+    # Attempt with original file first (webm/ogg) — Gemini handles them natively
+    # and original quality is better than re-encoded WAV.
+    for stt_path in ([file_path, converted_path] if file_path != converted_path else [converted_path]):
+        try:
+            gemini_text = _recognize_gemini(stt_path)
+            if gemini_text and gemini_text.strip() and gemini_text.strip().lower() != "empty":
+                logger.info("Speech transcribed successfully with Gemini Multimodal STT (path=%s).", stt_path)
+                return gemini_text.strip(), "gemini", []
+        except Exception as exc:
+            logger.info("Gemini multimodal STT failed for %s (%s), trying next...", stt_path, exc)
+    logger.info("Gemini multimodal STT exhausted all attempts, trying Whisper/Google...")
 
     # 2. Try Whisper STT
     whisper_active = whisper_stt.is_whisper_enabled() if enable_whisper is None else enable_whisper

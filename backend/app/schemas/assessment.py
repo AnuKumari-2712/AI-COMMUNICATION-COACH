@@ -140,7 +140,7 @@ class VoiceAnalysisResponse(BaseModel):
     # browser, "server" = recognized by the backend, "sample" = recognition
     # failed and this is a canned sentence, not the user's words.
     transcript_source: Literal["browser", "server", "sample"] = "server"
-    transcript_engine: Literal["whisper", "google", "browser", "sample", "failed"] = "whisper"
+    transcript_engine: Literal["gemini", "whisper", "google", "browser", "sample", "failed"] = "gemini"
     words: list[dict] = []
     unclear_words: list[dict] = []
     sentences: list[SentenceAnalysis] = []
