@@ -7,7 +7,7 @@
  * 2. If it fails within 3 s, assume the backend is sleeping → show "waking up" banner.
  * 3. Retry every 8 s until the backend responds, then hide the banner.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { apiClient } from '@/services/apiClient';
 
@@ -19,6 +19,7 @@ export function BackendStatusBanner() {
   const [status, setStatus] = useState<Status>('checking');
   const [healthData, setHealthData] = useState<SystemHealth | null>(null);
   const [dismissedReady, setDismissedReady] = useState(false);
+  const isReadyRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,18 +29,19 @@ export function BackendStatusBanner() {
         const res = await apiClient.get<SystemHealth>('/health', { timeout: 8000 });
         if (!cancelled) {
           setHealthData(res.data);
+          isReadyRef.current = true;
           setStatus('ready');
         }
       } catch {
-        if (!cancelled) setStatus('waking');
+        if (!cancelled && !isReadyRef.current) setStatus('waking');
       }
     };
 
     void check();
 
-    // Retry every 8 s while waking.
+    // Retry every 5 s while waking.
     const interval = setInterval(async () => {
-      if (status === 'ready') {
+      if (isReadyRef.current) {
         clearInterval(interval);
         return;
       }
@@ -47,25 +49,25 @@ export function BackendStatusBanner() {
         const res = await apiClient.get<SystemHealth>('/health', { timeout: 8000 });
         if (!cancelled) {
           setHealthData(res.data);
+          isReadyRef.current = true;
           setStatus('ready');
           clearInterval(interval);
         }
       } catch {
-        if (!cancelled) setStatus('waking');
+        if (!cancelled && !isReadyRef.current) setStatus('waking');
       }
-    }, 8000);
+    }, 5000);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-dismiss the "ready" banner after 6 s.
+  // Auto-dismiss the "ready" banner after 5 s.
   useEffect(() => {
     if (status === 'ready') {
-      const t = setTimeout(() => setDismissedReady(true), 6000);
+      const t = setTimeout(() => setDismissedReady(true), 5000);
       return () => clearTimeout(t);
     }
   }, [status]);
@@ -98,12 +100,21 @@ export function BackendStatusBanner() {
   }
 
   if (status === 'waking') {
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
     return (
       <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-xl bg-warning-500/15 px-4 py-2.5 text-xs text-warning-200 shadow-soft-lg backdrop-blur-md border border-warning-500/20 max-w-xs">
         <Loader2 className="size-3.5 shrink-0 animate-spin" />
         <span>
-          <strong>Backend is waking up</strong> (Render free plan — may take up to 60 s).
-          Login and signup will work once it's ready.
+          {isLocal ? (
+            <>
+              <strong>Connecting to local backend...</strong> Checking server on port 8000.
+            </>
+          ) : (
+            <>
+              <strong>Backend is waking up</strong> (Render free plan — may take up to 60 s). Login and signup will work once it's ready.
+            </>
+          )}
         </span>
       </div>
     );

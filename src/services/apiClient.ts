@@ -1,7 +1,26 @@
 import axios from 'axios';
 
+function resolveBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (typeof window !== 'undefined') {
+    const isLocalhost = window.location.hostname === 'localhost';
+    const isIp = window.location.hostname === '127.0.0.1';
+    if (envUrl) {
+      if (isLocalhost && envUrl.includes('127.0.0.1')) {
+        return envUrl.replace('127.0.0.1', 'localhost');
+      }
+      if (isIp && envUrl.includes('localhost')) {
+        return envUrl.replace('localhost', '127.0.0.1');
+      }
+      return envUrl;
+    }
+    return isLocalhost ? 'http://localhost:8000/api/v1' : 'http://127.0.0.1:8000/api/v1';
+  }
+  return envUrl || 'http://127.0.0.1:8000/api/v1';
+}
+
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000/api/v1',
+  baseURL: resolveBaseUrl(),
   // 60 s, not 15 s: on Render's free plan the backend sleeps after ~15 min idle and
   // takes 30-60 s to wake. A 15 s timeout made the first request after a pause fail,
   // which silently switched the whole app to "Demo data — backend offline". A backend
