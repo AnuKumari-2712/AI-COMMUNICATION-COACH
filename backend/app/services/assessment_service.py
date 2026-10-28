@@ -249,27 +249,27 @@ def analyze_voice_upload(
     # measured from the uploaded audio.
     client_text = (client_transcript or "").strip()
     words: list[dict] = []
-    if client_text:
-        transcript, stt_source, transcript_source, transcript_engine = client_text, AnalysisSource.real, "browser", "browser"
-        try:
-            _, _ = stt.transcribe_wav(tmp_path, language=language)
-            words = getattr(stt, "last_words", [])
-        except Exception:
-            words = []
-    else:
-        transcript, stt_source = stt.transcribe_wav(tmp_path, language=language)
-        transcript_engine = getattr(stt, "last_transcript_engine", "whisper" if stt_source == AnalysisSource.real else "failed")
-        words = getattr(stt, "last_words", [])
+    server_transcript, stt_source = stt.transcribe_wav(tmp_path, language=language)
+    transcript_engine = getattr(stt, "last_transcript_engine", "gemini")
+    words = getattr(stt, "last_words", [])
 
-        if stt_source == AnalysisSource.real:
-            transcript_source = "server"
-            if transcript_engine not in ("whisper", "google"):
-                transcript_engine = "whisper"
-        else:
-            transcript_source = "sample"
-            transcript_engine = "failed"
-            if not transcript.strip() or transcript == stt.EMPTY_TRANSCRIPT_FALLBACK:
-                transcript = "(Could not understand the audio, please try again)"
+    client_words = len(client_text.split())
+    server_words = len(server_transcript.split()) if server_transcript != stt.EMPTY_TRANSCRIPT_FALLBACK else 0
+
+    # Pick whichever transcript captured more spoken content (guards against either side getting cut off)
+    if server_words >= client_words and server_words > 0:
+        transcript = server_transcript
+        transcript_source = "server"
+    elif client_words > 0:
+        transcript = client_text
+        transcript_source = "browser"
+        stt_source = AnalysisSource.real
+    elif server_transcript and server_transcript != stt.EMPTY_TRANSCRIPT_FALLBACK:
+        transcript = server_transcript
+        transcript_source = "server"
+    else:
+        transcript = "(Could not understand the audio, please try again)"
+        transcript_source = "server"
     pause_analysis = analyze_wav_pauses(tmp_path)
     if pause_analysis is None and words:
         from app.speech.speech_metrics import compute_pauses_from_words

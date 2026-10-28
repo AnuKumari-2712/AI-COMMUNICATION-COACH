@@ -69,8 +69,82 @@ def _recognize(recognizer, sr, audio, language: str) -> str:
         return recognizer.recognize_google(audio, language=language)
 
 
+import base64
+import os
+import requests
+from app.core.config import get_settings
 from app.speech import audio_utils
 from app.speech import whisper_stt
+
+
+def _recognize_gemini(file_path: str) -> str:
+    """Transcribes audio using Google Gemini multimodal capabilities directly."""
+    settings = get_settings()
+    api_key = os.getenv("GEMINI_API_KEY") or getattr(settings, "gemini_api_key", None)
+    if not api_key or not api_key.strip():
+        raise ValueError("GEMINI_API_KEY not configured")
+
+    with open(file_path, "rb") as f:
+        audio_bytes = f.read()
+
+    if not audio_bytes:
+        raise ValueError("Audio file is empty")
+
+    b64_data = base64.b64encode(audio_bytes).decode("utf-8")
+    lower = file_path.lower()
+    mime = "audio/wav"
+    if lower.endswith(".webm"):
+        mime = "audio/webm"
+    elif lower.endswith(".mp3"):
+        mime = "audio/mp3"
+    elif lower.endswith(".ogg"):
+        mime = "audio/ogg"
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "inline_data": {
+                            "mime_type": mime,
+                            "data": b64_data,
+                        }
+                    },
+                    {
+                        "text": (
+                            "Please transcribe all spoken words in this audio verbatim into English. "
+                            "Output only the plain transcribed words. Do not add speaker tags, notes, or explanations."
+                        )
+                    },
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.0,
+        },
+    }
+
+    model = os.getenv("GEMINI_MODEL") or getattr(settings, "gemini_model", "gemini-2.5-flash")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key.strip()}"
+    resp = requests.post(url, json=payload, timeout=25)
+    if resp.status_code != 200:
+        raise ValueError(f"Gemini audio transcription failed ({resp.status_code}): {resp.text}")
+
+    data = resp.json()
+    candidates = data.get("candidates", [])
+    if not candidates:
+        raise ValueError("No candidates from Gemini audio transcription")
+
+    text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+    return text
+
+
+def _recognize_google_whole(file_path: str, language: str = "en-IN") -> str:
+    import speech_recognition as sr
+    recognizer = sr.Recognizer()
+    with sr.AudioFile(file_path) as source:
+        whole = recognizer.record(source)
+    return recognizer.recognize_google(audio=whole, language=language)
 
 
 def _recognize_google_chunks(file_path: str, language: str = "en-IN") -> str:
@@ -105,11 +179,12 @@ def transcribe_audio(
     enable_whisper: bool | None = None,
 ) -> tuple[str, str, list[dict]]:
     """
-    STT Fallback Chain:
+    STT Priority Chain:
     1. Audio Conversion to 16kHz mono WAV (via audio_utils.convert_to_wav_16k).
-    2. Whisper STT (faster-whisper) with filler prompting and word timestamps.
-    3. Google Web Speech API fallback via speech_recognition.
-    4. Failure: returns ("", "failed", []). Never returns a silent fake transcript for real user audio!
+    2. Gemini Multimodal Audio STT (high accuracy, verbatim, captures full speech without slice drops).
+    3. Whisper STT (faster-whisper) with filler prompting and word timestamps.
+    4. Google Web Speech (whole audio pass first, chunked fallback second).
+    5. Failure: returns ("", "failed", []).
     """
     converted_path = file_path
     try:
@@ -117,6 +192,16 @@ def transcribe_audio(
     except Exception as exc:
         logger.warning("Audio conversion to 16kHz WAV failed (%s). Proceeding with original path.", exc)
 
+    # 1. Try Gemini Multimodal STT first (captures full sentences accurately)
+    try:
+        gemini_text = _recognize_gemini(converted_path)
+        if gemini_text and gemini_text.strip() and gemini_text.strip().lower() != "empty":
+            logger.info("Speech transcribed successfully with Gemini Multimodal STT.")
+            return gemini_text.strip(), "gemini", []
+    except Exception as exc:
+        logger.info("Gemini multimodal STT skipped/failed (%s), trying Whisper/Google...", exc)
+
+    # 2. Try Whisper STT
     whisper_active = whisper_stt.is_whisper_enabled() if enable_whisper is None else enable_whisper
     if whisper_active:
         try:
@@ -128,10 +213,20 @@ def transcribe_audio(
         except Exception as exc:
             logger.warning("Whisper STT failed or unavailable (%s), falling back to Google Web Speech.", exc)
 
+    # 3. Try Google Web Speech on whole audio file
+    try:
+        google_whole = _recognize_google_whole(converted_path, language=language)
+        if google_whole and google_whole.strip():
+            logger.info("Speech transcribed successfully with Google Web Speech (whole).")
+            return google_whole.strip(), "google", []
+    except Exception:
+        pass
+
+    # 4. Fallback: chunked Google Web Speech
     try:
         google_text = _recognize_google_chunks(converted_path, language=language)
         if google_text.strip():
-            logger.info("Speech transcribed successfully with Google Web Speech.")
+            logger.info("Speech transcribed successfully with Google Web Speech (chunked).")
             return google_text.strip(), "google", []
     except Exception as exc:
         logger.warning("Google Web Speech failed (%s).", exc)
@@ -140,7 +235,7 @@ def transcribe_audio(
     return "", "failed", []
 
 
-last_transcript_engine: str = "whisper"
+last_transcript_engine: str = "gemini"
 last_words: list[dict] = []
 
 
@@ -150,7 +245,7 @@ def transcribe_wav(file_path: str, language: str = "en-IN") -> tuple[str, Analys
     text, engine, words = transcribe_audio(file_path, language=language)
     last_transcript_engine = engine
     last_words = words
-    if engine in ("whisper", "google") and text:
+    if engine in ("gemini", "whisper", "google") and text:
         return text, AnalysisSource.real
     return EMPTY_TRANSCRIPT_FALLBACK, AnalysisSource.mock
 

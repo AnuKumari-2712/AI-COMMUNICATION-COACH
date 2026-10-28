@@ -88,6 +88,7 @@ export class LiveTranscriber {
     if (!recognition) return Promise.resolve(this.text());
     return new Promise<string>((resolve) => {
       const finish = () => {
+        this.commitInterim();
         this.waiting = null;
         resolve(this.text());
       };
