@@ -18,7 +18,9 @@ const GrammarPracticePage = lazy(() => import('@/pages/practice/GrammarPracticeP
 const FluencyPracticePage = lazy(() => import('@/pages/practice/FluencyPracticePage'));
 const InterviewPracticePage = lazy(() => import('@/pages/interview/InterviewPracticePage'));
 const InterviewResultPage = lazy(() => import('@/pages/interview/InterviewResultPage'));
+const ResumeAnalyzerPage = lazy(() => import('@/pages/resume/ResumeAnalyzerPage'));
 const LearningPlanPage = lazy(() => import('@/pages/plan/LearningPlanPage'));
+
 const AnalyticsPage = lazy(() => import('@/pages/analytics/AnalyticsPage'));
 const ProfilePage = lazy(() => import('@/pages/profile/ProfilePage'));
 const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'));
@@ -59,6 +61,7 @@ export default function App() {
           <Route path="practice/vocabulary" element={<VocabularyPracticePage />} />
           <Route path="practice/grammar" element={<GrammarPracticePage />} />
           <Route path="practice/fluency" element={<FluencyPracticePage />} />
+          <Route path="resume" element={<ResumeAnalyzerPage />} />
           <Route path="interview" element={<InterviewPracticePage />} />
           <Route path="interview/result" element={<InterviewResultPage />} />
           <Route path="learning-plan" element={<LearningPlanPage />} />

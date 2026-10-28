@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Bot, Mic, Square, ArrowRight, Clock, HelpCircle, Gauge, MessageSquareText, ShieldCheck, Upload, FileText, Target, Sparkles } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, Badge, Button, Modal, Input } from '@/components/ui';
@@ -23,6 +23,7 @@ const commonRoles = ['Software Developer', 'Full Stack Developer', 'AI/ML Engine
 
 export default function InterviewPracticePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
   const [categories, setCategories] = useState<InterviewCategory[]>([]);
   const [active, setActive] = useState<InterviewCategory | null>(null);
@@ -40,8 +41,23 @@ export default function InterviewPracticePage() {
   const [startingSetup, setStartingSetup] = useState(false);
 
   useEffect(() => {
-    interviewService.getCategories().then(setCategories);
-  }, []);
+    interviewService.getCategories().then((cats) => {
+      setCategories(cats);
+      const state = location.state as { autoStartCategory?: string; prefilledResumeText?: string } | null;
+      if (state?.autoStartCategory === 'resume' && state.prefilledResumeText) {
+        const resumeCat = cats.find((c) => c.id === 'resume');
+        if (resumeCat) {
+          setResumeText(state.prefilledResumeText);
+          beginSession(resumeCat, { resumeText: state.prefilledResumeText });
+          showToast({
+            title: 'Resume Interview Started',
+            description: 'AI Interviewer has formulated questions directly from your analyzed resume.',
+            variant: 'success',
+          });
+        }
+      }
+    });
+  }, [location.state]);
 
   const beginSession = async (cat: InterviewCategory, options?: { resumeText?: string; jobRole?: string }) => {
     const newSession = await interviewService.startSession(cat.id, options);

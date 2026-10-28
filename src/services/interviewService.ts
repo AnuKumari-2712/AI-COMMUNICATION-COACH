@@ -160,6 +160,27 @@ export const interviewService = {
     return data.resume_text;
   },
 
+  /** Uploads and comprehensively analyzes a resume PDF or text file for ATS score, skills, verbs, and tips. */
+  analyzeResume: async (file: File): Promise<{
+    word_count: number;
+    ats_score: number;
+    skills: string[];
+    action_verbs: string[];
+    detected_projects_count: number;
+    strengths: string[];
+    recommendations: string[];
+    suggested_questions: string[];
+    resume_text: string;
+  }> => {
+    const form = new FormData();
+    form.append('resume', file);
+    const { data } = await apiClient.post<any>('/interview/resume-analyze', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  },
+
+
   /** Starts a real backend interview session (question bank + resume/job-role generation). Falls back to a local, session-less question list. */
   startSession: async (categoryId: string, options?: { resumeText?: string; jobRole?: string }): Promise<InterviewSession> => {
     try {

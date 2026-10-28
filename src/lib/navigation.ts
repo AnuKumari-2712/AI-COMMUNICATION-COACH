@@ -12,6 +12,7 @@ import {
   Bot,
   User,
   Settings,
+  FileCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -23,15 +24,17 @@ export interface NavItem {
 
 export const primaryNav: NavItem[] = [
   { label: 'Dashboard', path: '/app/dashboard', icon: LayoutDashboard },
+  { label: 'Resume Analyzer', path: '/app/resume', icon: FileCheck },
+  { label: 'Interview', path: '/app/interview', icon: Briefcase },
   { label: 'Voice Practice', path: '/app/practice/voice', icon: Mic },
   { label: 'Text Practice', path: '/app/practice/text', icon: FileText },
   { label: 'Vocabulary', path: '/app/practice/vocabulary', icon: BookOpen },
   { label: 'Grammar', path: '/app/practice/grammar', icon: SpellCheck },
   { label: 'Fluency', path: '/app/practice/fluency', icon: Waves },
-  { label: 'Interview', path: '/app/interview', icon: Briefcase },
   { label: 'Achievements', path: '/app/achievements', icon: Trophy },
   { label: 'AI Coach', path: '/app/coach', icon: Bot },
 ];
+
 
 export const secondaryNav: NavItem[] = [
   { label: 'Profile', path: '/app/profile', icon: User },

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.api.deps import get_current_student_id
 from app.interview import question_bank
-from app.interview.resume_parser import extract_text_from_upload
+from app.interview.resume_parser import extract_text_from_upload, analyze_resume_text
 from app.schemas.interview import (
     InterviewAnswerRequest,
     InterviewAnswerResponse,
@@ -40,6 +40,15 @@ async def upload_resume(resume: UploadFile = File(...)):
     if not text.strip():
         raise HTTPException(status_code=422, detail="Couldn't extract any text from this file.")
     return {"resume_text": text}
+
+
+@router.post("/resume-analyze")
+async def analyze_resume_endpoint(resume: UploadFile = File(...)):
+    content = await resume.read()
+    text = extract_text_from_upload(resume.filename or "resume.txt", content)
+    if not text.strip():
+        raise HTTPException(status_code=422, detail="Couldn't extract any text from this file.")
+    return analyze_resume_text(text)
 
 
 @router.post("/answer", response_model=InterviewAnswerResponse)
