@@ -1,5 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Mic, Square, RotateCcw, ArrowRight, Image as ImageIcon, MessageSquare, BookOpen, Shuffle, Clock } from 'lucide-react';
+import {
+  Mic,
+  Square,
+  RotateCcw,
+  ArrowRight,
+  Image as ImageIcon,
+  MessageSquare,
+  BookOpen,
+  Shuffle,
+  Clock,
+  Target,
+  Waves,
+  AlertTriangle,
+  Award,
+  FileText,
+} from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, Badge, Button } from '@/components/ui';
 import { RadialProgress } from '@/components/ui/RadialProgress';
@@ -10,12 +25,18 @@ import { AnswerCorrectionBox } from '@/components/shared/AnswerCorrectionBox';
 import { formatDuration, scoreTone } from '@/lib/utils';
 
 const exercises = [
-  { id: 'speak30', title: 'Speak for 30 Seconds', description: 'Talk continuously about your favorite hobby.', icon: Clock, target: 30 },
-  { id: 'image', title: 'Describe an Image', description: 'Describe what a busy city street might look like.', icon: ImageIcon, target: 45 },
-  { id: 'topic', title: 'Explain a Topic', description: 'Explain how the internet works, in simple terms.', icon: MessageSquare, target: 60 },
-  { id: 'story', title: 'Storytelling', description: 'Tell a short story about an unexpected trip.', icon: BookOpen, target: 60 },
-  { id: 'random', title: 'Random Topic', description: 'Speak about: "The importance of lifelong learning."', icon: Shuffle, target: 45 },
+  { id: 'speak30', title: 'Elevator Pitch Drill', description: 'Introduce yourself, your academic background, and core career ambition continuously in 30 seconds.', icon: Clock, target: 30 },
+  { id: 'image', title: 'Describe a Scene', description: 'Describe a bustling modern tech conference or futuristic smart city with vivid sensory details.', icon: ImageIcon, target: 45 },
+  { id: 'topic', title: 'Explain a Concept Simply', description: 'Explain how cloud computing or artificial intelligence works as if teaching a 10-year-old.', icon: MessageSquare, target: 60 },
+  { id: 'story', title: 'Storytelling Under Pressure', description: 'Narrate an unexpected trip or project turning point with a clear beginning, climax, and lesson.', icon: BookOpen, target: 60 },
+  { id: 'random', title: 'Impromptu Thought', description: 'Speak without pauses on: "Why resilience and adaptability matter more than raw IQ."', icon: Shuffle, target: 45 },
+  { id: 'persuade', title: 'The Persuasive Pitch', description: 'Convince an engineering team to adopt automated testing instead of manual QA.', icon: Target, target: 60 },
+  { id: 'flow', title: 'Continuous Flow Drill', description: 'Describe your ideal collaborative workplace culture without pausing or using filler words.', icon: Waves, target: 45 },
+  { id: 'crisis', title: 'Crisis Communication', description: 'Walk through how you would calmly communicate with users during a major live service outage.', icon: AlertTriangle, target: 60 },
+  { id: 'leadership', title: 'Leadership & Ethics', description: 'Discuss what traits define an exceptional leader and how integrity shapes decision-making.', icon: Award, target: 45 },
+  { id: 'summary', title: 'Executive Project Summary', description: 'Deliver a structured 60-second executive summary of your most impactful software project.', icon: FileText, target: 60 },
 ];
+
 
 export default function FluencyPracticePage() {
   const [selected, setSelected] = useState(exercises[0]);

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Mic, Pause, Play, Square, RotateCcw, ArrowRight, AlertCircle } from 'lucide-react';
+import { Mic, Pause, Play, Square, RotateCcw, ArrowRight, AlertCircle, ChevronLeft, ChevronRight, Shuffle } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, Button, Badge } from '@/components/ui';
 import { Waveform } from '@/components/shared/Waveform';
@@ -11,8 +11,15 @@ import { formatDuration } from '@/lib/utils';
 
 const prompts = [
   'Describe a challenge you recently overcame and what you learned from it.',
-  'Tell me about a time you worked effectively in a team.',
-  'What are your greatest strengths as a communicator?',
+  'Tell me about a time you worked effectively in a multidisciplinary team.',
+  'What are your greatest professional strengths, and how do you leverage them?',
+  'Walk me through how you prioritize tasks when juggling multiple tight deadlines.',
+  'Describe a situation where you had to persuade someone with a differing opinion.',
+  'How do you handle constructive criticism or feedback from a mentor or manager?',
+  'Tell me about a technical project that did not go as planned and how you adapted.',
+  'Explain a complex concept simply as if explaining to a non-technical stakeholder.',
+  'Where do you see yourself professionally in the next three to five years?',
+  'Why are you passionate about your chosen career field and what drives your growth?',
 ];
 
 export default function VoicePracticePage() {
@@ -20,7 +27,26 @@ export default function VoicePracticePage() {
   const { showToast } = useToast();
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<VoiceAnalysisResult | null>(null);
-  const [prompt] = useState(prompts[Math.floor(Math.random() * prompts.length)]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const prompt = prompts[currentIndex];
+
+  const handleNextPrompt = () => {
+    setCurrentIndex((prev) => (prev + 1) % prompts.length);
+    if (result) handleTryAgain();
+  };
+
+  const handlePrevPrompt = () => {
+    setCurrentIndex((prev) => (prev - 1 + prompts.length) % prompts.length);
+    if (result) handleTryAgain();
+  };
+
+  const handleShufflePrompt = () => {
+    let nextIdx = Math.floor(Math.random() * prompts.length);
+    if (nextIdx === currentIndex) nextIdx = (currentIndex + 1) % prompts.length;
+    setCurrentIndex(nextIdx);
+    if (result) handleTryAgain();
+  };
 
   const isRecording = recorder.status === 'recording';
   const isPaused = recorder.status === 'paused';
@@ -50,12 +76,31 @@ export default function VoicePracticePage() {
       <PageHeader eyebrow="Practice" title="Voice Practice" description="Record a real answer and get instant AI feedback on fluency, pace and confidence." />
 
       <Card className="p-4 sm:p-6">
-        <div className="flex items-center justify-between gap-3">
-          <Badge variant="accent">Speaking Prompt</Badge>
-          {isRecording && <Badge variant="danger" className="animate-pulse-soft">● Recording</Badge>}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Badge variant="accent">Speaking Prompt</Badge>
+            <span className="text-xs font-semibold text-base-400">
+              Question {currentIndex + 1} of {prompts.length}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {isRecording && <Badge variant="danger" className="animate-pulse-soft">● Recording</Badge>}
+            <div className="flex items-center gap-1 border-l border-base-700/60 pl-3">
+              <Button variant="ghost" size="icon" onClick={handlePrevPrompt} disabled={isRecording} title="Previous Question">
+                <ChevronLeft className="size-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={handleNextPrompt} disabled={isRecording} title="Next Question">
+                <ChevronRight className="size-4" />
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleShufflePrompt} disabled={isRecording} className="gap-1.5 text-xs">
+                <Shuffle className="size-3.5" /> Random
+              </Button>
+            </div>
+          </div>
         </div>
         <p className="mt-3 text-lg font-medium text-base-50">{prompt}</p>
       </Card>
+
 
       <Card className="mt-6 flex flex-col items-center gap-6 p-8 sm:p-12">
         {recorder.error && (
