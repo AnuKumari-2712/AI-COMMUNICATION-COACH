@@ -117,10 +117,11 @@ def analyze_text(student_id: str, question: str, answer: str) -> TextAnalysisRes
     corrected_text = grammar_res["corrected_text"]
     sentence_count = max(1, grammar_res.get("sentence_count", len(sentences_data)))
 
-    # Formula: based on total_mistakes per sentence count
-    grammar_score = max(0.0, min(100.0, round(100.0 - (total_mistakes / sentence_count) * 25.0, 1)))
+    # Formula: standard CEFR / IELTS mistake density scoring (12 pts per mistake/sentence density, not 25 pts)
+    mistake_density = total_mistakes / sentence_count
+    grammar_score = max(25.0, min(100.0, round(100.0 - (mistake_density * 12.0), 1))) if total_mistakes > 0 else 98.0
     grammar_formula = (
-        f"score = max(0, min(100, 100 - ({total_mistakes} mistakes / {sentence_count} sentences) * 25.0)) "
+        f"score = max(25, min(100, 100 - ({total_mistakes} mistakes / {sentence_count} sentences) * 12.0)) "
         f"= {grammar_score} ({engine_used.capitalize()} grammar engine)."
     )
     grammar_sufficient_data = bool(answer.strip())
@@ -352,7 +353,8 @@ def analyze_voice_upload(
         confidence_score = 40.0 if word_count > 0 else 0.0
         pace_score = metrics.pace_score if word_count > 0 else 0.0
     else:
-        grammar_score = max(0.0, min(100.0, round(100.0 - (total_mistakes / sentence_count) * 25.0, 1)))
+        mistake_density = total_mistakes / sentence_count
+        grammar_score = max(25.0, min(100.0, round(100.0 - (mistake_density * 12.0), 1))) if total_mistakes > 0 else 98.0
         vocabulary_score = vocab_result["score"]
         fluency_score = metrics.fluency_score
         pace_score = metrics.pace_score
