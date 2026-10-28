@@ -192,7 +192,7 @@ export default function FluencyPracticePage() {
     if (recorder.status === 'recording' && recorder.duration >= selected.target) {
       recorder.stop();
     }
-  }, [recorder, selected.target]);
+  }, [recorder.status, recorder.duration, selected.target]);
 
   const handleSelectExercise = (ex: FluencyExercise) => {
     setSelected(ex);
@@ -219,16 +219,25 @@ export default function FluencyPracticePage() {
 
   const handleAnalyze = async () => {
     setAnalyzing(true);
-    const audioBlob = await recorder.getAudioBlob();
-    const transcript = await recorder.getTranscript();
-    const analysis = await practiceService.analyzeVoiceRecording(
-      recorder.duration,
-      audioBlob ?? undefined,
-      transcript,
-      currentPrompt,
-    );
-    setResult(analysis);
-    setAnalyzing(false);
+    try {
+      const audioBlob = await recorder.getAudioBlob();
+      const transcript = await recorder.getTranscript();
+      const analysis = await practiceService.analyzeVoiceRecording(
+        Math.max(1, recorder.duration),
+        audioBlob ?? undefined,
+        transcript,
+        currentPrompt,
+      );
+      setResult(analysis);
+    } catch {
+      showToast({
+        title: 'Analysis Error',
+        description: 'Unable to analyze fluency drill. Please speak clearly and try again.',
+        variant: 'error',
+      });
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const handleReset = () => {

@@ -54,11 +54,25 @@ export default function VoicePracticePage() {
 
   const handleAnalyze = async () => {
     setAnalyzing(true);
-    const audioBlob = await recorder.getAudioBlob();
-    const transcript = await recorder.getTranscript();
-    const analysis = await practiceService.analyzeVoiceRecording(recorder.duration, audioBlob ?? undefined, transcript, prompt);
-    setResult(analysis);
-    setAnalyzing(false);
+    try {
+      const audioBlob = await recorder.getAudioBlob();
+      const transcript = await recorder.getTranscript();
+      const analysis = await practiceService.analyzeVoiceRecording(
+        Math.max(1, recorder.duration),
+        audioBlob ?? undefined,
+        transcript,
+        prompt
+      );
+      setResult(analysis);
+    } catch {
+      showToast({
+        title: 'Analysis Error',
+        description: 'Unable to analyze speech recording. Please speak clearly and try again.',
+        variant: 'error',
+      });
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const handleTryAgain = () => {

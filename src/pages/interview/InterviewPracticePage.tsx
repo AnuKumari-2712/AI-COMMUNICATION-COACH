@@ -32,6 +32,7 @@ export default function InterviewPracticePage() {
   const [scoring, setScoring] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [lastMetrics, setLastMetrics] = useState<AnswerFeedback>(defaultMetrics);
+  const [evaluatedIndex, setEvaluatedIndex] = useState<number | null>(null);
   const recorder = useVoiceRecorder();
 
   const [setupCategory, setSetupCategory] = useState<InterviewCategory | null>(null);
@@ -65,6 +66,7 @@ export default function InterviewPracticePage() {
     setActive(cat);
     setQIndex(0);
     setLastMetrics(defaultMetrics);
+    setEvaluatedIndex(null);
   };
 
   const startInterview = async (cat: InterviewCategory) => {
@@ -110,36 +112,52 @@ export default function InterviewPracticePage() {
     const question = session.questions[qIndex];
 
     setScoring(true);
-    const audioBlob = await recorder.getAudioBlob();
-    const transcript = await recorder.getTranscript();
-    const feedback = await interviewService.answerQuestion(session, question.id, audioBlob ?? undefined, recorder.duration, transcript);
-    setLastMetrics(feedback);
-    setScoring(false);
-    recorder.reset();
+    try {
+      const audioBlob = await recorder.getAudioBlob();
+      const transcript = await recorder.getTranscript();
+      const feedback = await interviewService.answerQuestion(
+        session,
+        question.id,
+        audioBlob ?? undefined,
+        Math.max(1, recorder.duration),
+        transcript
+      );
+      setLastMetrics(feedback);
+      setEvaluatedIndex(qIndex);
+      recorder.reset();
 
-    let questionsList = session.questions;
-    if (feedback.followupQuestion) {
-      const followup = {
-        id: feedback.followupQuestion.id,
-        text: feedback.followupQuestion.text,
-        isFollowup: true,
-        engine: feedback.followupEngine,
-      };
-      if (!questionsList.some((q) => q.id === followup.id)) {
-        questionsList = [...questionsList];
-        questionsList.splice(qIndex + 1, 0, followup);
-        setSession({ ...session, questions: questionsList });
+      let questionsList = session.questions;
+      if (feedback.followupQuestion) {
+        const followup = {
+          id: feedback.followupQuestion.id,
+          text: feedback.followupQuestion.text,
+          isFollowup: true,
+          engine: feedback.followupEngine,
+        };
+        if (!questionsList.some((q) => q.id === followup.id)) {
+          questionsList = [...questionsList];
+          questionsList.splice(qIndex + 1, 0, followup);
+          setSession({ ...session, questions: questionsList });
+        }
       }
-    }
 
-    if (qIndex + 1 >= questionsList.length) {
-      setSubmitting(true);
-      const result = await interviewService.submitInterview(session);
-      setSubmitting(false);
-      navigate('/app/interview/result', { state: { result, categoryTitle: active!.title } });
-      return;
+      if (qIndex + 1 >= questionsList.length) {
+        setSubmitting(true);
+        const result = await interviewService.submitInterview(session);
+        setSubmitting(false);
+        navigate('/app/interview/result', { state: { result, categoryTitle: active!.title } });
+        return;
+      }
+      setQIndex((i) => i + 1);
+    } catch {
+      showToast({
+        title: 'Evaluation Error',
+        description: 'Unable to evaluate answer. Please try again.',
+        variant: 'error',
+      });
+    } finally {
+      setScoring(false);
     }
-    setQIndex((i) => i + 1);
   };
 
   if (!active || !session) {
@@ -292,10 +310,10 @@ export default function InterviewPracticePage() {
         <Card className="p-5">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-base-400">
-              {lastMetrics.feedback
-                ? 'Answer Evaluation Metrics'
-                : recorder.status === 'recording'
+              {recorder.status === 'recording'
                 ? 'Live Voice Metrics'
+                : lastMetrics.feedback
+                ? `Evaluation (Question ${(evaluatedIndex !== null ? evaluatedIndex : qIndex) + 1})`
                 : 'Performance Metrics'}
             </p>
             {recorder.status === 'recording' ? (
@@ -304,7 +322,7 @@ export default function InterviewPracticePage() {
               </Badge>
             ) : lastMetrics.feedback ? (
               <Badge variant="accent" size="sm">
-                AI Verified
+                Q{(evaluatedIndex !== null ? evaluatedIndex : qIndex) + 1} AI Verified
               </Badge>
             ) : (
               <Badge variant="outline" size="sm">

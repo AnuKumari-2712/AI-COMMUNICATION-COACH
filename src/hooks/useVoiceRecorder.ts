@@ -24,6 +24,9 @@ export function useVoiceRecorder() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const lastLevelUpdateRef = useRef<number>(0);
+  const lastLevelValRef = useRef<number>(0);
+  const startTimeRef = useRef<number>(0);
   const chunksRef = useRef<Blob[]>([]);
   // Resolves with the WAV (or, if conversion fails, the raw recording) once the
   // recorder has stopped and conversion has finished. Callers must await this
@@ -47,11 +50,15 @@ export function useVoiceRecorder() {
     setLiveTranscript('');
     setAudioLevel(0);
     chunksRef.current = [];
+    finalBlobRef.current = new Promise<Blob | null>((resolve) => {
+      resolveFinalBlobRef.current = resolve;
+    });
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      // Connect Web Audio API Analyser for live mic volume metering
+      // Connect Web Audio API Analyser for live mic volume metering with throttled state updates
       try {
         const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         if (AudioCtx) {
@@ -64,21 +71,32 @@ export function useVoiceRecorder() {
           analyserRef.current = analyser;
 
           const dataArray = new Uint8Array(analyser.frequencyBinCount);
-          const updateLevel = () => {
+          lastLevelUpdateRef.current = 0;
+          lastLevelValRef.current = 0;
+
+          const updateLevel = (now: number) => {
             if (!analyserRef.current) return;
-            analyserRef.current.getByteFrequencyData(dataArray);
-            let sum = 0;
-            for (let i = 0; i < dataArray.length; i += 1) {
-              sum += dataArray[i];
+            // Throttle state update to at most once every 120ms to keep React 60fps smooth
+            if (now - lastLevelUpdateRef.current >= 120) {
+              analyserRef.current.getByteFrequencyData(dataArray);
+              let sum = 0;
+              for (let i = 0; i < dataArray.length; i += 1) {
+                sum += dataArray[i];
+              }
+              const avg = sum / dataArray.length;
+              const newLevel = Math.min(100, Math.round((avg / 128) * 100));
+              if (Math.abs(newLevel - lastLevelValRef.current) >= 3 || newLevel === 0) {
+                lastLevelValRef.current = newLevel;
+                setAudioLevel(newLevel);
+              }
+              lastLevelUpdateRef.current = now;
             }
-            const avg = sum / dataArray.length;
-            setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
             animFrameRef.current = requestAnimationFrame(updateLevel);
           };
           animFrameRef.current = requestAnimationFrame(updateLevel);
         }
       } catch {
-        // AudioContext initialization fallback
+        // AudioContext fallback if unavailable
       }
 
       const recorder = new MediaRecorder(stream);
@@ -96,17 +114,29 @@ export function useVoiceRecorder() {
           .then((finalBlob) => {
             setAudioBlob(finalBlob);
             resolveFinalBlobRef.current?.(finalBlob);
+          })
+          .finally(() => {
+            if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+              audioContextRef.current.close().catch(() => {});
+              audioContextRef.current = null;
+            }
           });
       };
-      recorder.start();
+
+      // Use 250ms timeslice to ensure continuous chunk capture
+      recorder.start(250);
       transcriber.reset();
       transcriber.onTextChange = (text: string) => {
         setLiveTranscript(text);
       };
       transcriber.start();
       setStatus('recording');
-      setDuration(0);
-      intervalRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
+      startTimeRef.current = Date.now();
+      setDuration(1);
+      intervalRef.current = setInterval(() => {
+        const elapsed = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
+        setDuration(elapsed);
+      }, 1000);
     } catch {
       setStatus('error');
       setError('Microphone access was denied or is unavailable. Please allow microphone permissions.');
@@ -128,18 +158,28 @@ export function useVoiceRecorder() {
       mediaRecorderRef.current.resume();
       transcriber.start();
       setStatus('recording');
-      intervalRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
+      intervalRef.current = setInterval(() => {
+        const elapsed = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
+        setDuration(elapsed);
+      }, 1000);
       if (analyserRef.current) {
         const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-        const updateLevel = () => {
+        const updateLevel = (now: number) => {
           if (!analyserRef.current) return;
-          analyserRef.current.getByteFrequencyData(dataArray);
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i += 1) {
-            sum += dataArray[i];
+          if (now - lastLevelUpdateRef.current >= 120) {
+            analyserRef.current.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i += 1) {
+              sum += dataArray[i];
+            }
+            const avg = sum / dataArray.length;
+            const newLevel = Math.min(100, Math.round((avg / 128) * 100));
+            if (Math.abs(newLevel - lastLevelValRef.current) >= 3 || newLevel === 0) {
+              lastLevelValRef.current = newLevel;
+              setAudioLevel(newLevel);
+            }
+            lastLevelUpdateRef.current = now;
           }
-          const avg = sum / dataArray.length;
-          setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
           animFrameRef.current = requestAnimationFrame(updateLevel);
         };
         animFrameRef.current = requestAnimationFrame(updateLevel);
@@ -148,18 +188,15 @@ export function useVoiceRecorder() {
   }, [transcriber]);
 
   const stop = useCallback(() => {
-    finalBlobRef.current = new Promise<Blob | null>((resolve) => {
-      resolveFinalBlobRef.current = resolve;
-    });
+    const finalDur = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
+    setDuration(finalDur);
     finalTranscriptRef.current = transcriber.stop();
-    mediaRecorderRef.current?.stop();
     clearTimer();
     setAudioLevel(0);
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
     analyserRef.current = null;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
     setStatus('stopped');
   }, [transcriber]);
 
