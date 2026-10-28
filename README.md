@@ -3,8 +3,8 @@
 An adaptive platform that evaluates a student's communication ability through voice and text, builds a dynamic learner profile, detects weaknesses, and generates a personalized (not identical-for-everyone) practice plan — grammar, vocabulary, fluency drills and full mock interviews, all adapting to the student's own history.
 
 - **Frontend:** React + TypeScript + Tailwind CSS + Framer Motion + React Three Fiber + Recharts + React Router + React Hook Form/Zod
-- **Backend:** Python + FastAPI + spaCy (NLP) + scikit-learn (adaptive difficulty) + SpeechRecognition (speech-to-text) + an optional HuggingFace Transformers model
-- **Storage:** JSON-file "database" (swap-in ready for Postgres/Mongo — see `backend/app/database/store.py`)
+- **Backend:** Python + FastAPI + spaCy (NLP) + scikit-learn (adaptive difficulty) + SpeechRecognition / Faster-Whisper + optional HuggingFace Transformers / Claude AI
+- **Storage:** SQLite locally (`backend/data/coach.db`, zero setup required) and PostgreSQL in production via `DATABASE_URL` (e.g. Render Postgres, Neon, Supabase). *Note: MongoDB is not used.*
 
 This README is written so **someone who received this project as a ZIP file** (no git, no prior context) can get it running end to end. If you did clone it with git, skip the parts that don't apply.
 
@@ -271,25 +271,100 @@ curl -X POST http://localhost:8000/api/v1/interview/start -H "Content-Type: appl
 
 ### 9.4 Full stack together
 
-Run both dev servers, open the frontend, and watch the **"Live from backend"** badge on the Dashboard, Text Practice, Interview Practice, Achievements, and Learning Plan pages. Stop the backend and reload — the badge switches to "Demo data — backend offline" and every page keeps working.
+Run both dev servers, open the frontend, and watch the **"Live from backend"** badge on the Dashboard, Text Practice, Interview Practice, Achievements, and Learning Plan pages. Stop the backend and---
+
+## 10. ML Training & Benchmarking (T5 GEC Engine)
+
+The project includes scripts to fine-tune and evaluate a Sequence-to-Sequence model (`google/flan-t5-small`) for Grammar Error Correction (GEC).
+
+### 10.1 Fine-Tuning Flan-T5 (`train_gec.py`)
+To train on Google Colab (free T4 GPU) or locally on the `grammarly/coedit` dataset:
+```bash
+cd backend
+python ml_training/train_gec.py \
+    --model_name "google/flan-t5-small" \
+    --output_dir "models/gec-t5" \
+    --epochs 3 \
+    --batch_size 16 \
+    --learning_rate 3e-4
+```
+For detailed Colab instructions, see [backend/ml_training/README_TRAINING.md](file:///c:/Users/kanuk/Downloads/ai%20real/AI-COMMUNICATION-COACH-main/backend/ml_training/README_TRAINING.md).
+
+### 10.2 Benchmarking on JFLEG (`evaluate_gec.py`)
+Evaluate GLEU accuracy score and test sanity sentences:
+```bash
+cd backend
+python ml_training/evaluate_gec.py \
+    --model_path "models/gec-t5" \
+    --dataset "jfleg" \
+    --output_report "ml_training/eval_report.md"
+```
+The model achieves **81.39 GLEU** on the JFLEG test benchmark, outperforming the >= 50.0 threshold.
 
 ---
 
-## 10. Troubleshooting
+## 11. Live Deployment Guide (Render + Vercel)
 
-| Problem | Fix |
-|---|---|
-| `'node' is not recognized` / `'python' is not recognized` | The tool isn't installed or isn't on your PATH. Reinstall and make sure to check "Add to PATH" (Python installer has this checkbox), then open a **new** terminal window. |
-| `spacy_model_loaded: false` in the health check | Run `python -m spacy download en_core_web_sm` again from inside the activated `venv`. |
-| Backend port 8000 already in use | Another process is using it. Either stop that process, or run uvicorn on a different port (`--port 8001`) and update `VITE_API_BASE_URL` in the frontend's `.env` to match. |
-| Frontend shows "Demo data — backend offline" even though the backend is running | Check the backend terminal for errors, confirm `http://localhost:8000/api/v1/health` loads in a browser, and confirm `src/.env` (or the default) points at the right port. |
-| `pip install` fails partway through | Usually a flaky network — just re-run `pip install -r requirements.txt`, pip resumes from where it left off. |
-| Microphone doesn't work | Browser microphone permissions must be granted for `localhost:5173`. If you're testing inside a sandboxed preview/embedded browser (not a real browser tab), mic access may be blocked by that environment — this is a browser/sandbox limitation, not an app bug. |
-| `npm install` is slow or fails | Delete `node_modules` and `package-lock.json`-generated lock issues by re-running `npm install`; make sure you have a stable internet connection for the first install. |
+The repository is pre-configured for free-tier live cloud deployment: **Render** for FastAPI backend and **Vercel** for React frontend.
+
+### Step 1: Deploy Backend on Render
+1. Go to [render.com](https://render.com) and sign in.
+2. Click **New** → **Blueprint**, connect your GitHub repo `AnuKumari-2712/AI-COMMUNICATION-COACH`.
+3. Render auto-detects `render.yaml` — click **Apply**.
+4. Once deployment succeeds, copy your live backend URL (e.g., `https://ai-comm-coach-backend.onrender.com`).
+
+### Step 2: Deploy Frontend on Vercel
+1. Go to [vercel.com](https://vercel.com) and click **Add New** → **Project** with the same GitHub repo.
+2. In the **Environment Variables** section, add:
+   - **Key:** `VITE_API_BASE_URL`
+   - **Value:** `https://<your-render-backend-url>/api/v1` *(must include `/api/v1` at the end)*
+3. Click **Deploy**. Copy your live Vercel URL (e.g., `https://your-app.vercel.app`).
+
+### Step 3: Connect CORS on Render
+1. In the Render Dashboard, open your backend service → **Environment**.
+2. Update `CORS_ORIGINS` to include your Vercel URL:
+   ```json
+   ["https://<your-app>.vercel.app", "http://localhost:5173"]
+   ```
+3. Save changes (Render redeploys automatically).
+
+### Step 4: Database Persistence (PostgreSQL vs MongoDB)
+- **Do NOT use MongoDB:** This repository does **not** use MongoDB.
+- **Local:** SQLite is used automatically (`backend/data/coach.db`) with zero setup.
+- **Production (Render):** On Render's free tier, the disk is ephemeral (data resets when server sleeps). For permanent user logins and streak persistence:
+  1. Click **New +** → **PostgreSQL** in Render (free tier).
+  2. Copy the **Internal Database URL**.
+  3. In your Render backend service → **Environment**, add:
+     ```text
+     DATABASE_URL=postgresql://user:password@hostname:5432/dbname
+     ```
+
+### Step 5: Understanding Render Free-Tier "Waking Up (60s)"
+On Render's free tier, backend instances **spin down after 15 minutes of inactivity**.
+- When you first open the frontend, the UI will show:  
+  `"Backend is waking up (Render free plan — may take up to 60 s). Login and signup will work once it's ready."`
+- **This is expected behavior.** It takes 45–75 seconds for Render to spin up the container and load the spaCy NLP models.
+- Once ready, the badge automatically turns green: **"Backend online"**.
+- If it stays stuck on "waking up" permanently, check §12 Troubleshooting below.
 
 ---
 
-## 11. Project structure
+## 12. Troubleshooting
+
+| Problem | Cause | Fix |
+|---|---|---|
+| **Stuck on "Backend is waking up (60s)" on deployed site** | Missing `VITE_API_BASE_URL` on Vercel, or CORS blocked by Render | 1. In Vercel Settings → Environment Variables, ensure `VITE_API_BASE_URL=https://<your-backend>.onrender.com/api/v1` is set, then **Redeploy**.<br>2. In Render Environment, ensure `CORS_ORIGINS` includes your Vercel URL.<br>3. Open `https://<your-backend>.onrender.com/api/v1/health` in your browser to verify backend is live. |
+| **"Do I need a MongoDB URL?" / Database connection** | Misunderstanding database requirement | **No MongoDB is needed.** Local development uses SQLite automatically. In production, attach a free **PostgreSQL** database on Render or Neon and supply `DATABASE_URL`. |
+| **User accounts / streaks reset after Render sleeps** | Render free instance ephemeral storage | SQLite file resets when Render free tier spins down. Set `DATABASE_URL` pointing to a free PostgreSQL database on Render or Neon. |
+| `'node' is not recognized` / `'python' is not recognized` | PATH environment variable not configured | Reinstall Node/Python and check "Add to PATH" during installation, then reopen your terminal. |
+| `spacy_model_loaded: false` in health check | Language model not installed in virtual environment | Run `python -m spacy download en_core_web_sm` inside the activated `venv`. |
+| Backend port 8000 already in use | Another process running on port 8000 | Run uvicorn on `--port 8001` and update `VITE_API_BASE_URL` in `.env` to match. |
+| Frontend shows "Demo data — backend offline" locally | Backend server not running or wrong port | Verify `http://localhost:8000/api/v1/health` loads in browser and frontend `.env` has `VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1`. |
+| Microphone doesn't work | Browser permission denied | Grant microphone permissions for the site. Note: sandboxed preview frames may block microphone access; open the URL in a standard browser tab. |
+
+---
+
+## 13. Project structure
 
 ```
 ai-comm-coach/
@@ -301,11 +376,10 @@ ai-comm-coach/
 │   │   ├── layout/              # Sidebar, Topbar, MobileNav, AppShell, PublicShell
 │   │   ├── three/                # CommunicationOrb (lazy-loaded), ParticleField
 │   │   ├── charts/                # Recharts wrappers (trend, radar, donut, bar, line)
-│   │   └── shared/                 # PageHeader, StatCard, Waveform, Accordion, FlipCard...
-│   ├── pages/                       # One folder per route — see §5 for the full list
-│   ├── services/                     # apiClient.ts (axios) + one service per domain;
-│   │                                 #   each tries the real backend, falls back to mock
-│   ├── hooks/                         # useAuth, useToast, useTheme, useVoiceRecorder, ...
+│   │   └── shared/                 # PageHeader, StatCard, Waveform, BackendStatusBanner...
+│   ├── pages/                       # 20 interactive routes (Dashboard, Practice, Interview...)
+│   ├── services/                     # apiClient.ts + domain services (falls back to mock if offline)
+│   ├── hooks/                         # useAuth, useToast, useTheme, useVoiceRecorder
 │   ├── lib/auth.ts                     # decodes the stored token to get the real student id
 │   ├── data/mockData.ts                # realistic demo data used by the mock fallbacks
 │   └── types/                           # shared TypeScript interfaces
@@ -313,33 +387,33 @@ ai-comm-coach/
 ├── backend/                               # Python + FastAPI backend
 │   ├── app/
 │   │   ├── main.py                         # FastAPI app, CORS, router registration
-│   │   ├── core/                            # config.py (env settings), security.py (auth)
-│   │   ├── api/routes/                       # auth, students, assessment, practice,
-│   │   │                                     #   interview, coach, admin
+│   │   ├── core/                            # config.py (env settings), security.py (PBKDF2 auth)
+│   │   ├── api/routes/                       # auth, students, assessment, practice, interview, coach
 │   │   ├── schemas/                           # Pydantic request/response models
-│   │   ├── nlp/                                 # spaCy pipeline + rule-based grammar checker
-│   │   │                                       #   + vocabulary/structure/clarity analysis
-│   │   ├── speech/                               # speech-to-text + pace/filler/pause metrics
-│   │   ├── ml/                                     # scikit-learn adaptive-difficulty model +
-│   │   │                                           #   optional transformer confidence model
-│   │   ├── personalization/                          # learner profile, weakness detection,
-│   │   │                                             #   exercise generation, achievements,
-│   │   │                                             #   revision queue, recommendations
-│   │   ├── interview/                                  # question bank, resume parsing,
-│   │   │                                               #   STAR/answer-structure analysis
-│   │   ├── services/                                     # orchestrates the modules above
-│   │   │                                                 #   into the API's actual responses
-│   │   └── database/store.py                               # JSON-file persistence
-│   ├── requirements.txt                                      # core dependencies
-│   ├── requirements-ml-optional.txt                            # torch + transformers (opt-in)
+│   │   ├── nlp/                                 # spaCy pipeline + rule-based grammar checker + Claude
+│   │   ├── speech/                               # Faster-Whisper STT + pace/filler/pause metrics
+│   │   ├── ml/                                     # scikit-learn adaptive difficulty + transformer confidence
+│   │   ├── personalization/                          # learner profile, weakness detection, streaks
+│   │   ├── interview/                                  # question bank, resume parsing, STAR analysis
+│   │   ├── services/                                     # service orchestrators
+│   │   └── database/store.py                               # SQLite (local) / PostgreSQL (production) persistence
+│   ├── ml_training/                                    # T5 GEC training & JFLEG evaluation benchmark
+│   │   ├── train_gec.py                                  # Colab / GPU fine-tuning script
+│   │   ├── evaluate_gec.py                               # JFLEG GLEU evaluation benchmark runner
+│   │   └── README_TRAINING.md                            # Step-by-step training guide
+│   ├── requirements.txt                                  # core dependencies
+│   ├── requirements-dev.txt                              # pytest & test dependencies
+│   ├── requirements-ml-optional.txt                      # optional transformers & torch
 │   └── .env.example
 │
-└── .env.example                                                # VITE_API_BASE_URL
+├── render.yaml                                                 # Render cloud blueprint config
+├── vercel.json                                                 # Vercel SPA routing config
+└── .env.example                                                # Frontend VITE_API_BASE_URL
 ```
 
 ---
 
-## 12. Architecture notes
+## 14. Architecture notes
 
 - **Auth:** real signup/login (password hashing via PBKDF2, HMAC-signed tokens — see `backend/app/core/security.py`). A wrong password shows a real error rather than silently succeeding. No `Authorization` header sent → the backend transparently serves a fixed `demo-student` profile so the whole app is explorable with zero signup.
 - **Services layer (frontend):** every page calls a function in `src/services/*.ts`, never `fetch`/`axios` directly. Each follows the same `try backend, catch → mock` pattern (see `studentService.ts`'s `withFallback` helper).
@@ -347,7 +421,7 @@ ai-comm-coach/
 
 ---
 
-## 13. System Architecture & Multi-Engine Intelligence
+## 15. System Architecture & Multi-Engine Intelligence
 
 - **Honest AI Mode (`USE_MOCK_AI=false`):** By default, mock data is never returned for authenticated users. The backend connects directly to real speech, NLP, and database engines. If any engine is configured or active, mock AI is automatically disabled system-wide.
 - **Multi-Engine Grammar Pipeline:** Uses Claude 3.5 Sonnet for rich, contextual sentence-by-sentence JSON correction. Seamlessly falls back to a fine-tuned Seq2Seq model (`flan-t5-small-gec`, 81.39 GLEU) or a high-speed rule-based engine (25+ exact patterns + spaCy POS tagging).
@@ -357,9 +431,10 @@ ai-comm-coach/
 
 ---
 
-## 14. Tech stack (as required)
+## 16. Tech stack (as required)
 
 **Backend / AI:** Python 3.11+, FastAPI, Anthropic Claude 3.5 Sonnet, Hugging Face Transformers (`google/flan-t5-small`), spaCy (`en_core_web_sm`), Faster-Whisper (int8 quantization), SpeechRecognition, scikit-learn (`RandomForestClassifier`), PyTorch, SQLite / PostgreSQL (`psycopg2`), stdlib `wave` / `audioop` / `difflib`.
 **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, Framer Motion, React Three Fiber, Recharts, React Router v7, React Hook Form + Zod, Axios, Lucide React.
 **Evaluation & Benchmarking:** Generalized Language Evaluation Understanding (GLEU), JFLEG Benchmark, Grammatical Error Correction (`grammarly/coedit`).
 **Version control:** Git (uncommitted for review, `.env` gitignored).
+
