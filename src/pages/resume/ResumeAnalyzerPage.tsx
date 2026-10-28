@@ -21,11 +21,28 @@ import { interviewService } from '@/services/interviewService';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 
+interface ScoreBreakdownItem {
+  score: number;
+  max: number;
+  count?: number;
+  words?: number;
+  found?: string[];
+  missing?: string[];
+}
+
 interface ResumeAnalysisData {
   word_count: number;
   ats_score: number;
+  score_breakdown?: {
+    sections: ScoreBreakdownItem;
+    skills: ScoreBreakdownItem;
+    action_verbs: ScoreBreakdownItem;
+    metrics: ScoreBreakdownItem;
+    length: ScoreBreakdownItem;
+  };
   skills: string[];
   action_verbs: string[];
+  quantifiable_metrics_count?: number;
   detected_projects_count: number;
   strengths: string[];
   recommendations: string[];
@@ -252,6 +269,70 @@ export default function ResumeAnalyzerPage() {
                 <div className="mt-4">
                   <ProgressBar value={analysis.ats_score} max={100} tone="accent" />
                 </div>
+
+                {analysis.score_breakdown && (
+                  <div className="mt-6 border-t border-base-700/60 pt-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-base-400 mb-3">
+                      ATS Score Breakdown (5 Industry Standard Pillars)
+                    </p>
+                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+                      <div className="rounded-xl border border-base-700/70 bg-base-950/60 p-2.5">
+                        <span className="text-[11px] text-base-400 block">Sections</span>
+                        <span className="font-display text-base font-bold text-base-100">
+                          {analysis.score_breakdown.sections.score}
+                          <span className="text-[10px] text-base-500 font-normal"> / 20</span>
+                        </span>
+                        <span className="block text-[10px] text-accent-300 mt-0.5 truncate">
+                          {analysis.score_breakdown.sections.found?.length || 0}/4 detected
+                        </span>
+                      </div>
+
+                      <div className="rounded-xl border border-base-700/70 bg-base-950/60 p-2.5">
+                        <span className="text-[11px] text-base-400 block">Tech Skills</span>
+                        <span className="font-display text-base font-bold text-base-100">
+                          {analysis.score_breakdown.skills.score}
+                          <span className="text-[10px] text-base-500 font-normal"> / 25</span>
+                        </span>
+                        <span className="block text-[10px] text-accent-300 mt-0.5 truncate">
+                          {analysis.skills.length} matched
+                        </span>
+                      </div>
+
+                      <div className="rounded-xl border border-base-700/70 bg-base-950/60 p-2.5">
+                        <span className="text-[11px] text-base-400 block">Action Verbs</span>
+                        <span className="font-display text-base font-bold text-base-100">
+                          {analysis.score_breakdown.action_verbs.score}
+                          <span className="text-[10px] text-base-500 font-normal"> / 20</span>
+                        </span>
+                        <span className="block text-[10px] text-emerald-400 mt-0.5 truncate">
+                          {analysis.action_verbs.length} found
+                        </span>
+                      </div>
+
+                      <div className="rounded-xl border border-base-700/70 bg-base-950/60 p-2.5">
+                        <span className="text-[11px] text-base-400 block">Metrics & Data</span>
+                        <span className="font-display text-base font-bold text-base-100">
+                          {analysis.score_breakdown.metrics.score}
+                          <span className="text-[10px] text-base-500 font-normal"> / 15</span>
+                        </span>
+                        <span className="block text-[10px] text-amber-400 mt-0.5 truncate">
+                          {analysis.score_breakdown.metrics.count || 0} quantifiable
+                        </span>
+                      </div>
+
+                      <div className="col-span-2 sm:col-span-1 rounded-xl border border-base-700/70 bg-base-950/60 p-2.5">
+                        <span className="text-[11px] text-base-400 block">Length/Density</span>
+                        <span className="font-display text-base font-bold text-base-100">
+                          {analysis.score_breakdown.length.score}
+                          <span className="text-[10px] text-base-500 font-normal"> / 20</span>
+                        </span>
+                        <span className="block text-[10px] text-azure-400 mt-0.5 truncate">
+                          {analysis.word_count} words
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </Card>
 
               {/* Skills & Action Verbs */}
