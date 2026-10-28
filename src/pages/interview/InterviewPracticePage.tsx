@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Bot, Mic, Square, ArrowRight, Clock, HelpCircle, Gauge, MessageSquareText, ShieldCheck, Upload, FileText, Target, Sparkles } from 'lucide-react';
+import { Bot, Mic, Square, ArrowRight, Clock, HelpCircle, Gauge, MessageSquareText, ShieldCheck, Upload, FileText, Target, Sparkles, Volume2, Activity } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, Badge, Button, Modal, Input } from '@/components/ui';
 import { ProgressBar } from '@/components/ui/ProgressBar';
@@ -290,70 +290,177 @@ export default function InterviewPracticePage() {
         </Card>
 
         <Card className="p-5">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-base-400">
-            {lastMetrics.feedback ? 'Last Answer Metrics' : 'Live Metrics'}
-          </p>
-          <div className="space-y-3">
-            {[
-              { icon: ShieldCheck, label: 'Confidence', value: lastMetrics.confidence || 71, engine: undefined },
-              { icon: Gauge, label: 'Fluency', value: lastMetrics.fluency || 64, engine: undefined },
-              {
-                icon: Target,
-                label: 'Relevance',
-                value: lastMetrics.relevanceScore !== undefined ? lastMetrics.relevanceScore : 75,
-                engine: lastMetrics.relevanceEngine,
-              },
-              {
-                icon: Sparkles,
-                label: 'Vocabulary',
-                value: lastMetrics.vocabulary || 70,
-                engine: lastMetrics.vocabEngine,
-              },
-              { icon: MessageSquareText, label: 'Structure', value: lastMetrics.structure || 68, engine: undefined },
-            ].map((m) => (
-              <div key={m.label}>
-                <div className="mb-1 flex items-center justify-between text-xs text-base-300">
-                  <span className="flex items-center gap-1.5">
-                    <m.icon className="size-3.5 text-accent-400" /> {m.label}
-                    {m.engine && (
-                      <Badge variant={m.engine === 'claude' ? 'accent' : 'outline'} size="sm" className="text-[9px] py-0 px-1">
-                        {m.engine === 'claude' ? 'Claude' : 'Heuristic'}
-                      </Badge>
-                    )}
-                  </span>
-                  <span className="font-medium text-base-100">{Math.round(m.value)}%</span>
-                </div>
-                <ProgressBar value={m.value} size="sm" tone="accent" />
-              </div>
-            ))}
-            <div className="rounded-xl border border-white/5 bg-base-800/60 p-2.5">
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-base-400">Filler words</p>
-                <p className="font-display text-base font-semibold text-warning-400">{lastMetrics.fillerWordCount}</p>
-              </div>
-            </div>
-            {lastMetrics.relevanceReason && (
-              <div className="rounded-xl border border-white/5 bg-base-800/60 p-2.5 text-[11px] text-base-300">
-                <strong className="text-accent-300">Relevance:</strong> {lastMetrics.relevanceReason}
-              </div>
-            )}
-            {lastMetrics.feedback && (
-              <div className="rounded-xl border border-accent-500/20 bg-accent-500/5 p-2.5 text-xs text-base-300">
-                {lastMetrics.feedback}
-              </div>
-            )}
-            {lastMetrics.followupQuestion && (
-              <div className="rounded-xl border border-accent-500/30 bg-accent-500/10 p-2.5">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-accent-300">Follow-up Generated</span>
-                  <Badge variant={lastMetrics.followupEngine === 'claude' ? 'accent' : 'outline'} size="sm" className="text-[9px]">
-                    {lastMetrics.followupEngine === 'claude' ? 'Claude AI' : 'Rule-based'}
-                  </Badge>
-                </div>
-                <p className="text-xs text-base-100 italic">&ldquo;{lastMetrics.followupQuestion.text}&rdquo;</p>
-              </div>
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-base-400">
+              {lastMetrics.feedback
+                ? 'Answer Evaluation Metrics'
+                : recorder.status === 'recording'
+                ? 'Live Voice Metrics'
+                : 'Performance Metrics'}
+            </p>
+            {recorder.status === 'recording' ? (
+              <Badge variant="danger" size="sm" className="animate-pulse">
+                ● Live Mic
+              </Badge>
+            ) : lastMetrics.feedback ? (
+              <Badge variant="accent" size="sm">
+                AI Verified
+              </Badge>
+            ) : (
+              <Badge variant="outline" size="sm">
+                Standby
+              </Badge>
             )}
           </div>
+
+          {recorder.status === 'recording' ? (
+            <div className="space-y-3.5">
+              {/* Live Mic Volume Level Meter */}
+              <div className="rounded-xl border border-accent-500/30 bg-accent-500/10 p-3">
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="flex items-center gap-1.5 font-medium text-accent-300">
+                    <Volume2 className="size-3.5" /> Mic Input Level
+                  </span>
+                  <span className="font-semibold text-accent-200">{recorder.audioLevel}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-base-950/60">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-accent-500 via-emerald-400 to-amber-400 transition-all duration-75"
+                    style={{ width: `${recorder.audioLevel}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Real-time Voice Stats */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl border border-white/5 bg-base-800/60 p-2.5">
+                  <p className="text-[11px] text-base-400">Live Pace</p>
+                  <p className="mt-0.5 font-display text-base font-semibold text-base-100">
+                    {recorder.liveWpm}{' '}
+                    <span className="text-[10px] font-normal text-base-500">
+                      {recorder.liveWpm >= 120 && recorder.liveWpm <= 165 ? '✓ Ideal' : 'WPM'}
+                    </span>
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-base-800/60 p-2.5">
+                  <p className="text-[11px] text-base-400">Words Spoken</p>
+                  <p className="mt-0.5 font-display text-base font-semibold text-base-100">
+                    {recorder.liveWordCount}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-base-800/60 p-2.5">
+                  <p className="text-[11px] text-base-400">Hesitations / Fillers</p>
+                  <p className="mt-0.5 font-display text-base font-semibold text-warning-400">
+                    {recorder.liveFillerCount}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-base-800/60 p-2.5">
+                  <p className="text-[11px] text-base-400">Recording Time</p>
+                  <p className="mt-0.5 font-display text-base font-semibold text-base-100">
+                    {formatDuration(recorder.duration)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Live Transcript Stream */}
+              <div className="rounded-xl border border-white/5 bg-base-800/60 p-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-base-400 mb-1">
+                  Live Speech Stream
+                </p>
+                <p className="text-xs text-base-200 italic line-clamp-3">
+                  {recorder.liveTranscript || 'Listening to your microphone...'}
+                </p>
+              </div>
+            </div>
+          ) : lastMetrics.feedback ? (
+            <div className="space-y-3">
+              {[
+                { icon: ShieldCheck, label: 'Confidence', value: lastMetrics.confidence, engine: undefined },
+                { icon: Gauge, label: 'Fluency', value: lastMetrics.fluency, engine: undefined },
+                {
+                  icon: Target,
+                  label: 'Relevance',
+                  value: lastMetrics.relevanceScore !== undefined ? lastMetrics.relevanceScore : 0,
+                  engine: lastMetrics.relevanceEngine,
+                },
+                {
+                  icon: Sparkles,
+                  label: 'Vocabulary',
+                  value: lastMetrics.vocabulary,
+                  engine: lastMetrics.vocabEngine,
+                },
+                { icon: MessageSquareText, label: 'Structure', value: lastMetrics.structure, engine: undefined },
+              ].map((m) => (
+                <div key={m.label}>
+                  <div className="mb-1 flex items-center justify-between text-xs text-base-300">
+                    <span className="flex items-center gap-1.5">
+                      <m.icon className="size-3.5 text-accent-400" /> {m.label}
+                      {m.engine && (
+                        <Badge variant={m.engine === 'claude' ? 'accent' : 'outline'} size="sm" className="text-[9px] py-0 px-1">
+                          {m.engine === 'claude' ? 'Claude' : 'Heuristic'}
+                        </Badge>
+                      )}
+                    </span>
+                    <span className="font-medium text-base-100">{Math.round(m.value)}%</span>
+                  </div>
+                  <ProgressBar value={m.value} size="sm" tone="accent" />
+                </div>
+              ))}
+              <div className="rounded-xl border border-white/5 bg-base-800/60 p-2.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-base-400">Filler words</p>
+                  <p className="font-display text-base font-semibold text-warning-400">{lastMetrics.fillerWordCount}</p>
+                </div>
+              </div>
+              {lastMetrics.relevanceReason && (
+                <div className="rounded-xl border border-white/5 bg-base-800/60 p-2.5 text-[11px] text-base-300">
+                  <strong className="text-accent-300">Relevance:</strong> {lastMetrics.relevanceReason}
+                </div>
+              )}
+              {lastMetrics.feedback && (
+                <div className="rounded-xl border border-accent-500/20 bg-accent-500/5 p-2.5 text-xs text-base-300">
+                  {lastMetrics.feedback}
+                </div>
+              )}
+              {lastMetrics.followupQuestion && (
+                <div className="rounded-xl border border-accent-500/30 bg-accent-500/10 p-2.5">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-accent-300">Follow-up Generated</span>
+                    <Badge variant={lastMetrics.followupEngine === 'claude' ? 'accent' : 'outline'} size="sm" className="text-[9px]">
+                      {lastMetrics.followupEngine === 'claude' ? 'Claude AI' : 'Rule-based'}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-base-100 italic">&ldquo;{lastMetrics.followupQuestion.text}&rdquo;</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {[
+                { icon: ShieldCheck, label: 'Confidence' },
+                { icon: Gauge, label: 'Fluency' },
+                { icon: Target, label: 'Relevance' },
+                { icon: Sparkles, label: 'Vocabulary' },
+                { icon: MessageSquareText, label: 'Structure' },
+              ].map((m) => (
+                <div key={m.label}>
+                  <div className="mb-1 flex items-center justify-between text-xs text-base-400">
+                    <span className="flex items-center gap-1.5">
+                      <m.icon className="size-3.5 text-base-500" /> {m.label}
+                    </span>
+                    <span className="text-base-500 font-mono text-[11px]">--</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-base-800/60" />
+                </div>
+              ))}
+              <div className="rounded-xl border border-base-700/60 bg-base-900/60 p-3 mt-4 text-center">
+                <p className="text-xs font-medium text-base-300">Ready to Evaluate</p>
+                <p className="text-[11px] text-base-500 mt-1">
+                  Click the microphone button and answer verbally. Real-time cadence, acoustic fluency, and linguistic scores are evaluated with zero mock data.
+                </p>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
 

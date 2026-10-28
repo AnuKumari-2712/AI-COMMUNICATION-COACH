@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Mic, Pause, Play, Square, RotateCcw, ArrowRight, AlertCircle, ChevronLeft, ChevronRight, Shuffle } from 'lucide-react';
+import { Mic, Pause, Play, Square, RotateCcw, ArrowRight, AlertCircle, ChevronLeft, ChevronRight, Shuffle, Volume2 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, Button, Badge } from '@/components/ui';
 import { Waveform } from '@/components/shared/Waveform';
@@ -119,6 +119,42 @@ export default function VoicePracticePage() {
         <Waveform active={isRecording} bars={48} className="w-full max-w-lg" />
 
         <p className="font-display text-4xl font-semibold tabular-nums text-base-50">{formatDuration(recorder.duration)}</p>
+
+        {isRecording && (
+          <div className="w-full max-w-lg space-y-3 rounded-2xl border border-accent-500/20 bg-base-900/60 p-4">
+            <div className="flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5 font-medium text-accent-300">
+                <Volume2 className="size-3.5" /> Mic Input Volume
+              </span>
+              <span className="font-semibold text-accent-200">{recorder.audioLevel}%</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-base-950/80">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-accent-500 via-emerald-400 to-amber-400 transition-all duration-75"
+                style={{ width: `${recorder.audioLevel}%` }}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+              <div className="rounded-xl bg-base-950/40 p-2">
+                <p className="text-[10px] uppercase tracking-wider text-base-400">Live Pace</p>
+                <p className="mt-0.5 text-xs font-semibold text-base-100">{recorder.liveWpm} WPM</p>
+              </div>
+              <div className="rounded-xl bg-base-950/40 p-2">
+                <p className="text-[10px] uppercase tracking-wider text-base-400">Words</p>
+                <p className="mt-0.5 text-xs font-semibold text-base-100">{recorder.liveWordCount}</p>
+              </div>
+              <div className="rounded-xl bg-base-950/40 p-2">
+                <p className="text-[10px] uppercase tracking-wider text-base-400">Hesitations</p>
+                <p className="mt-0.5 text-xs font-semibold text-warning-400">{recorder.liveFillerCount}</p>
+              </div>
+            </div>
+            {recorder.liveTranscript && (
+              <p className="border-t border-base-800/80 pt-2 text-xs italic text-base-300 line-clamp-2">
+                &ldquo;{recorder.liveTranscript}&rdquo;
+              </p>
+            )}
+          </div>
+        )}
 
         {!isStopped ? (
           <div className="flex items-center gap-4">

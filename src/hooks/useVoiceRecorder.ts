@@ -16,9 +16,14 @@ export function useVoiceRecorder() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [liveTranscript, setLiveTranscript] = useState('');
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animFrameRef = useRef<number | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   // Resolves with the WAV (or, if conversion fails, the raw recording) once the
   // recorder has stopped and conversion has finished. Callers must await this
@@ -31,16 +36,51 @@ export function useVoiceRecorder() {
   const clearTimer = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = null;
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    animFrameRef.current = null;
   };
 
   const start = useCallback(async () => {
     setError(null);
     setAudioUrl(null);
     setAudioBlob(null);
+    setLiveTranscript('');
+    setAudioLevel(0);
     chunksRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+
+      // Connect Web Audio API Analyser for live mic volume metering
+      try {
+        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          const audioCtx = new AudioCtx();
+          audioContextRef.current = audioCtx;
+          const source = audioCtx.createMediaStreamSource(stream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 256;
+          source.connect(analyser);
+          analyserRef.current = analyser;
+
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          const updateLevel = () => {
+            if (!analyserRef.current) return;
+            analyserRef.current.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i += 1) {
+              sum += dataArray[i];
+            }
+            const avg = sum / dataArray.length;
+            setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
+            animFrameRef.current = requestAnimationFrame(updateLevel);
+          };
+          animFrameRef.current = requestAnimationFrame(updateLevel);
+        }
+      } catch {
+        // AudioContext initialization fallback
+      }
+
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       recorder.ondataavailable = (e) => {
@@ -60,6 +100,9 @@ export function useVoiceRecorder() {
       };
       recorder.start();
       transcriber.reset();
+      transcriber.onTextChange = (text: string) => {
+        setLiveTranscript(text);
+      };
       transcriber.start();
       setStatus('recording');
       setDuration(0);
@@ -76,6 +119,7 @@ export function useVoiceRecorder() {
       transcriber.pause();
       setStatus('paused');
       clearTimer();
+      setAudioLevel(0);
     }
   }, [transcriber]);
 
@@ -85,6 +129,21 @@ export function useVoiceRecorder() {
       transcriber.start();
       setStatus('recording');
       intervalRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
+      if (analyserRef.current) {
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+        const updateLevel = () => {
+          if (!analyserRef.current) return;
+          analyserRef.current.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i += 1) {
+            sum += dataArray[i];
+          }
+          const avg = sum / dataArray.length;
+          setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
+          animFrameRef.current = requestAnimationFrame(updateLevel);
+        };
+        animFrameRef.current = requestAnimationFrame(updateLevel);
+      }
     }
   }, [transcriber]);
 
@@ -95,6 +154,12 @@ export function useVoiceRecorder() {
     finalTranscriptRef.current = transcriber.stop();
     mediaRecorderRef.current?.stop();
     clearTimer();
+    setAudioLevel(0);
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
     setStatus('stopped');
   }, [transcriber]);
 
@@ -106,8 +171,15 @@ export function useVoiceRecorder() {
     setAudioUrl(null);
     setAudioBlob(null);
     setError(null);
+    setAudioLevel(0);
+    setLiveTranscript('');
     finalBlobRef.current = Promise.resolve(null);
     clearTimer();
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
   }, [transcriber]);
 
   const getAudioBlob = useCallback(() => finalBlobRef.current, []);
@@ -118,7 +190,35 @@ export function useVoiceRecorder() {
     clearTimer();
     transcriber.reset();
     streamRef.current?.getTracks().forEach((t) => t.stop());
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().catch(() => {});
+    }
   }, [transcriber]);
 
-  return { status, duration, audioUrl, audioBlob, getAudioBlob, getTranscript, speechSupported, error, start, pause, resume, stop, reset };
+  // Derived real-time speech stats
+  const liveWordCount = liveTranscript.trim() ? liveTranscript.trim().split(/\s+/).length : 0;
+  const liveWpm = duration > 0 ? Math.round((liveWordCount / duration) * 60) : 0;
+  const liveFillerMatches = liveTranscript.match(/\b(um|uh|umm|uhh|hmm|erm|like|actually|basically|you know|sort of|kind of)\b/gi);
+  const liveFillerCount = liveFillerMatches ? liveFillerMatches.length : 0;
+
+  return {
+    status,
+    duration,
+    audioUrl,
+    audioBlob,
+    audioLevel,
+    liveTranscript,
+    liveWordCount,
+    liveWpm,
+    liveFillerCount,
+    getAudioBlob,
+    getTranscript,
+    speechSupported,
+    error,
+    start,
+    pause,
+    resume,
+    stop,
+    reset,
+  };
 }

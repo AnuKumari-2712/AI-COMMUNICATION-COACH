@@ -49,6 +49,7 @@ export class LiveTranscriber {
     return recognitionConstructor() !== null;
   }
 
+  public onTextChange?: (text: string) => void;
   private recognition: Recognition | null = null;
   private finals = '';
   private interim = '';
@@ -56,6 +57,10 @@ export class LiveTranscriber {
   private waiting: (() => void) | null = null;
   private lastOpenedAt = 0;
   private quickRestarts = 0;
+
+  public getCurrentText(): string {
+    return this.text();
+  }
 
   /** Starts (or resumes) listening. Text recognized so far is kept. */
   start(): void {
@@ -132,6 +137,7 @@ export class LiveTranscriber {
         else interim += result[0].transcript;
       }
       this.interim = interim;
+      this.onTextChange?.(this.text());
     };
     recognition.onerror = (event) => {
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') this.listening = false;
