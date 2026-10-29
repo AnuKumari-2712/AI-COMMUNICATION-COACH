@@ -1,14 +1,26 @@
 # AI-Powered Personalized Communication & Interview Coach
 
-An adaptive platform that evaluates a student's communication ability through voice and text, builds a dynamic learner profile, detects weaknesses, and generates a personalized (not identical-for-everyone) practice plan — grammar, vocabulary, fluency drills and full mock interviews, all adapting to the student's own history.
+[![GitHub Repository](https://img.shields.io/badge/GitHub-AnuKumari--2712%2FAI--COMMUNICATION--COACH-blue?logo=github)](https://github.com/AnuKumari-2712/AI-COMMUNICATION-COACH)
+[![React](https://img.shields.io/badge/Frontend-React_19_%2B_Vite_%2B_TS-61DAFB?logo=react)](https://github.com/AnuKumari-2712/AI-COMMUNICATION-COACH)
+[![FastAPI](https://img.shields.io/badge/Backend-FastAPI_%2B_Python_3.11-009688?logo=fastapi)](https://github.com/AnuKumari-2712/AI-COMMUNICATION-COACH)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/AnuKumari-2712/AI-COMMUNICATION-COACH)
 
-- **Frontend:** React + TypeScript + Tailwind CSS + Framer Motion + React Three Fiber + Recharts + React Router + React Hook Form/Zod
-- **Backend:** Python + FastAPI + spaCy (NLP) + scikit-learn (adaptive difficulty) + SpeechRecognition / Faster-Whisper + optional HuggingFace Transformers / Claude AI
+An adaptive platform that evaluates a student's communication ability through voice and text, builds a dynamic learner profile, detects weaknesses, and generates a personalized practice plan — grammar, vocabulary, fluency drills, ATS resume evaluation, and full mock interviews, all adapting to the student's own history.
+
+- **GitHub Repository:** [https://github.com/AnuKumari-2712/AI-COMMUNICATION-COACH](https://github.com/AnuKumari-2712/AI-COMMUNICATION-COACH)
+- **Frontend:** React 19 + TypeScript + Tailwind CSS + Framer Motion + React Three Fiber + Recharts + React Router + React Hook Form / Zod
+- **Backend:** Python 3.11 + FastAPI + spaCy (NLP) + scikit-learn (adaptive difficulty) + SpeechRecognition / Faster-Whisper + optional HuggingFace Transformers / Claude AI
 - **Storage:** SQLite locally (`backend/data/coach.db`, zero setup required) and PostgreSQL in production via `DATABASE_URL` (e.g. Render Postgres, Neon, Supabase). *Note: MongoDB is not used.*
 
-This README is written so **someone who received this project as a ZIP file** (no git, no prior context) can get it running end to end. If you did clone it with git, skip the parts that don't apply.
-
 ---
+
+## Project Team & Module Division
+
+| Member | Module | Key Contributions & Responsibilities |
+|---|---|---|
+| **Anu Kumari** | **Module 1: Frontend & User Experience** | 20 responsive interactive pages, 3D Canvas visualizer, live audio waveform recording, adaptive learning dashboard, assessment feedback interface, and client state orchestration. |
+| **Chitra Singh** | **Module 2: NLP & Backend Architecture** | FastAPI backend architecture, Multi-Engine Grammar Pipeline (Claude 3.5 Sonnet / T5 GEC / spaCy rule engine), contextual vocabulary richness scoring (Herdan's C), and semantic answer relevance analysis. |
+| **Akhila Reddy** | **Module 3: ML Models & Speech Processing** | Faster-Whisper STT engine with hesitation detection, audio PCM fluency/WPM calculation, scikit-learn adaptive difficulty classifier, and ATS Resume Analyzer with granular scoring breakdown. |
 
 ## 1. What you need to install first
 
@@ -202,7 +214,7 @@ Every backend response includes an explicit `source: "real" | "mock"` field alon
 | Adaptive difficulty | scikit-learn `RandomForestClassifier` trained at startup | Always real — predicts beginner/intermediate/advanced difficulty dynamically from profile history. |
 | Weakness & revision queue | Deterministic threshold logic (weakness if score < 65 and below learner average) | Always real — mistakes recurring 3+ times auto-enqueued for revision. |
 | Streak & score calculation | 100% deterministic calendar math with same-day deduplication and midnight crossover | Never mocked — brand-new users show 0.0 baseline ("No data yet"). |
-| Resume parsing | `pypdf` text extraction | Unreadable PDF returns empty text gracefully. |
+| Resume & ATS parsing | `pypdf` text extraction + ATS scoring breakdown: Section completeness (20%), Skill density (25%), Action verbs (20%), Metrics (15%), Length (20%) + Academic/Live project count extraction | Unreadable PDF returns empty text gracefully. Zero-skill upload yields accurate transparent scoring without fake inflation. |
 | Data persistence | SQLite locally (`coach.db`), PostgreSQL in production via `DATABASE_URL` | Never mocked — persistent relational storage with auto-migration. |
 | Admin Dashboard | — | Intentionally rich mock data for presentation purposes. |
 

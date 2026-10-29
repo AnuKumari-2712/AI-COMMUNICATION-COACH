@@ -209,6 +209,22 @@ def analyze_resume_text(text: str) -> dict:
     # 10. Suggested Interview Questions based on actual skills and text
     questions = get_resume_based_questions(text, limit=4)
 
+    # Count detected projects (lines under "Projects" section header)
+    _project_lines = []
+    _in_projects = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if re.match(r"^(projects?|academic projects?)\s*:?$", stripped, re.IGNORECASE):
+            _in_projects = True
+            continue
+        if _in_projects:
+            if not stripped or (re.match(r"^[A-Z][a-zA-Z ]+:?$", stripped) and len(stripped.split()) <= 4 and stripped.endswith(":")):
+                _in_projects = False
+                continue
+            if stripped:
+                _project_lines.append(stripped)
+    detected_projects_count = len(_project_lines)
+
     return {
         "word_count": word_count,
         "ats_score": ats_score,
@@ -217,9 +233,36 @@ def analyze_resume_text(text: str) -> dict:
         "verb_score": verb_score,
         "metric_score": metric_score,
         "length_score": length_score,
+        "score_breakdown": {
+            "sections": {
+                "score": section_score,
+                "max": 20,
+                "found": sections_found,
+                "missing": sections_missing,
+            },
+            "skills": {
+                "score": skill_score,
+                "max": 25,
+            },
+            "action_verbs": {
+                "score": verb_score,
+                "max": 20,
+            },
+            "metrics": {
+                "score": metric_score,
+                "max": 15,
+                "count": len(actual_metrics),
+            },
+            "length": {
+                "score": length_score,
+                "max": 20,
+                "words": word_count,
+            },
+        },
         "skills": found_skills,
         "action_verbs": found_verbs,
         "quantifiable_metrics_count": len(actual_metrics),
+        "detected_projects_count": detected_projects_count,
         "sections_found": sections_found,
         "sections_missing": sections_missing,
         "strengths": strengths or ["Basic resume structure recognized."],

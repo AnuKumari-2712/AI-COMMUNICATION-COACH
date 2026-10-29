@@ -1,7 +1,14 @@
 {
-  "name": "ai-comm-coach",
+  "name": "ai-communication-coach",
+  "description": "AI-Powered Personalized Communication & Interview Coach - Voice & text evaluation, adaptive learner profile, and mock interviews",
+  "author": "Anu Kumari, Chitra Singh, Akhila Reddy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AnuKumari-2712/AI-COMMUNICATION-COACH.git"
+  },
+  "homepage": "https://github.com/AnuKumari-2712/AI-COMMUNICATION-COACH#readme",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
