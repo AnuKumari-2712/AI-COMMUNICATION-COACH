@@ -1,11 +1,3 @@
-"""
-MODULE 10 test plan (see AUDIT.md): scoring transparency. Before this
-module, overall/composite scores used hardcoded, unexplained weights and
-could silently blend an unreliable component (e.g. pronunciation, which
-Module 5 established is never reliably measured) into a headline score at
-full weight. These tests prove compute_weighted_score excludes unreliable
-components, renormalizes the rest, shows its work, and stays consistent.
-"""
 from app.services.scoring_engine import compute_weighted_score
 
 
@@ -73,7 +65,6 @@ def test_formula_names_excluded_components():
 
 
 def test_zero_total_weight_among_reliable_components_does_not_crash():
-    # MODULE 11: a pathological all-zero-weight set must return a safe
     # score instead of raising ZeroDivisionError.
     components = [
         {"name": "a", "score": 90.0, "weight": 0.0, "reliable": True},

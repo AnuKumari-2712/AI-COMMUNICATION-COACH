@@ -48,8 +48,7 @@ class InterviewAnswerRequest(BaseModel):
 
 
 class AnswerStructureScore(BaseModel):
-    # MODULE 11 (see AUDIT.md): explicit bounds reject an impossible
-    # component score at the API boundary instead of silently serving it.
+    # Bounds validation for structural components [0, 100]
     introduction: float = Field(ge=0, le=100)
     main_point: float = Field(ge=0, le=100)
     supporting_explanation: float = Field(ge=0, le=100)
@@ -62,7 +61,6 @@ class InterviewAnswerResponse(BaseModel):
     grammar_score: float = Field(ge=0, le=100)
     vocabulary_score: float = Field(ge=0, le=100)
     fluency_score: float = Field(ge=0, le=100)
-    # MODULE 4: whether fluency_score came from real speech timing
     # (compute_speech_metrics, voice mode with a real duration) or a
     # text-only proxy (text_flow_consistency) — see interview_service.py.
     fluency_source: Literal["speech_measured", "text_estimated"] = "text_estimated"
@@ -71,7 +69,6 @@ class InterviewAnswerResponse(BaseModel):
     structure: AnswerStructureScore
     structure_score: float = Field(ge=0, le=100)
     filler_word_count: int = Field(ge=0)
-    # MODULE 7: keyword/lemma-overlap relevance between this question and
     # this answer — see relevance_analysis.py::analyze_relevance. Not true
     # semantic understanding; addressed/missing_keywords are the evidence.
     relevance_score: float = Field(default=0.0, ge=0, le=100)
@@ -81,7 +78,6 @@ class InterviewAnswerResponse(BaseModel):
     relevance_reason: str = ""
     relevance_engine: Literal["gemini", "claude", "heuristic"] = "heuristic"
     vocab_engine: Literal["gemini", "claude", "heuristic"] = "heuristic"
-    # MODULE 8: only the fixed technical-interview questions have a known
     # concept checklist to verify against — see technical_knowledge.py.
     # applicable=False for any question without one (dynamic resume/job-role
     # questions, or non-technical categories), never a fabricated verdict.
@@ -90,7 +86,6 @@ class InterviewAnswerResponse(BaseModel):
     technical_matched_concepts: list[str] = []
     technical_missing_concepts: list[str] = []
     technical_explanation: str = ""
-    # MODULE 9: a real follow-up question generated from something specific
     # in THIS answer (see followup_generator.py) — None when the answer had
     # nothing specific enough to follow up on, rather than a generic,
     # disconnected question.
@@ -108,7 +103,6 @@ class InterviewSubmitRequest(BaseModel):
 
 
 class InterviewResultResponse(BaseModel):
-    # MODULE 11: explicit bounds on every composite/component score and
     # ge=0 on every count — see the equivalent note on TextAnalysisResponse.
     overall: float = Field(ge=0, le=100)
     communication: float = Field(ge=0, le=100)
@@ -119,25 +113,17 @@ class InterviewResultResponse(BaseModel):
     structure: float = Field(ge=0, le=100)
     fluency: float = Field(ge=0, le=100)
     pronunciation: float = Field(ge=0, le=100)
-    # MODULE 5: pronunciation is a transcript-only proxy, never a real
-    # audio-based measurement — see speech_metrics.py::pronunciation_proxy.
     pronunciation_reliable: bool = False
     pronunciation_method: str = ""
-    # MODULE 7: average per-answer relevance score (see InterviewAnswerResponse
-    # above). MODULE 10 folds this into `overall` (see below).
     relevance: float = Field(default=0.0, ge=0, le=100)
     relevance_sufficient_data: bool = True
-    # MODULE 8: counts across only the answers where a verified concept
-    # checklist existed (technical_evaluated_count) — see technical_knowledge.py.
     technical_evaluated_count: int = Field(default=0, ge=0)
     technical_correct_count: int = Field(default=0, ge=0)
     technical_partially_correct_count: int = Field(default=0, ge=0)
     technical_incorrect_count: int = Field(default=0, ge=0)
     technical_insufficient_count: int = Field(default=0, ge=0)
-    # MODULE 10 transparency — see scoring_engine.py::compute_weighted_score.
     # `overall`/`communication` are now documented, reproducible weighted
     # blends; pronunciation is never a candidate component (see
-    # interview_service.py — Module 5 established it's never reliably
     # measured here), and relevance is excluded from `overall` (weight
     # redistributed) when the session's questions had too few identifiable
     # keywords to judge relevance confidently.

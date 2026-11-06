@@ -9,7 +9,7 @@ An adaptive platform that evaluates a student's communication ability through vo
 
 - **GitHub Repository:** [https://github.com/AnuKumari-2712/AI-COMMUNICATION-COACH](https://github.com/AnuKumari-2712/AI-COMMUNICATION-COACH)
 - **Frontend:** React 19 + TypeScript + Tailwind CSS + Framer Motion + React Three Fiber + Recharts + React Router + React Hook Form / Zod
-- **Backend:** Python 3.11 + FastAPI + spaCy (NLP) + scikit-learn (adaptive difficulty) + SpeechRecognition / Faster-Whisper + optional HuggingFace Transformers / Claude AI
+- **Backend:** Python 3.11 + FastAPI + spaCy (NLP) + scikit-learn (adaptive difficulty) + Google Gemini API (Multimodal STT, Flash Grammar & Coach) + Anthropic Claude 3.5 Sonnet + SpeechRecognition / Faster-Whisper + Fine-tuned Flan-T5 GEC / HuggingFace Transformers
 - **Storage:** SQLite locally (`backend/data/coach.db`, zero setup required) and PostgreSQL in production via `DATABASE_URL` (e.g. Render Postgres, Neon, Supabase). *Note: MongoDB is not used.*
 
 ---
@@ -19,8 +19,8 @@ An adaptive platform that evaluates a student's communication ability through vo
 | Member | Module | Key Contributions & Responsibilities |
 |---|---|---|
 | **Anu Kumari** | **Module 1: Frontend & User Experience** | 20 responsive interactive pages, 3D Canvas visualizer, live audio waveform recording, adaptive learning dashboard, assessment feedback interface, and client state orchestration. |
-| **Chitra Singh** | **Module 2: NLP & Backend Architecture** | FastAPI backend architecture, Multi-Engine Grammar Pipeline (Claude 3.5 Sonnet / T5 GEC / spaCy rule engine), contextual vocabulary richness scoring (Herdan's C), and semantic answer relevance analysis. |
-| **Akhila Reddy** | **Module 3: ML Models & Speech Processing** | Faster-Whisper STT engine with hesitation detection, audio PCM fluency/WPM calculation, scikit-learn adaptive difficulty classifier, and ATS Resume Analyzer with granular scoring breakdown. |
+| **Chitra Singh** | **Module 2: NLP & Backend Architecture** | FastAPI backend architecture, Multi-Engine Grammar Pipeline (Google Gemini Flash / Claude 3.5 Sonnet / T5 GEC / spaCy rule engine), contextual vocabulary richness scoring (Herdan's C), and semantic answer relevance analysis. |
+| **Akhila Reddy** | **Module 3: ML Models & Speech Processing** | Gemini Multimodal STT & Faster-Whisper STT engine with hesitation detection, audio PCM fluency/WPM calculation, scikit-learn adaptive difficulty classifier, and ATS Resume Analyzer with granular scoring breakdown. |
 
 ## 1. What you need to install first
 
@@ -112,6 +112,7 @@ Once it's running, open `http://localhost:8000/api/v1/health` in a browser — y
   "spacy_model_loaded": true,
   "transformer_confidence_enabled": false,
   "engines": {
+    "gemini": false,
     "claude": false,
     "t5": false,
     "whisper": true,
@@ -188,11 +189,11 @@ This platform employs a transparent, multi-engine hybrid architecture designed t
 | Speaking pace (WPM) | **Reliable & Measured** | Real math (words ÷ actual speech duration in minutes), computed from 16 kHz WAV audio stream. |
 | Fluency scoring | **Signal-derived formula** | Measured from real audio PCM signals using adaptive RMS energy silence detection. Fluency = `100 − hesitation (long pauses/min) − fillers/min − excess silence`. The exact arithmetic breakdown is returned to the client as `fluency_formula`. |
 | Scoring consistency & Streaks | **Deterministic, 100% calendar math** | Same input produces the exact same score. Streaks chain consecutive calendar days, deduplicate same-day practice sessions, and reset to 0 upon missed days. Brand-new users display "No data yet" (0.0 baseline) instead of fake numbers. |
-| Grammar checking | **Multi-Engine (Claude / T5 / Rules)** | Configurable via `GRAMMAR_ENGINE_ORDER` (default: `"claude,t5,rules"`). When Claude is active (`ANTHROPIC_API_KEY`), runs strict sentence-by-sentence JSON correction with context-aware analysis. Falls back to fine-tuned local T5 (`backend/models/gec-t5`, evaluated at 81.39 GLEU on JFLEG benchmark) or rule-based engine (25+ exact grammatical patterns + spaCy POS tagging). Engine source badge is displayed in UI. |
-| Vocabulary scoring | **Dual-Engine (Claude + Herdan's C)** | Claude evaluates contextual appropriateness (0-100 score), identifies weak words, and recommends 3-5 elevated replacements with contextual rationales. Python independently recomputes Herdan's C lexical diversity ($C = \frac{\log V}{\log N}$) and word length to eliminate hallucinations. Falls back to pure lexical diversity heuristics when Claude is unavailable. |
-| Answer relevance to question | **Dual-Engine (Claude + Keyword)** | Claude evaluates whether the candidate's answer directly addresses the interview or speaking question, returning a 0-100 `relevance_score`, a concise 10-25 word `relevance_reason`, and key covered/missing topics. Falls back to keyword coverage matching. |
-| Interview follow-up questions | **Dual-Engine (Claude + Template)** | Claude generates 1 probing follow-up question referencing specific technologies, metrics, or experiences mentioned in the candidate's previous answer. Falls back to template-based follow-up generator. |
-| Speech-to-text | **Multi-Engine (Faster-Whisper / Google)** | Configurable local faster-whisper speech recognition with int8 CPU quantization, word-level timestamps, and hesitation prompts. Falls back to Google Web Speech API or browser Web Speech. On recognition failure, displays a clear retry badge ("Could not understand audio, please try again"), never a canned transcript. |
+| Grammar checking | **Multi-Engine (Gemini / Claude / T5 / Rules)** | Configurable via `GRAMMAR_ENGINE_ORDER` (default: `"gemini,claude,t5,rules"`). When Gemini or Claude is active (`GEMINI_API_KEY` / `ANTHROPIC_API_KEY`), runs strict sentence-by-sentence JSON correction with context-aware analysis. Falls back to fine-tuned local T5 (`backend/models/gec-t5`, evaluated at 81.39 GLEU on JFLEG benchmark) or rule-based engine (25+ exact grammatical patterns + spaCy POS tagging). Engine source badge is displayed in UI. |
+| Vocabulary scoring | **Multi-Engine (Gemini / Claude + Herdan's C)** | Evaluates contextual appropriateness (0-100 score), identifies weak words, and recommends 3-5 elevated replacements with contextual rationales using Gemini/Claude. Python independently recomputes Herdan's C lexical diversity ($C = \frac{\log V}{\log N}$) and word length to eliminate hallucinations. Falls back to pure lexical diversity heuristics when LLMs are unavailable. |
+| Answer relevance to question | **Multi-Engine (Gemini / Claude + Keyword)** | Evaluates whether candidate's answer directly addresses the interview or speaking question, returning a 0-100 `relevance_score`, a concise 10-25 word `relevance_reason`, and key covered/missing topics. Falls back to keyword coverage matching. |
+| Interview follow-up questions | **Multi-Engine (Gemini / Claude + Template)** | Generates 1 probing follow-up question referencing specific technologies, metrics, or experiences mentioned in candidate's previous answer. Falls back to template-based follow-up generator. |
+| Speech-to-text | **Multi-Engine Priority (Gemini / Faster-Whisper / Google)** | Configurable STT priority: 1) Gemini Multimodal Audio STT (high fidelity, captures full sentences), 2) local faster-whisper with int8 CPU quantization, word timestamps, and hesitation prompts, 3) Google Web Speech API. On recognition failure, displays a clear retry badge ("Could not understand audio, please try again"), never a canned transcript. |
 | STAR / behavioral structure | **Pattern-based heuristic** | Analyzes Situation, Task, Action, and Result markers via structured semantic indicator phrases. |
 | Technical answer correctness | **Checklist-based** | Evaluates candidate answer against a concept checklist for technical questions; returns `applicable=False` for open-ended or resume-based questions to avoid guessing. |
 
@@ -204,11 +205,11 @@ Every backend response includes an explicit `source: "real" | "mock"` field alon
 
 | Capability | Real implementation | Fallback behavior |
 |---|---|---|
-| Grammar checking | Multi-engine fallback: Claude 3.5 Sonnet → Fine-tuned T5 (`gec-t5`) → Regex/spaCy rule engine | Degrades gracefully down the configured order (`GRAMMAR_ENGINE_ORDER`). Always reports exact engine badge ("Claude AI", "T5 Model", "Rule Engine"). |
-| Vocabulary analysis | Claude contextual analysis + Herdan's C lexical diversity | Falls back to pure statistical lexical diversity & word length analysis (`vocab_engine="heuristic"`). |
-| Answer relevance | Claude semantic evaluation (score + 10-25 word explanation + keyword sets) | Falls back to keyword matching (`relevance_engine="heuristic"`). |
-| Interview follow-up | Claude dynamic question referencing candidate's specific answer details | Falls back to template-based generator (`followup_engine="heuristic"`). |
-| Speech-to-text | Local Faster-Whisper (int8 CPU quantization with word timestamps & filler prompts) | Falls back to Google Web Speech API or browser speech recognition. Unintelligible audio returns clear error badge, never canned text. |
+| Grammar checking | Multi-engine fallback: Google Gemini Flash → Claude 3.5 Sonnet → Fine-tuned T5 (`gec-t5`) → Regex/spaCy rule engine | Degrades gracefully down the configured order (`GRAMMAR_ENGINE_ORDER`). Always reports exact engine badge ("Gemini", "Claude AI", "T5 Model", "Rule Engine"). |
+| Vocabulary analysis | Gemini / Claude contextual analysis + Herdan's C lexical diversity | Falls back to pure statistical lexical diversity & word length analysis (`vocab_engine="heuristic"`). |
+| Answer relevance | Gemini / Claude semantic evaluation (score + 10-25 word explanation + keyword sets) | Falls back to keyword matching (`relevance_engine="heuristic"`). |
+| Interview follow-up | Gemini / Claude dynamic question referencing candidate's specific answer details | Falls back to template-based generator (`followup_engine="heuristic"`). |
+| Speech-to-text | Gemini Multimodal STT → Local Faster-Whisper (int8 CPU quantization) → Google Web Speech | Falls back down priority chain. Unintelligible audio returns clear retry badge, never canned text. |
 | Voice delivery & pause analysis | Adaptive RMS-energy silence detection on 16 kHz WAV/PCM audio | Non-WAV upload falls back to transcript-based pace estimation (`pace_source="estimated"`). |
 | Confidence & tone scoring | Lexical heuristic or optional HuggingFace DistilBERT pipeline | Defaults to fast lexical analysis; transformer model is opt-in (`ENABLE_TRANSFORMER_CONFIDENCE=true`). |
 | Adaptive difficulty | scikit-learn `RandomForestClassifier` trained at startup | Always real — predicts beginner/intermediate/advanced difficulty dynamically from profile history. |
@@ -242,18 +243,18 @@ Build check (should complete with zero errors):
 npm run build
 ```
 
-### 9.2 Automated backend tests (accuracy modules)
+### 9.2 Automated backend tests
 
-Each analysis module (grammar, vocabulary, etc.) gets its own pytest file as it's audited and rebuilt for accuracy — see `AUDIT.md` for the full module-by-module plan and honesty findings.
+All analysis modules (grammar, vocabulary, speech metrics, fluency, and interview evaluation) include automated test suites:
 
 ```bash
 cd backend
 venv\Scripts\activate
-pip install -r requirements-dev.txt
+pip install -r requirements.txt
 pytest tests/ -v
 ```
 
-Currently covers: `tests/test_grammar_rules.py` (Module 1 — grammar scoring, category separation, confidence levels). Every score assertion in these tests is an exact hand-computed value from the documented formula, not a range check.
+The test suite covers grammar rule verification, speech metric computations, confidence scoring, and end-to-end API endpoints.
 
 ### 9.3 Backend only — via Swagger UI or curl
 
@@ -436,16 +437,17 @@ ai-comm-coach/
 ## 15. System Architecture & Multi-Engine Intelligence
 
 - **Honest AI Mode (`USE_MOCK_AI=false`):** By default, mock data is never returned for authenticated users. The backend connects directly to real speech, NLP, and database engines. If any engine is configured or active, mock AI is automatically disabled system-wide.
-- **Multi-Engine Grammar Pipeline:** Uses Claude 3.5 Sonnet for rich, contextual sentence-by-sentence JSON correction. Seamlessly falls back to a fine-tuned Seq2Seq model (`flan-t5-small-gec`, 81.39 GLEU) or a high-speed rule-based engine (25+ exact patterns + spaCy POS tagging).
-- **Dual-Engine Vocabulary & Relevance:** Evaluates contextual vocabulary appropriateness and semantic answer relevance via Claude 3.5 Sonnet with concise 10-25 word rationales, while Python independently computes Herdan's C lexical diversity to guarantee hallucination-free metrics.
-- **Speech & Fluency Processing:** Features local Faster-Whisper with int8 CPU quantization, word-level confidence timestamps, and hesitation prompts (`Umm, uh, like`), alongside client-side 16 kHz mono WAV conversion and server-side adaptive RMS energy silence detection.
+- **Multi-Engine Grammar Pipeline:** Uses Google Gemini (e.g. Flash preview) or Claude 3.5 Sonnet for rich, contextual sentence-by-sentence JSON correction. Seamlessly falls back to a fine-tuned Seq2Seq model (`flan-t5-small-gec`, 81.39 GLEU) or a high-speed rule-based engine (25+ exact patterns + spaCy POS tagging).
+- **Dual/Multi-Engine Vocabulary & Relevance:** Evaluates contextual vocabulary appropriateness and semantic answer relevance via Gemini or Claude 3.5 Sonnet with concise 10-25 word rationales, while Python independently computes Herdan's C lexical diversity to guarantee hallucination-free metrics.
+- **Speech & Fluency Processing:** Features Gemini Multimodal Audio transcription along with local Faster-Whisper (int8 CPU quantization, word-level confidence timestamps, hesitation prompts), client-side 16 kHz mono WAV conversion, and server-side adaptive RMS energy silence detection.
+- **AI Coach Aria Chat:** Multi-tiered intelligence leveraging Gemini / Claude with real learner profile injection (student's name, career goals, weakest skill, practice history), with intelligent topic matching fallback.
 - **Permanent Relational Database:** Supports SQLite locally at `backend/data/coach.db` and PostgreSQL in production via `DATABASE_URL` with salted PBKDF2 password hashing (100,000 iterations).
 
 ---
 
 ## 16. Tech stack (as required)
 
-**Backend / AI:** Python 3.11+, FastAPI, Anthropic Claude 3.5 Sonnet, Hugging Face Transformers (`google/flan-t5-small`), spaCy (`en_core_web_sm`), Faster-Whisper (int8 quantization), SpeechRecognition, scikit-learn (`RandomForestClassifier`), PyTorch, SQLite / PostgreSQL (`psycopg2`), stdlib `wave` / `audioop` / `difflib`.
+**Backend / AI:** Python 3.11+, FastAPI, Google Gemini API (Multimodal STT, Flash Grammar & Coach), Anthropic Claude 3.5 Sonnet, Hugging Face Transformers (`google/flan-t5-small`), spaCy (`en_core_web_sm`), Faster-Whisper (int8 quantization), SpeechRecognition, scikit-learn (`RandomForestClassifier`), PyTorch, SQLite / PostgreSQL (`psycopg2`), stdlib `wave` / `audioop` / `difflib`.
 **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, Framer Motion, React Three Fiber, Recharts, React Router v7, React Hook Form + Zod, Axios, Lucide React.
 **Evaluation & Benchmarking:** Generalized Language Evaluation Understanding (GLEU), JFLEG Benchmark, Grammatical Error Correction (`grammarly/coedit`).
 **Version control:** Git (uncommitted for review, `.env` gitignored).

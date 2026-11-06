@@ -1,12 +1,3 @@
-"""
-MODULE 6 test plan (see AUDIT.md): the `intro_present` component of
-structure_analysis() used to be `... or True`, always scoring the
-introduction as present regardless of the actual answer. These tests
-prove the fix distinguishes a substantive opening from a trivial one,
-and that STAR-format evaluation (behavioral) stays separate from generic
-structure evaluation (non-behavioral/technical) — the audit's "don't
-force STAR on every question type" requirement.
-"""
 from app.interview.structure_analyzer import evaluate_star_format
 from app.nlp.text_analysis import structure_analysis
 

@@ -1,18 +1,3 @@
-"""
-MODULE 2 tests — vocabulary accuracy engine.
-
-Audit finding: raw type-token ratio (TTR) is length-biased and a short
-answer can hit a perfect diversity score by chance alone. This module
-switched to Herdan's C (length-stable) and added a sufficient_data flag
-for short answers. These tests verify both parts of that fix, plus exact
-formula reproduction.
-
-Run with:
-    cd backend
-    venv\\Scripts\\activate
-    pip install -r requirements-dev.txt
-    pytest tests/test_vocabulary_analysis.py -v
-"""
 import math
 
 from app.nlp.text_analysis import vocabulary_analysis, _lexical_diversity, _MIN_CONTENT_WORDS_FOR_CONFIDENT_SCORE
@@ -28,7 +13,7 @@ def test_empty_input_scores_zero_and_is_flagged_insufficient():
 def test_short_answer_is_flagged_low_confidence_even_if_diverse():
     """A 5-word answer with zero repeats should NOT be presented as a
     confident, reliable vocabulary measurement — this is the exact bias
-    the audit flagged."""
+    for short responses."""
     result = vocabulary_analysis("Quantum encryption enables secure communication.")
     assert result["content_word_count"] < _MIN_CONTENT_WORDS_FOR_CONFIDENT_SCORE
     assert result["sufficient_data"] is False
@@ -60,7 +45,7 @@ def test_long_repetitive_answer_scores_lower_than_long_diverse_answer():
 
 
 def test_long_answer_is_not_scored_high_purely_for_being_long():
-    """Audit requirement: do not give a vocabulary score just because the
+    """Do not give a high vocabulary score just because the
     answer is long. A long but highly repetitive answer must score low
     despite its length."""
     repetitive_long = "the thing is good the thing is good the thing is good " * 5

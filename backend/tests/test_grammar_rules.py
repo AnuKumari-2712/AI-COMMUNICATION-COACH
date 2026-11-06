@@ -1,17 +1,3 @@
-"""
-MODULE 1 tests — grammar accuracy engine.
-
-Every score assertion here is an EXACT value computed by hand from the
-documented formula in grammar_rules.py, not a "roughly right" range check —
-per the project's testing requirements, these are meant to let you verify
-the claims, not trust them.
-
-Run with:
-    cd backend
-    venv\\Scripts\\activate
-    pip install -r requirements-dev.txt
-    pytest tests/test_grammar_rules.py -v
-"""
 import pytest
 
 from app.nlp import grammar_rules
@@ -66,7 +52,7 @@ def test_homophone_confusion_counted_as_grammar_not_spelling():
 
 
 def test_spelling_error_alone_does_not_lower_grammar_score():
-    """Audit finding #1: spelling must never affect grammar_score."""
+    """Verify spelling does not affect grammar_score."""
     result = grammar_rules.analyze("I practiced alot this week.")
     assert result["grammar_issue_count"] == 0
     assert result["spelling_issue_count"] == 1
@@ -75,7 +61,7 @@ def test_spelling_error_alone_does_not_lower_grammar_score():
 
 
 def test_casual_style_alone_does_not_lower_grammar_score():
-    """Audit finding #1: style/formality must never affect grammar_score."""
+    """Verify style and formality do not affect grammar_score."""
     result = grammar_rules.analyze("I'm gonna finish it by Friday.")
     assert result["grammar_issue_count"] == 0
     assert result["style_issue_count"] == 1

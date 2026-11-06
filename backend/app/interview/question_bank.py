@@ -1,6 +1,6 @@
 """
 Interview question bank: fixed categories, plus generators for resume-based
-and job-role-based interviews (sections 25/26 of the spec) that build
+and job-role-based interviews  that build
 questions from what the student actually submits rather than a static list.
 """
 import re
@@ -44,13 +44,7 @@ _FIXED_QUESTIONS = {
     ],
 }
 
-# MODULE 9 (see AUDIT.md): "mock" had no entry here at all, so
-# get_fixed_questions("mock") silently fell back to the "hr" list —
-# "Full Mock Interview" (described in CATEGORIES as "End-to-end simulation
-# across all rounds") was actually only ever asking HR questions. Built
-# from the other three real categories instead of inventing a fourth,
-# separate question list to maintain; count (2+3+3=8) matches this
-# category's declared question_count in CATEGORIES.
+# Full mock interview questions assembled from HR, Behavioral, and Technical categories
 _FIXED_QUESTIONS["mock"] = (
     _FIXED_QUESTIONS["hr"][:2] + _FIXED_QUESTIONS["behavioral"][:3] + _FIXED_QUESTIONS["technical"][:3]
 )
@@ -97,7 +91,7 @@ _MOCK_STAGES = (["hr"] * 2) + (["behavioral"] * 3) + (["technical"] * 3)
 
 
 def get_question_stages(category_id: str) -> list[str]:
-    """MODULE 9: per-question sub-category for a fixed question list. Only
+    """per-question sub-category for a fixed question list. Only
     "mock" actually mixes multiple question types under one category_id —
     every other fixed category is internally uniform, so its stage is just
     its own category_id repeated. Used by interview_service to pick the

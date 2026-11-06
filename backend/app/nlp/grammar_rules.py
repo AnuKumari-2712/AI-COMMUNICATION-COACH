@@ -1,33 +1,6 @@
 """
-Rule-based grammar checker — MODULE 1 (see AUDIT.md for the full rationale).
-
-Design rules enforced here, per the accuracy audit:
-1. Only issues categorized "grammar" affect grammar_score. Spelling and
-   style/formality issues are detected and reported, but never lower the
-   grammar score — they are a different kind of mistake.
-2. Every issue carries a confidence level. Pattern-exact matches (double
-   negative, "I has", etc.) are "high" confidence. The tense-consistency
-   heuristic can legitimately false-positive on correct sentences (e.g.
-   reported speech: "She said she is happy" mixes past+present correctly),
-   so it is always "medium" confidence and weighted at half strength in the
-   score, never presented as a certain error.
-3. The scoring formula is fully transparent and returned in the response,
-   not hidden in code: an average reader of the API response can recompute
-   the score by hand from the numbers given.
-4. Sentence counting uses real sentence boundaries (spaCy when available,
-   else a punctuation-based regex split), not a punctuation character tally.
-
-This is real, deterministic NLP — not a mock — built from regex + (when
-spaCy is available) POS tags. Coverage was widened after user reports that
-written feedback missed obvious mistakes: pronoun/verb agreement ("he don't",
-"they was"), "should of", a/an, double comparatives, wrong verb form after
-"didn't", common Indian-English patterns ("I am agree", "discuss about"), a
-lowercase pronoun "i", and ~60 frequently misspelled words. Every new rule is
-a narrow, exact pattern so it stays high-confidence (low false-positive). It intentionally avoids a heavyweight
-grammar-correction dependency (LanguageTool needs a JVM; a transformer
-grammar-correction model is 300MB+) so the project installs cleanly on a
-student laptop. Coverage is intentionally narrow and honestly documented:
-see AUDIT.md for exactly which error types are and are not detected.
+Rule-based grammar checker using deterministic pattern matching and spaCy POS tagging.
+Detects grammatical, spelling, and style errors with clear confidence levels and explanations.
 """
 import re
 from dataclasses import dataclass, field
@@ -431,8 +404,7 @@ def _fix_repeated_word(text: str) -> list[Correction]:
 
 
 def _fix_simple_typos(text: str) -> list[Correction]:
-    """Spelling and style issues — deliberately kept OUT of the "grammar"
-    category so they cannot affect grammar_score (audit finding #1)."""
+    """Spelling and style issues — categorized separately so they do not reduce grammatical score."""
     corrections = []
     for m in _ALOT.finditer(text):
         corrections.append(

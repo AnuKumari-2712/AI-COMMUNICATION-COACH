@@ -1,10 +1,4 @@
-"""
-Static content pools for Grammar and Vocabulary practice, filtered/ordered
-per-student by `personalization.weakness_detector` output and the
-scikit-learn difficulty prediction — this is what makes two students with
-different weaknesses see a different question order and mix, satisfying
-"do not give the same exercise sequence to every student."
-"""
+
 import random
 
 from app.ml.difficulty_model import predict_difficulty

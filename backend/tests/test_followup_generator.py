@@ -1,12 +1,4 @@
-"""
-MODULE 9 test plan (see AUDIT.md): follow-up question generation. Before
-this module, the interview flow's entire question slate was fixed at
-session start and nothing ever looked at what the candidate actually
-said. These tests prove a follow-up references something SPECIFIC from
-the answer (the audit's own example: "hospital management system"), that
-vague answers honestly get no follow-up rather than a generic one, and
-that an already-referenced phrase isn't asked about twice.
-"""
+
 from app.interview.followup_generator import generate_followup
 
 

@@ -1,9 +1,4 @@
-"""
-Achievements computed from the student's actual learner profile — not a
-static decorative list. Every `progress`/`unlocked` value below is derived
-from real fields (streak_days, practice_history, learned_words, scores),
-so two students genuinely see different unlock states.
-"""
+
 from app.schemas.student import LearnerProfile
 
 _DEFINITIONS = [

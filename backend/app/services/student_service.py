@@ -25,12 +25,10 @@ def get_profile(student_id: str) -> LearnerProfile:
     profile = learner_profile.get_profile(student_id)
     if profile is None:
         if student_id == DEMO_STUDENT_ID:
-            # Unauthenticated / demo mode: return the shared demo profile.
+            
             profile = learner_profile.get_or_create_demo_profile()
         else:
-            # A real token resolved to a student_id we don't have a profile for.
-            # This should not happen in normal operation (signup always creates
-            # one), but guard against it rather than showing demo data.
+            
             raise ValueError(f"No learner profile found for student_id={student_id!r}")
     return profile
 
@@ -82,12 +80,7 @@ def mark_word_learned(student_id: str, word: str) -> dict:
 
 
 def analytics_trend(student_id: str, max_points: int = 7) -> list[dict]:
-    """
-    Real trend data built from `profile_snapshot`s recorded in
-    practice_history (see learner_profile.update_scores) — each snapshot is
-    the full profile state right after that session, bucketed here into up
-    to `max_points` groups in chronological order.
-    """
+    
     profile = get_profile(student_id)
     snapshots = [h for h in profile.practice_history if "profile_snapshot" in h]
     if len(snapshots) < 2:

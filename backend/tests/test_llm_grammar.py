@@ -1,6 +1,3 @@
-"""
-Unit tests for LLM-based grammar checker and fallback behavior.
-"""
 import json
 from unittest.mock import MagicMock, patch
 

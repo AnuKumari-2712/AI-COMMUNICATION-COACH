@@ -1,10 +1,4 @@
-"""
-When the browser has already recognized the user's speech it sends that
-transcript with the audio; the backend must use it (instead of calling the
-server-side Google request, which was unreliable from the deployed host)
-while still measuring pace and pauses from the uploaded audio.
-Run with:  cd backend && pytest tests/test_client_transcript.py -v
-"""
+
 import math
 import struct
 import wave

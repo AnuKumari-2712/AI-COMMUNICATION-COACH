@@ -1,13 +1,4 @@
-"""
-Tests for Prompt 2: Data Permanent Save (SQLite locally, PostgreSQL via DATABASE_URL).
 
-Verifies:
-- A user created via /auth/signup still exists (with the same sessions, scores, and streak)
-  after the FastAPI app object and TestClient are recreated.
-- Passwords are saved as PBKDF2 hashes and NEVER stored in plaintext.
-- The underlying SQLite database schema (store_documents) is created automatically.
-- Legacy JSON files are seamlessly migrated into the database.
-"""
 import json
 import random
 import sqlite3

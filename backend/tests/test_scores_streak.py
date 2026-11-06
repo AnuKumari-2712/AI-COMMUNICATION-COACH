@@ -31,7 +31,7 @@ def test_client():
     return TestClient(app)
 
 
-class TestPrompt3ScoresAndStreak:
+class TestScoresAndStreak:
     def test_new_user_scores_and_streak(self):
         """A brand-new user must have streak=0 and baseline scores of 0.0 (no fake numbers)."""
         student_id = str(uuid.uuid4())

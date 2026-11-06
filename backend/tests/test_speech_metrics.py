@@ -1,15 +1,3 @@
-"""
-MODULE 4 test plan (see AUDIT.md): fluency/pace transparency.
-
-Covers:
-- WPM computed exactly from word_count / duration_seconds, not estimated
-  from text length alone.
-- pace_source correctly labeled "measured" (real WAV pause analysis given)
-  vs "estimated" (transcript-based fallback).
-- InvalidDurationError raised for zero/negative duration instead of a
-  silent clamp.
-- text_flow_consistency behaves sensibly on short / uniform / varied text.
-"""
 import pytest
 
 from app.speech.audio_utils import PauseAnalysis

@@ -498,7 +498,6 @@ def run_initial_assessment(student_id: str, intro_text: str, topic_answer: str, 
     structure_result = text_analysis.structure_analysis(text_answer or combined_text)
     confidence_score, _ = score_confidence(combined_text)
 
-    # MODULE 4: this step is typed text with no real recording, so there's
     # no real speaking duration to measure WPM/pace from at all — the
     # previous code fabricated one (duration_seconds=45.0), which fed a
     # fake speaking_pace number into the student's very first profile.

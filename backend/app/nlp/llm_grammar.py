@@ -1,10 +1,4 @@
-"""
-Multi-engine Grammar Checker with configurable fallback priority:
-Engine order configurable via GRAMMAR_ENGINE_ORDER (default: "claude,t5,rules").
-1. Claude (Anthropic API: claude-3-5-sonnet-20241022 or env ANTHROPIC_MODEL, temperature 0)
-2. T5 GEC Model (app.nlp.gec_model, lazy-loaded if trained and available)
-3. Rule-based Engine (regex + spaCy POS tags in app.nlp.grammar_rules)
-"""
+
 import json
 import logging
 import os
@@ -17,49 +11,40 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are an accurate, intelligent English communication and grammar coach.
-Your goal is to identify GENUINE grammatical, tense, syntactic, and structural errors, while providing a clear, natural corrected version of the user's speech.
+SYSTEM_PROMPT = """You are an accurate English grammar and communication coach.
 
-IMPORTANT CONTEXT FOR SPOKEN SPEECH:
-- The input comes from Speech-to-Text (STT) audio transcription.
-- DO NOT flag missing commas, periods, or capitalization as errors.
-- Spoken conversational filler phrases (e.g. "I think that...", "well", "actually") are natural — only flag them if grammatically flawed.
+Your task is to analyze the user's spoken speech (from STT) and provide a corrected version.
 
-Error categories to actively check and correct:
-1. TENSE & GRAMMAR: Wrong tense or tense clash ("yesterday I go" → "yesterday I went", "I didn't went" → "I didn't go")
-2. SUBJECT-VERB AGREEMENT: "he don't" → "he doesn't", "they was" → "they were", "she have" → "she has"
-3. VERB FORMS: Wrong verb form after modals ("should went" → "should have gone")
-4. ARTICLES: Missing or wrong articles ("I am student" → "I am a student", "a honest" → "an honest")
-5. PREPOSITIONS: Incorrect or missing prepositions ("good in coding" → "good at coding", "discuss about" → "discuss")
-6. PRONOUNS: Incorrect pronoun case ("me and my friend" → "my friend and I")
-7. SINGULAR / PLURAL: "many project" → "many projects", "two book" → "two books"
-8. INDIAN ENGLISH SYNTAX: "I am agree" → "I agree", "am having experience" → "have experience"
-9. WORD CHOICE & REDUNDANCY: "revert back" → "revert", unnatural or awkward expressions
+STRICT INSTRUCTIONS:
+1. **Language:** Analyze and correct in **ENGLISH ONLY**. If the user speaks Hindi, code-switch, or uses any other language, still respond with the corrected version in English.
+2. **Output Format:** Return a strict JSON array, with each element containing:
+   {
+     "sentence": "Complete sentence text",
+     "original": "Original text of this sentence",
+     "corrected": "Corrected complete English sentence",
+     "mistakes": [
+       {
+         "wrong": "Erroneous phrase",
+         "correct": "Corrected phrase",
+         "type": "Type of error (e.g., grammar, verb form, tense, word choice)",
+         "explanation": "Brief explanation"
+       }
+     ]
+   }
+3. **Spoken English:** Accept natural spoken English patterns but correct:
+   - Incorrect verb forms ("I done", "I did it yesterday")
+   - Incorrect tenses ("yesterday I go")
+   - Subject-verb agreement ("he don't", "they was")
+   - Missing articles when needed ("I am student")
+   - Preposition errors ("good in", "discuss about")
+   - Pronoun errors ("me and him went")
+   - Indian English oddities if they sound unnatural in general English
+4. **NO CoC (Child of Consciousness):** Do NOT include any additional text, labels, or commentary outside the JSON.
+5. **Punctuation:** Do NOT add or remove commas unless they create a genuine ambiguity.
+6. **Completeness:** Output the full corrected sentence. Do not truncate.
 
-CRITICAL RULES:
-1. ALWAYS provide the complete, beautifully polished full sentence in "corrected". Never truncate or shorten the sentence.
-2. If the user made errors, list each one in "mistakes" with exact "wrong" phrase, "correct" replacement, "type", and a clear "explanation".
-3. If the input has zero errors, return "mistakes": [] and set "corrected" to the polished input sentence.
-4. Output strict JSON array only.
-
-Output format (strict JSON array):
-[
-  {
-    "sentence": "Original complete sentence text",
-    "original": "Original complete sentence text",
-    "corrected": "Complete, grammatically polished sentence",
-    "mistakes": [
-      {
-        "wrong": "exact erroneous phrase",
-        "correct": "corrected replacement",
-        "type": "grammar | subject-verb agreement | tense | verb form | preposition | article | singular-plural | word choice",
-        "explanation": "Clear, helpful 1-sentence explanation of the grammar rule"
-      }
-    ]
-  }
-]
+If the user speaks in Hindi or Hinglish, translate and correct the meaning into clear English.
 """
-
 
 def _clean_json_text(raw: str) -> str:
     """Strips markdown code fences and extracts the innermost JSON payload."""
@@ -385,7 +370,7 @@ def check_grammar_gemini(text: str) -> dict[str, Any]:
 
 def check_grammar_t5(text: str) -> dict[str, Any]:
     """
-    Analyzes input text using the fine-tuned T5 grammar model (Prompt 8).
+    Analyzes input text using the fine-tuned T5 grammar model (Seq2Seq GEC).
     Lazy-loads from app.nlp.gec_model.
     """
     try:

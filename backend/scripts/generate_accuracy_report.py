@@ -1,20 +1,4 @@
-"""
-MODULE 12 (see AUDIT.md): generates backend/ACCURACY_REPORT.md by running
-the ground-truth benchmark (tests/ground_truth_data.py) against the real
-analysis functions — the same functions the API uses, not a separate
-reimplementation — and recording Metric/Method/Input/Expected/Actual/
-Match for every example, plus per-metric accuracy.
 
-Run it yourself:
-    cd backend
-    venv\\Scripts\\activate
-    python scripts/generate_accuracy_report.py
-
-This is a report generator, not a test — pytest (test_ground_truth_
-benchmark.py) is what actually enforces these examples via CI-style
-assertions. This script's only job is to turn the same dataset into a
-human-readable, dated document.
-"""
 import datetime
 import sys
 from pathlib import Path
@@ -102,11 +86,11 @@ def _technical_rows():
 
 def generate() -> str:
     sections = [
-        ("Grammar", _grammar_rows(), "Only the 7 hand-coded rule patterns in grammar_rules.py are checked — see AUDIT.md Module 1 for coverage limits (e.g. 'dont' without an apostrophe is not matched by the double-negative rule)."),
-        ("Filler Words", _filler_rows(), "Context-aware for 'like'/'kind of'/'you know'/'actually' (see AUDIT.md Module 3); relies on spaCy POS tagging, which has known small-model limitations documented there."),
-        ("Speaking Pace (WPM)", _pace_rows(), "WPM is computed by exact definition (words / minutes) — this category is expected to match 100% by construction, not because pace prediction is 'solved'; see AUDIT.md Module 4 for pace_source measured-vs-estimated distinction."),
-        ("Answer Relevance", _relevance_rows(), "Keyword/lemma overlap, not semantic understanding — an answer echoing the question's own words without answering it would still score well; see AUDIT.md Module 7."),
-        ("Technical Correctness", _technical_rows(), "Only the 5 fixed technical-interview questions have a verified concept checklist; checks for keyword presence, not contextual correctness of usage; see AUDIT.md Module 8."),
+        ("Grammar", _grammar_rows(), "Only the 7 hand-coded rule patterns in grammar_rules.py are checked — for coverage limits (e.g. 'dont' without an apostrophe is not matched by the double-negative rule)."),
+        ("Filler Words", _filler_rows(), "Context-aware for 'like'/'kind of'/'you know'/'actually'; relies on spaCy POS tagging, which has known small-model limitations documented there."),
+        ("Speaking Pace (WPM)", _pace_rows(), "WPM is computed by exact definition (words / minutes) — this category is expected to match 100% by construction, not because pace prediction is 'solved'; for pace_source measured-vs-estimated distinction."),
+        ("Answer Relevance", _relevance_rows(), "Keyword/lemma overlap, not semantic understanding — an answer echoing the question's own words without answering it would still score well;."),
+        ("Technical Correctness", _technical_rows(), "Only the 5 fixed technical-interview questions have a verified concept checklist; checks for keyword presence, not contextual correctness of usage;."),
     ]
 
     total_correct = sum(s[1][1] for s in sections)
@@ -122,7 +106,7 @@ def generate() -> str:
         "",
         "**This is not a claim of real-world accuracy at scale.** It is a small, manually-curated "
         "benchmark (28 examples across 5 metrics) proving the implementation does what its own "
-        "documented rules say it does, on cases a human has checked by hand. See `AUDIT.md` for the "
+        "documented rules say it does, on cases checked by hand. See project docs for the "
         "full per-module accuracy problems found and fixed, and the honestly-documented limitations "
         "of each metric — this report never claims 100% accuracy beyond what is demonstrated below.",
         "",

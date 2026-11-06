@@ -1,12 +1,3 @@
-"""
-End-to-end tests for Voice Practice feedback system:
-- Sentence-by-sentence grammar analysis on voice transcripts
-- Actionable correction cards with sentence context
-- Full corrected answer reconstruction
-- Evidence-based score reasons & confidence signals
-- Transparent pronunciation unavailable handling
-- Short utterance (< 4 words) handling
-"""
 import math
 import struct
 import wave

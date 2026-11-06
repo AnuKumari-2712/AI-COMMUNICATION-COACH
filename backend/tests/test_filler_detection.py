@@ -1,22 +1,9 @@
-"""
-MODULE 3 tests — filler word false-positive reduction.
 
-Audit finding: the old detector matched a fixed word list ANYWHERE in the
-text, so "Do you know the deadline?" and "I like pizza" both got counted
-as filler usage. These tests prove the false positives are gone AND that
-real filler usage is still caught.
-
-Run with:
-    cd backend
-    venv\\Scripts\\activate
-    pip install -r requirements-dev.txt
-    pytest tests/test_filler_detection.py -v
-"""
 from app.speech.speech_metrics import detect_filler_words
 
 
 def test_genuine_question_with_you_know_is_not_a_filler():
-    """The exact false positive named in the audit."""
+    """Verify interrogative usage of 'you know' is not treated as filler hesitation."""
     result = detect_filler_words("Do you know the deadline for this project?")
     assert result["count"] == 0
     assert len(result["excluded_examples"]) == 1
@@ -42,7 +29,7 @@ def test_clause_initial_actually_is_counted():
 
 
 def test_mid_clause_actually_is_excluded():
-    """The exact second false positive named in the audit: a normal
+    """A normal
     sentence-internal adverb should not be confidently flagged as hesitation."""
     result = detect_filler_words("I actually finished the report early this week.")
     assert result["count"] == 0

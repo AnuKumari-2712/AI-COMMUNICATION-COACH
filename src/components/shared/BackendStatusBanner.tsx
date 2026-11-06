@@ -1,12 +1,4 @@
-/**
- * BackendStatusBanner — displayed while the Render free-tier backend is waking up
- * from its cold start (can take 30-60 s after 15 min idle).
- *
- * Strategy:
- * 1. On mount, fire a /health check.
- * 2. If it fails within 3 s, assume the backend is sleeping → show "waking up" banner.
- * 3. Retry every 8 s until the backend responds, then hide the banner.
- */
+
 import { useEffect, useState, useRef } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { apiClient } from '@/services/apiClient';
@@ -78,6 +70,7 @@ export function BackendStatusBanner() {
   if (status === 'ready') {
     const activeEngines: string[] = [];
     if (healthData?.engines) {
+      if (healthData.engines.gemini) activeEngines.push('Gemini');
       if (healthData.engines.spacy) activeEngines.push('spaCy');
       if (healthData.engines.whisper) activeEngines.push('Whisper');
       if (healthData.engines.claude) activeEngines.push('Claude');
@@ -92,8 +85,8 @@ export function BackendStatusBanner() {
           {activeEngines.length > 0
             ? ` • Real AI (${activeEngines.join(', ')})`
             : healthData?.use_mock_ai === false
-            ? ' • Honest AI Mode'
-            : ''}
+              ? ' • Honest AI Mode'
+              : ''}
         </span>
       </div>
     );

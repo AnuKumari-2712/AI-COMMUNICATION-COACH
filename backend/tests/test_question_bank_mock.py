@@ -1,11 +1,3 @@
-"""
-MODULE 9 test plan (see AUDIT.md): question_bank.get_fixed_questions("mock")
-had no "mock" entry at all, so it silently fell back to the "hr" list —
-"Full Mock Interview" (described as "End-to-end simulation across all
-rounds") was actually only ever asking HR questions. These tests prove
-the fixed mock question set genuinely mixes categories and that each
-question's stage is correctly tagged for downstream structure evaluation.
-"""
 from app.interview import question_bank
 
 

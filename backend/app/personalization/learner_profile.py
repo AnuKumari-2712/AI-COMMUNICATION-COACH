@@ -1,9 +1,4 @@
-"""
-The dynamic learner profile: created at signup, read by every practice page,
-and updated after every relevant session. This is the single object that
-makes personalization possible — see weakness_detector.py and
-exercise_generator.py, which both read from it.
-"""
+
 import uuid
 from datetime import date, datetime, timezone
 
@@ -134,8 +129,7 @@ def update_scores(
     average). This means the profile evolves after every session, as
     required, without one bad session overwhelming weeks of progress.
 
-    Also recomputes weakness/strength labels and, per section 31 of the
-    spec, feeds them into the revision-queue logic below: a weakness that
+    Also recomputes weakness/strength labels and feeds them into the revision-queue logic below: a weakness that
     shows up in most of the last few sessions gets auto-added to
     `revision_queue`; one that's cleared up for several sessions in a row
     gets removed.

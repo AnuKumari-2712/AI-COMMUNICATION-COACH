@@ -1,19 +1,4 @@
-"""
-Tests for Prompt 7: Vocabulary, Answer Relevance, and Interview Follow-up with Claude and Heuristic Fallbacks.
 
-Verifies:
-1. Vocabulary analysis with Claude mocked returns context_appropriateness_score, word suggestions with example sentences,
-   and tags vocab_engine = 'claude' while recomputing lexical metrics in Python.
-2. Vocabulary analysis falls back cleanly to 'heuristic' when ANTHROPIC_API_KEY is missing or errors out.
-3. Relevance analysis with Claude mocked evaluates semantic relevance (0-100), provides a concise one-line reason,
-   and tags relevance_engine = 'claude'.
-4. Relevance analysis falls back cleanly to 'heuristic' when ANTHROPIC_API_KEY is missing or errors out.
-5. Interview follow-up generation with Claude mocked builds probing follow-up questions tailored to answer specifics,
-   tagging followup_engine = 'claude'.
-6. Interview follow-up generation falls back cleanly to 'heuristic' when ANTHROPIC_API_KEY is missing or errors out.
-7. End-to-end /assessment/text endpoint includes vocab_engine, relevance_engine, and relevance_reason.
-8. End-to-end /interview/answer endpoint includes vocab_engine, relevance_engine, relevance_reason, and followup_engine.
-"""
 import json
 from unittest.mock import MagicMock, patch
 
@@ -52,7 +37,7 @@ SAMPLE_ANSWER = (
 )
 
 
-class TestPrompt7Vocabulary:
+class TestVocabularyAnalysis:
     def test_vocabulary_without_api_key_falls_back_to_heuristic(self, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         result = llm_vocab_relevance.get_vocabulary_analysis(SAMPLE_ANSWER)
@@ -111,7 +96,7 @@ class TestPrompt7Vocabulary:
         assert result["content_word_count"] > 0
 
 
-class TestPrompt7Relevance:
+class TestRelevanceAnalysis:
     def test_relevance_without_api_key_falls_back_to_heuristic(self, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         result = llm_vocab_relevance.get_relevance_analysis(SAMPLE_QUESTION, SAMPLE_ANSWER)
@@ -147,7 +132,7 @@ class TestPrompt7Relevance:
         assert result["sufficient_data"] is True
 
 
-class TestPrompt7InterviewFollowup:
+class TestInterviewFollowup:
     def test_followup_without_api_key_falls_back_to_heuristic(self, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         followup = llm_vocab_relevance.get_followup_question(SAMPLE_QUESTION, SAMPLE_ANSWER)
@@ -180,8 +165,8 @@ class TestPrompt7InterviewFollowup:
         assert "what specific latency metrics proved decisive" in followup["question_text"]
 
 
-class TestPrompt7EndToEndEndpoints:
-    def test_text_analysis_endpoint_includes_prompt7_fields(self, client, monkeypatch):
+class TestEndToEndEndpoints:
+    def test_text_analysis_endpoint_includes_analysis_fields(self, client, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         resp = client.post(
             "/api/v1/assessment/text",
@@ -201,7 +186,7 @@ class TestPrompt7EndToEndEndpoints:
         assert isinstance(data["relevance_reason"], str)
         assert len(data["relevance_reason"]) > 0
 
-    def test_interview_answer_endpoint_includes_prompt7_fields(self, client, monkeypatch):
+    def test_interview_answer_endpoint_includes_analysis_fields(self, client, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         # Start session
         start_resp = client.post(

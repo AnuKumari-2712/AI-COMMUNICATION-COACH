@@ -1,8 +1,4 @@
-"""
-Single "what should I do right now" recommendation, with an explanation —
-required so the student understands WHY the system picked this exercise
-(current weaknesses, recent trend, career goal), not just what to do.
-"""
+
 from app.personalization.exercise_generator import SKILL_TO_EXERCISE, recent_trend
 from app.personalization.weakness_detector import detect
 from app.schemas.student import LearnerProfile

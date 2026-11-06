@@ -1,13 +1,4 @@
-"""
-MODULE 8 test plan (see AUDIT.md): technical answer correctness. Before
-this module, a technical interview answer was scored only on
-grammar/vocabulary/structure/fluency — nothing checked whether the
-answer's actual technical content was right, wrong, partial, or too thin
-to judge, so a well-worded but factually wrong answer could still score
-well. These tests prove the concept-checklist approach distinguishes
-correct/partially_correct/incorrect/insufficient, and honestly reports
-"not applicable" for questions with no known correct-answer shape.
-"""
+
 from app.interview.technical_knowledge import evaluate_technical_correctness
 
 _HASH_MAP_QUESTION = "Explain how a hash map works and its average time complexity."

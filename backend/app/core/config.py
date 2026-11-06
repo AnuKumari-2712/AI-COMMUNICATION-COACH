@@ -1,13 +1,4 @@
-"""
-Central application settings, loaded from environment variables (.env).
 
-USE_MOCK_AI is the single switch referenced throughout the codebase to decide
-whether a route is allowed to fall back to deterministic mock output when a
-real model/service (spaCy, the transformer pipeline, speech recognition) is
-unavailable. It defaults to True so the API runs out of the box on a laptop
-with no GPU and no internet, per the project requirement that mock data must
-be used (and clearly labeled) whenever real AI services aren't configured.
-"""
 import json
 import os
 from functools import lru_cache
@@ -24,15 +15,12 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     environment: str = "development"
 
-    # CORS — configurable via CORS_ORIGINS env var.
-    # Accepts a JSON array string OR a comma-separated list of origins.
-    # Defaults include localhost dev servers; add your Vercel URL on Render.
+    
     cors_origins: list[str] | str = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
-    # Optional regex for origins that can't be listed ahead of time, e.g.
-    # Vercel's per-PR preview URLs. Set CORS_ORIGIN_REGEX on Render.
+   
     cors_origin_regex: str | None = None
 
     @field_validator("cors_origins", mode="before")
@@ -47,11 +35,11 @@ class Settings(BaseSettings):
             return [o.strip() for o in stripped.split(",") if o.strip()]
         return v  # type: ignore[return-value]
 
-    # Feature flags (Prompt 9: Honest AI mode - defaults to False)
+    
     use_mock_ai: bool = False
     enable_transformer_confidence: bool = False
 
-    # Auth (demo-grade; NOT production security)
+    # Auth configuration
     jwt_secret: str = "dev-secret-change-me"
     jwt_algorithm: str = "HS256"
     jwt_expires_minutes: int = 60 * 24
@@ -60,12 +48,12 @@ class Settings(BaseSettings):
     data_dir: str = "data"
     database_url: str | None = None
 
-    # Speech recognition (Prompt 5 & 6)
+    # Speech recognition & Whisper configuration
     stt_language: str = "en-IN"
     enable_whisper: bool = True
     whisper_model: str = "base"
 
-    # AI NLP & Grammar Engines (Prompt 4, 7, 8 + Gemini)
+    # AI NLP & Grammar Engines (Gemini, Claude, T5, Rules)
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3-flash-preview"
     anthropic_api_key: str | None = None
@@ -76,7 +64,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _auto_disable_mock_ai_if_real_engines_available(self) -> "Settings":
         """
-        Prompt 9: Honest AI Mode.
+        Honest AI Mode Validation:
         Automatically disable USE_MOCK_AI if any real engine is configured:
         - Gemini key present
         - Claude key present

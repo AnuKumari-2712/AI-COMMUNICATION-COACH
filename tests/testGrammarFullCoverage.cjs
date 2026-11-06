@@ -1,14 +1,13 @@
-// End-to-end test script verifying Client-side Real NLP Engine in clientAnalysis.ts
+
 const fs = require('fs');
 const path = require('path');
 
-// We can compile/run via node or import transpiled files from dist or evaluate logic
-// Let's test the dist or compile a small bundle, or read clientAnalysis.ts directly using tsx/node
+
 const { execSync } = require('child_process');
 
 console.log('Testing clientAnalysis with intentional multi-error answer...');
 
-const sampleParagraph = 
+const sampleParagraph =
   "Hello, my name are Anu and I am a B.Tech student in Lovely Professional University. " +
   "I am study in third year and I has a strong interest in web development and artificial intelligence. " +
   "I have make many project like AI interview coach which help students to improves their speaking skills. " +
@@ -17,7 +16,7 @@ const sampleParagraph =
   "I am hardworking person and I always tries to complete my work on time. " +
   "My dream are to become a successful AI engineer in a big company.";
 
-// Run a quick tsx / node script importing performClientTextAnalysis
+
 const testScript = `
 import { performClientTextAnalysis } from '../src/lib/clientAnalysis.ts';
 

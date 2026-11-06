@@ -1,7 +1,4 @@
-"""
-Answer-structure evaluation, including STAR-format guidance for behavioral
-questions (Situation, Task, Action, Result).
-"""
+
 from app.nlp.text_analysis import structure_analysis
 
 _STAR_KEYWORDS = {

@@ -23,6 +23,7 @@ import { Card, Badge, Button } from '@/components/ui';
 import { RadialProgress } from '@/components/ui/RadialProgress';
 import { Waveform } from '@/components/shared/Waveform';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
+import { useToast } from '@/hooks/useToast';
 import { practiceService, type VoiceAnalysisResult } from '@/services/practiceService';
 import { AnswerCorrectionBox } from '@/components/shared/AnswerCorrectionBox';
 import { formatDuration, scoreTone } from '@/lib/utils';
@@ -180,6 +181,7 @@ const exercises: FluencyExercise[] = [
 ];
 
 export default function FluencyPracticePage() {
+  const { showToast } = useToast();
   const [selected, setSelected] = useState(exercises[0]);
   const [scenarioIndex, setScenarioIndex] = useState(0);
   const recorder = useVoiceRecorder();

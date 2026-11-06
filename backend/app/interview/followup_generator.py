@@ -1,24 +1,4 @@
-"""
-MODULE 9 (see AUDIT.md): follow-up question generation.
 
-Before this module, the interview flow asked a fixed, pre-generated slate
-of questions decided entirely at session start — nothing in
-`answer_question` looked at what the candidate actually said. A real
-interviewer's follow-up references something specific the candidate
-mentioned (the audit's own example: "I built a hospital management system
-using MERN" -> a good follow-up asks about "your hospital management
-system" specifically, not an unrelated generic question like "what's your
-favorite language").
-
-This extracts the most specific noun phrase mentioned in the answer (via
-spaCy noun chunks, preferring longer/more concrete phrases over single
-generic nouns like "it" or "time") and builds a follow-up question that
-names it explicitly. If nothing sufficiently specific is found — a vague,
-short, or generic answer — no follow-up is generated. Inventing one
-anyway would produce exactly the kind of generic, disconnected question
-this module exists to eliminate; "no good follow-up available" is the
-honest result for a vague answer.
-"""
 from app.nlp.spacy_model import get_nlp
 
 _GENERIC_CHUNK_WORDS = {
@@ -27,18 +7,13 @@ _GENERIC_CHUNK_WORDS = {
     "project", "work", "things", "stuff", "the team", "my team", "the company",
 }
 
-# Individual words that make a whole chunk too vague to be a good follow-up
-# topic even if the chunk itself isn't an exact match above (e.g. "some
-# stuff", "a lot of things").
+
 _GENERIC_CONTENT_WORDS = {
     "stuff", "thing", "things", "lot", "lots", "way", "ways", "time", "times",
     "experience", "project", "work", "something", "anything", "everything",
 }
 
-# spaCy noun_chunks include leading determiners/possessives ("a hospital
-# management system"); stripping them means "a hospital management system"
-# and "hospital management system" are recognized as the same topic when
-# checking against already-referenced phrases.
+
 _LEADING_DETERMINERS = {
     "a", "an", "the", "my", "our", "your", "his", "her", "their",
     "this", "that", "these", "those", "some", "any",
@@ -72,8 +47,7 @@ def _specific_noun_phrases(nlp, text: str) -> list[str]:
         if lower not in seen:
             seen.add(lower)
             phrases.append(cleaned)
-    # Longer/more specific phrases are preferred as a proxy for "more
-    # concrete detail" — "hospital management system" over just "system".
+    
     phrases.sort(key=len, reverse=True)
     return phrases
 

@@ -1,29 +1,6 @@
 """
-MODULE 8 (see AUDIT.md): technical answer correctness.
-
-Before this module, a technical interview answer was scored only on
-grammar/vocabulary/structure/fluency — nothing checked whether the
-answer's actual technical content was right, partially right, wrong, or
-just too thin to judge. An answer that "sounded professional" (good
-grammar, confident tone, reasonable length) could score well while being
-factually incorrect, and nothing would catch that.
-
-Real automated correctness-checking would require either a large curated
-answer-key model or an LLM judge — neither exists in this project. The
-honest, implementable alternative used here is a small, manually-curated
-concept checklist for each of the five FIXED technical questions in
-question_bank.py (the only technical questions with a stable, known-in-
-advance correct answer shape). Each concept lists the phrasings/keywords
-that indicate a candidate actually mentioned it. This is checked, not
-"understood" — a candidate who used the right words in a nonsensical
-sentence would still be credited, and a candidate who explained the
-concept correctly using entirely different words would be missed. Both
-limitations are documented in AUDIT.md, not hidden.
-
-Dynamic technical-sounding questions (resume-based, job-role-based) have
-no known-in-advance correct answer, so there is no checklist for them —
-`evaluate_technical_correctness` honestly reports `applicable=False`
-rather than fabricating a verdict for a question it has no answer key for.
+Technical interview answer evaluation.
+Matches candidate responses against domain concept checklists for technical questions.
 """
 
 # Each concept: "name" (shown to the caller) + "keywords" (any one, case-

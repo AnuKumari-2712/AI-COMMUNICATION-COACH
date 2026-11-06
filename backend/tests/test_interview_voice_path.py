@@ -1,9 +1,3 @@
-"""
-Interview voice answers: the same STT-transcript problems as voice practice
-(no punctuation -> 1 giant sentence) used to make every spoken answer score
-clarity 40, grammar 0-50 for a single slip, and a constant 75 fluency that was
-still labelled "speech_measured". These tests pin the corrected behaviour.
-"""
 import pytest
 
 from app.nlp import text_analysis

@@ -1,7 +1,6 @@
 """
 Resume text extraction, kept deliberately separate from the interview
-question-generation service (per the spec's "keep resume processing
-separate from the main AI service layer") so the PDF-parsing dependency can
+question-generation service  so the PDF-parsing dependency can
 be swapped or removed without touching interview logic.
 """
 import io

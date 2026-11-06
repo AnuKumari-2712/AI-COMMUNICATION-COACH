@@ -1,12 +1,3 @@
-"""
-MODULE 7 test plan (see AUDIT.md): answer relevance. Before this module,
-`question` text was accepted by both the text-assessment and interview
-flows but never compared against the answer at all — there was no
-relevance metric of any kind. These tests prove the fix identifies real
-topic keywords from the question and checks the answer against them,
-including the audit's explicit "don't score high just for length" and
-"provide evidence" requirements.
-"""
 from app.nlp.relevance_analysis import analyze_relevance
 
 

@@ -1,12 +1,4 @@
-"""
-Interview session lifecycle: start (pick/generate questions) -> answer each
-question (voice or text) -> submit (aggregate into a final result and fold
-the outcome back into the learner profile).
 
-Sessions are short-lived, so they're kept in-memory rather than in the
-JSON "database" — a real deployment would put these in Redis or a database
-table with a TTL.
-"""
 import logging
 import uuid
 
@@ -44,10 +36,7 @@ def start_session(student_id: str, category_id: str, job_role: str | None, resum
         stages = [category_id] * len(raw_questions)
     else:
         raw_questions = question_bank.get_fixed_questions(category_id)
-        # MODULE 9: "mock" genuinely mixes hr/behavioral/technical questions
-        # now (see question_bank.py) — per-question stage lets answer_question
-        # pick the right structure evaluation (STAR vs generic) per question
-        # instead of applying one evaluation to the whole mixed session.
+        # Dynamic stage per question enables appropriate structure evaluation (STAR vs generic)
         stages = question_bank.get_question_stages(category_id)
 
     session_id = str(uuid.uuid4())
@@ -139,26 +128,14 @@ def answer_question(
     vocab_result = llm_vocab_relevance.get_vocabulary_analysis(answer_text)
     confidence_score, confidence_source = score_confidence(answer_text)
 
-    # MODULE 7: question text was already available per-question (session
-    # stores it at start_session) but was never compared against the
-    # answer at all — there was no relevance signal of any kind, so a
-    # completely off-topic answer could score well on every other metric
-    # with nothing flagging it.
+    # Evaluate topic relevance between question and answer
     question_text = session["questions"].get(question_id, "")
     relevance_result = llm_vocab_relevance.get_relevance_analysis(question_text, answer_text)
 
-    # MODULE 8: only the FIXED technical-interview questions (question_bank.py)
-    # have a known-in-advance correct-answer shape to check against; dynamic
-    # resume/job-role questions honestly report applicable=False rather than
-    # a fabricated verdict. See technical_knowledge.py.
+    # Evaluate technical correctness against concept checklist when applicable
     technical_result = evaluate_technical_correctness(question_text, answer_text)
 
-    # MODULE 9: previously this checked the whole session's category_id, so
-    # a "mock" session (which now genuinely mixes hr/behavioral/technical
-    # questions instead of silently only asking HR — see question_bank.py)
-    # would have every question evaluated with STAR format regardless of
-    # what kind of question it actually was. Now uses this specific
-    # question's own stage.
+    # Pick appropriate structure format (STAR format for behavioral, generic for others)
     question_stage = session["question_stages"].get(question_id, session["category_id"])
     is_behavioral = question_stage == "behavioral"
     if is_behavioral:
@@ -177,40 +154,27 @@ def answer_question(
         structure = AnswerStructureScore(**c)
         structure_score = generic["score"]
 
-    # MODULE 4: fluency_score used to be a flat hardcoded 90.0 (text mode) or
-    # 70.0 (voice mode with no duration) — neither derived from anything
-    # about the actual answer. Real speech timing gives a real measurement;
-    # without it, fall back to a genuine (if indirect) text-based signal
-    # instead of a made-up constant. filler_count now always goes through
-    # the same context-aware detector from Module 3, instead of a separate,
-    # cruder presence-check re-implementation that lived here before.
+    # Calculate speech fluency and clarity from audio metrics or text consistency
     has_measured_audio = is_voice and speech_fluency_score is not None and speech_pause_count is not None
     if has_measured_audio:
-        # Real audio measurements computed from this very recording.
+        # Real audio measurements computed from recording
         fluency_score = speech_fluency_score
         filler_count = detect_filler_words(answer_text)["count"]
         fluency_source = "speech_measured"
         clarity_result = text_analysis.spoken_clarity(answer_text, speech_pause_count)
     elif is_voice:
-        # Spoken, but no audio measurements reached us: be honest that fluency is
-        # only a text proxy, and don't score clarity from sentence length (an
-        # unpunctuated transcript always looks like one giant sentence).
+        # Spoken audio without timing metrics fallback
         filler_count = detect_filler_words(answer_text)["count"]
         fluency_score = text_flow_consistency(answer_text)
         fluency_source = "text_estimated"
-        clarity_result = {"score": 75.0, "average_sentence_length": 0.0}  # neutral, documented default
+        clarity_result = {"score": 75.0, "average_sentence_length": 0.0}
     else:
         fluency_score = text_flow_consistency(answer_text)
         filler_count = detect_filler_words(answer_text)["count"]
         fluency_source = "text_estimated"
         clarity_result = text_analysis.clarity_analysis(answer_text)
 
-    # MODULE 9: previously the entire question slate was decided up-front at
-    # start_session and nothing ever looked at what the candidate actually
-    # said. This generates a real follow-up only when the answer contains a
-    # specific, not-yet-referenced noun phrase to ask about (e.g. "your
-    # hospital management system") — a vague answer honestly gets no
-    # follow-up rather than a generic, disconnected one.
+    # Dynamic follow-up generation based on specific noun entities in response
     followup_index = len(session["answers"])
     followup = llm_vocab_relevance.get_followup_question(
         question_text,
@@ -319,10 +283,7 @@ def submit_session(session_id: str) -> InterviewResultResponse:
     relevance = avg("relevance")
     relevance_sufficient_data = all(a["relevance_sufficient_data"] for a in answers)
 
-    # MODULE 8: aggregate per-answer technical-correctness verdicts across
-    # the session. Only counts answers where a verified concept checklist
-    # existed at all (technical_applicable) — dynamic/non-technical
-    # questions are excluded rather than silently counted as "correct".
+    # Aggregate per-answer technical correctness verdicts across the session
     technical_verdicts = [a["technical_verdict"] for a in answers if a["technical_applicable"]]
     technical_evaluated_count = len(technical_verdicts)
     technical_correct_count = technical_verdicts.count("correct")
@@ -330,27 +291,13 @@ def submit_session(session_id: str) -> InterviewResultResponse:
     technical_incorrect_count = technical_verdicts.count("incorrect")
     technical_insufficient_count = technical_verdicts.count("insufficient")
 
-    # MODULE 5: pronunciation used to be a flat hardcoded 78.0 for every
-    # interview, regardless of anything in the actual answers — the exact
-    # "score from the LLM's imagination" the audit flags as VERY IMPORTANT
-    # to avoid. There's no audio here at all (interview answers are text,
-    # whether typed or already-transcribed client-side), so this can only
-    # ever be a weak transcript-based proxy — never a real measurement.
-    # It's now derived from the actual answers' average word length, and
-    # always reported with reliable=False and an explicit method string,
-    # via the same pronunciation_proxy() used by voice assessment.
+    # Transcript-based pronunciation proxy estimation based on lexical features
     all_answer_text = " ".join(a["answer_text"] for a in answers)
     vocab_of_answers = text_analysis.vocabulary_analysis(all_answer_text)
     pronunciation_result = pronunciation_proxy(vocab_of_answers["average_word_length"], stt_used=False)
     pronunciation = pronunciation_result["score"]
 
-    # MODULE 10: `communication` used to be a bare unweighted average, and
-    # `overall` blended it with confidence/fluency/**pronunciation** — even
-    # though Module 5 established pronunciation is never reliably measured
-    # here (`pronunciation_reliable` is always False). An admittedly-
-    # unreliable number was still shaping the headline score at full
-    # weight, and `relevance` (added in Module 7) was never included at
-    # all. Both composites now use the shared, documented weighting engine.
+    # Calculate overall communication score using weighted components
     communication_result = compute_weighted_score(
         [
             {"name": "grammar", "score": grammar, "weight": 0.30, "reliable": True},
@@ -361,11 +308,7 @@ def submit_session(session_id: str) -> InterviewResultResponse:
     )
     communication = communication_result["score"]
 
-    # pronunciation is deliberately NOT a candidate component here at all
-    # (not just excluded for low confidence this one time) — Module 5
-    # established there is no code path in this project where pronunciation
-    # is reliably measured, so it never contributes to `overall`, by design,
-    # not by chance. It's still reported separately for informational value.
+    # Calculate overall interview performance score
     overall_result = compute_weighted_score(
         [
             {"name": "communication", "score": communication, "weight": 0.40, "reliable": True},

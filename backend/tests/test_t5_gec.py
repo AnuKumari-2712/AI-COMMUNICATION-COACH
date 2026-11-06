@@ -1,15 +1,4 @@
-"""
-Tests for Prompt 8: T5 Grammar Error Correction (GEC) Model.
 
-Verifies:
-1. gec_model.load_model() raises FileNotFoundError with helpful message when model weights do not exist,
-   and never crashes on module import.
-2. extract_mistakes_difflib() extracts correct annotations (wrong, correct, type, explanation).
-3. With a mocked T5 model and tokenizer, gec_model.check_grammar() produces the standard JSON schema,
-   sets grammar_engine = 't5', and recomputes mistake counts in Python.
-4. llm_grammar.check_grammar() respects GRAMMAR_ENGINE_ORDER='t5,rules', using T5 when available
-   and falling back cleanly to 'rules' when weights are absent.
-"""
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,7 +6,7 @@ import pytest
 from app.nlp import gec_model, llm_grammar
 
 
-class TestPrompt8T5GEC:
+class TestT5GEC:
     def test_missing_weights_raises_filenotfound(self, monkeypatch, tmp_path):
         """Missing weights must raise FileNotFoundError on demand, without crashing on import."""
         non_existent_path = str(tmp_path / "does_not_exist_weights")

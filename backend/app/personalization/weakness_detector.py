@@ -1,13 +1,4 @@
-"""
-Weakness/strength detection — the input every downstream personalization
-decision (exercise selection, difficulty, recommendations) is built on.
 
-A skill counts as a weakness if it's both below an absolute floor (65) AND
-meaningfully below the student's own average — this avoids labeling a
-uniformly strong student's "worst" skill as a weakness just because it's
-relatively lower, and avoids ignoring a genuinely weak skill just because
-everything else is weak too.
-"""
 from app.schemas.common import SkillScores
 
 _LABELS = {

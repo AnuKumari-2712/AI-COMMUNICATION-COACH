@@ -1,25 +1,6 @@
 """
-MODULE 7 (see AUDIT.md): answer relevance — does the answer actually
-address what the question asked?
-
-Before this module, `question` text was accepted by the text-assessment
-endpoint and threaded through the interview session, but nothing in
-either flow ever compared it against the answer. There was no relevance
-metric of any kind — an answer could score well on grammar/vocabulary/
-structure while being completely off-topic and nothing would flag it.
-
-This is a real, transparent, but deliberately modest measurement: literal
-keyword/lemma overlap between the question's content words and the
-answer's content words. It is NOT semantic understanding — an answer that
-echoes the question's own wording back without actually answering it
-would still score well here, and a correct answer phrased with entirely
-different vocabulary than the question would score poorly. This
-limitation is documented, not hidden (see AUDIT.md Module 7). No word-
-vector/embedding model is used because `en_core_web_sm` does not ship
-real word vectors (small spaCy models return near-zero-similarity
-vectors for `.similarity()`, which would be a fabricated-looking number,
-not a real signal) — see README §13 for what a real semantic-relevance
-model would require.
+Answer relevance analysis engine.
+Evaluates alignment between question content words and candidate response using lemma and keyword matching.
 """
 import re
 

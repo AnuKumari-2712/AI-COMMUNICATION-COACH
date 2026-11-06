@@ -41,6 +41,7 @@ export interface SystemHealth {
   spacy_model_loaded: boolean;
   transformer_confidence_enabled: boolean;
   engines?: {
+    gemini?: boolean;
     claude: boolean;
     t5: boolean;
     whisper: boolean;

@@ -1,16 +1,4 @@
-"""
-AI Coach chat.
 
-This is a template/rule-based coach personalized with the student's own
-learner profile (their actual weakest skill, streak, career goal) rather
-than a wired-up generative LLM — the required stack lists NLP/transformer
-models for analysis, not a chat model, and standing up a safe, hosted LLM
-is out of scope here. The response-selection logic is real (keyword
-routing + live profile data), and the integration point for a real LLM
-(e.g. a HuggingFace text-generation pipeline) is isolated to
-`_generate_reply`, so swapping it in later doesn't touch the route or the
-profile-lookup logic.
-"""
 import random
 
 from app.personalization import learner_profile

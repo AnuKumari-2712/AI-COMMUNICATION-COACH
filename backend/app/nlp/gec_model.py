@@ -1,12 +1,4 @@
-"""
-Fine-tuned T5 Grammar Error Correction (GEC) Model Handler.
-Implements Prompt 8:
-- Lazy loads google/flan-t5-small fine-tuned weights from GEC_MODEL_PATH (default: backend/models/gec-t5).
-- Never crashes at startup; raises clear, actionable FileNotFoundError only when inference is requested without weights.
-- Processes text sentence-by-sentence with consistent prefix "grammar: <text>".
-- Extracts structured mistake annotations (wrong, correct, type, explanation) using ERRANT or difflib fallback.
-- Returns identical JSON schema as llm_grammar.
-"""
+
 import difflib
 import logging
 import os
@@ -42,9 +34,11 @@ def is_t5_available() -> bool:
             files = os.listdir(path)
             if any(f in ("config.json", "pytorch_model.bin", "model.safetensors") for f in files):
                 return True
+
         # Hugging Face Hub check (e.g. username/repo, not relative directories starting with models/ or ./)
-        if not path.startswith(("models/", "models\\", "backend/", "backend\\", "./", ".\\")):
-            parts = path.split("/")
+        normalized = path.replace("\\", "/")
+        if not normalized.startswith(("models/", "backend/", "./")):
+            parts = normalized.split("/")
             if len(parts) == 2 and all(p.strip() for p in parts) and not os.path.isabs(path):
                 return True
         return False
@@ -65,7 +59,15 @@ def load_model(model_path: str | None = None) -> tuple[Any, Any]:
     path = model_path or get_model_path()
 
     # Check if local path exists or if it looks like a Hugging Face Hub repo id (contains '/')
-    is_hf_repo = "/" in path and not os.path.exists(path) and not os.path.isabs(path)
+    normalized = path.replace("\\", "/")
+    parts = normalized.split("/")
+    is_hf_repo = (
+        len(parts) == 2
+        and all(p.strip() for p in parts)
+        and not os.path.isabs(path)
+        and not normalized.startswith(("models/", "backend/", "./"))
+    )
+
     if not is_hf_repo and not os.path.exists(path):
         raise FileNotFoundError(
             f"T5 GEC model weights not found at '{path}'. "
@@ -74,7 +76,7 @@ def load_model(model_path: str | None = None) -> tuple[Any, Any]:
         )
 
     try:
-        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer  # type: ignore[import-untyped, import-not-found]
     except ImportError as exc:
         raise RuntimeError("Transformers library is not installed. Run `pip install transformers`.") from exc
 
@@ -94,6 +96,12 @@ def _classify_edit(wrong: str, correct: str) -> tuple[str, str]:
     """Heuristic error classification for difflib fallback."""
     w_lower = wrong.lower().strip()
     c_lower = correct.lower().strip()
+
+    # Insertions / Deletions
+    if not wrong and correct:
+        return "grammar", f"Inserted missing word: '{correct}'."
+    if wrong and not correct:
+        return "grammar", f"Removed unnecessary word: '{wrong}'."
 
     # Punctuation edits
     if re.fullmatch(r"[^\w\s]+", wrong) or re.fullmatch(r"[^\w\s]+", correct):
@@ -176,12 +184,28 @@ def correct_sentence_t5(sentence: str, model: Any, tokenizer: Any) -> str:
     input_text = f"grammar: {trimmed}"
     inputs = tokenizer(input_text, return_tensors="pt", max_length=128, truncation=True)
 
-    outputs = model.generate(
-        **inputs,
-        max_length=128,
-        num_beams=4,
-        early_stopping=True,
-    )
+    # Move inputs to model device if applicable (e.g. GPU/CUDA)
+    device = getattr(model, "device", None)
+    if device is not None and isinstance(inputs, dict):
+        inputs = {k: (v.to(device) if hasattr(v, "to") else v) for k, v in inputs.items()}
+
+    try:
+        import torch  # type: ignore[import-untyped, import-not-found]
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_length=128,
+                num_beams=4,
+                early_stopping=True,
+            )
+    except (ImportError, Exception):
+        outputs = model.generate(
+            **inputs,
+            max_length=128,
+            num_beams=4,
+            early_stopping=True,
+        )
+
     corrected = tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
     return corrected or trimmed
 

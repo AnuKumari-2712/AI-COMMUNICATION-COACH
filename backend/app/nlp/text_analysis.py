@@ -1,22 +1,6 @@
 """
-Vocabulary, structure and clarity analysis.
-
-MODULE 2 (see AUDIT.md): vocabulary richness previously used raw
-type-token ratio (TTR = unique words / total words), which is a real but
-length-biased metric — a 5-word answer with zero repeated words scores a
-perfect 1.0 just as easily as a genuinely rich 200-word answer, and raw TTR
-mechanically decays as text gets longer even when the underlying
-vocabulary is equally rich, because longer text has more chances to repeat
-common words. This module now uses Herdan's C (log(unique)/log(total)), a
-standard corpus-linguistics measure that stays far more stable across text
-lengths than raw TTR, AND explicitly flags scores from short answers as
-low-confidence (`sufficient_data=False`) rather than presenting a
-five-word answer's vocabulary score with the same confidence as a
-five-sentence one.
-
-Structure analysis is a position + keyword heuristic for intro / main
-point / example / conclusion, used by both Text Practice and the interview
-answer-structure evaluator.
+Vocabulary richness, response structure, and clarity analysis.
+Computes lexical diversity using Herdan's C and analyzes response structural components.
 """
 import math
 import re
@@ -142,16 +126,7 @@ _INTRO_FILLER_OPENERS = {"yes", "no", "um", "uh", "well", "okay", "ok", "so", "b
 
 
 def _looks_like_substantive_opening(sentence: str) -> bool:
-    """MODULE 6 (see AUDIT.md): `intro_present` used to be `... or True`,
-    which made it always true for any non-empty answer regardless of
-    whether the opening sentence actually established anything — a
-    hardcoded pass-through disguised as a measurement. A literal keyword
-    check ("my name is", "let me begin") is too strict, since most real
-    interview answers launch straight into content without a stock
-    opening phrase. This is the middle ground: a real, checkable signal —
-    does the first sentence have enough words to plausibly frame the
-    answer, and does it not start with a throwaway filler word/acknowledgment
-    ("Yes.", "Um, so...") — rather than "any sentence exists at all"."""
+    """Verifies that the opening sentence provides substantive framing rather than a filler acknowledgment."""
     words = sentence.split()
     if len(words) < _INTRO_MIN_WORDS:
         return False

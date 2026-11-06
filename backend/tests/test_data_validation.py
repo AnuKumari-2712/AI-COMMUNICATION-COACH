@@ -1,14 +1,4 @@
-"""
-MODULE 11 test plan (see AUDIT.md): data validation. The original audit
-explicitly calls out: no NaN scores, no impossible percentages, no
-negative counts, WPM never below 0, filler count never exceeding total
-words, and verdict counts that must sum consistently. This module adds
-API-boundary bounds (pydantic Field constraints) to the response schemas
-and a zero-division guard in the shared scoring engine; these tests prove
-both — that adversarial/pathological inputs never produce an out-of-range
-number, AND that the schema bounds are real (a genuinely bad value is
-rejected, not silently accepted).
-"""
+
 import math
 
 import pytest
@@ -164,7 +154,6 @@ def test_interview_result_response_rejects_out_of_range_overall():
 
 
 def test_technical_verdict_counts_sum_to_evaluated_count_through_real_session():
-    # MODULE 11: the four verdict buckets must always partition
     # technical_evaluated_count exactly — no double-counting, no answers
     # silently lost.
     session = interview_service.start_session("demo-student", "technical", None, None)

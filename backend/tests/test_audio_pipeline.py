@@ -1,11 +1,4 @@
-"""
-Tests for the audio pipeline fixes (webm->WAV upstream, adaptive pause
-detection, measured fluency, chunked STT, unpunctuated-transcript grammar).
 
-All audio is synthetic WAV generated here, so results are exactly checkable:
-sine "speech" bursts separated by silence of known length.
-Run with:  cd backend && pytest tests/test_audio_pipeline.py -v
-"""
 import math
 import random
 import struct
@@ -164,6 +157,9 @@ def test_stt_short_clip_is_a_single_google_call(tmp_path, monkeypatch):
 
 def test_stt_joins_every_piece_and_skips_a_silent_one(tmp_path, monkeypatch):
     import speech_recognition as sr
+
+    # Simulate whole-file rejection on long audio so chunked fallback activates
+    monkeypatch.setattr(stt, "_recognize_google_whole", lambda *a, **kw: (_ for _ in ()).throw(sr.RequestError("file too long")))
 
     path = _write_wav(tmp_path / "long.wav", [("speech", 20.0)], amplitude=2000)
     frames, rate, width = _read_frames(path)

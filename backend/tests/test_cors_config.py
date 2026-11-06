@@ -1,11 +1,4 @@
-"""
-The deployed site could not talk to the deployed backend because the browser
-refuses cross-origin calls unless the backend lists the site's origin. These
-tests read the CORS values from the repo's real render.yaml and check which
-origins the backend would accept: this project's Vercel URLs yes, anyone
-else's no.
-Run with:  cd backend && pytest tests/test_cors_config.py -v
-"""
+
 import asyncio
 import json
 from pathlib import Path

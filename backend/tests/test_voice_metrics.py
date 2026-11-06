@@ -1,10 +1,3 @@
-"""
-Tests for Prompt 6: Real Voice Feedback
-- Pauses derived from Whisper word timestamps (>0.7s pause, >1.5s long pause)
-- Pronunciation confidence scoring & unclear words detection (<60% flagged)
-- Voice practice sentence-by-sentence multi-engine grammar integration
-- Exact hand-computed test assertions
-"""
 from unittest.mock import MagicMock
 import pytest
 from app.schemas.common import AnalysisSource
@@ -12,7 +5,7 @@ from app.services import assessment_service
 from app.speech import speech_metrics, stt
 
 
-class TestPrompt6VoiceFeedback:
+class TestVoiceFeedback:
     def test_compute_pauses_from_words_exact_math(self):
         """
         Gaps:

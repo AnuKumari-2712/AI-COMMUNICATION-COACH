@@ -1,9 +1,4 @@
-"""
-Turns "these are the student's weaknesses at this difficulty level" into an
-actual list of exercises. This is what guarantees no two students see the
-same plan: the exercise mix is a direct function of their own weakness list
-and their own predicted difficulty level.
-"""
+
 from app.ml.difficulty_model import predict_difficulty
 from app.personalization.weakness_detector import detect
 from app.schemas.student import LearnerProfile

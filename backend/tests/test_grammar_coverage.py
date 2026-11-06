@@ -1,20 +1,10 @@
-"""
-Comprehensive coverage test for the Grammar & Style Corrections engine.
-Verifies that:
-1. All actual mistakes across the entire answer are identified without truncation.
-2. Every mistake carries original, corrected, reason, rule, and error_type.
-3. The fully-corrected answer (corrected_answer) preserves original meaning.
-4. Correct sentences are not falsely flagged.
-"""
+
 import pytest
 from app.nlp import grammar_rules
 
 
 def test_complete_paragraph_all_mistakes_detected():
-    """
-    Submits a multi-sentence paragraph containing 16 intentional mistakes across
-    subject-verb agreement, verb forms, singular/plural, articles, prepositions, etc.
-    """
+    
     text = (
         "Hello, my name are Anu and I am a B.Tech student in Lovely Professional University. "
         "I am study in third year and I has a strong interest in web development and artificial intelligence. "
@@ -72,19 +62,12 @@ def test_complete_paragraph_all_mistakes_detected():
 
 
 def test_sentence_with_multiple_mistakes():
-    """
-    Verifies that multiple distinct mistakes within a single sentence
-    are all identified without skipping any.
-    """
+    
     sentence = "I has make many project to improves speaking."
     analysis = grammar_rules.analyze(sentence)
     corrections = analysis["corrections"]
 
-    # Mistakes in this single sentence:
-    # 1. "I has" (subject-verb agreement)
-    # 2. "have make" / "has make" (verb form)
-    # 3. "many project" (plural agreement)
-    # 4. "to improves" (verb form)
+    
     assert len(corrections) >= 3
 
     error_types = {c.error_type for c in corrections}
@@ -106,14 +89,7 @@ def test_correct_text_produces_zero_corrections():
 
 
 def test_technical_question_mistakes_detected():
-    """
-    Verifies mistakes in technical/project questions:
-    'one of my biggest problem were' -> problems, was
-    'have did' -> have done
-    'good in coding' -> good at coding
-    'there is many solutions' -> there are many solutions
-    'to worked' -> to work
-    """
+    
     text = (
         "In my last project, one of my biggest problem were database latency. "
         "I have did several optimizations and I am good in coding. "
@@ -165,16 +141,7 @@ def test_strengths_and_weaknesses_mistakes_detected():
 
 
 def test_introduction_and_behavioral_mistakes_detected():
-    """
-    Verifies mistakes in Introduction / Behavioral questions:
-    'myself Rahul' -> I am Rahul
-    'am software engineer' -> am a software engineer
-    'am having 2 years experience' -> have 2 years of experience
-    'passed out from' -> graduated from
-    'me and my team worked' -> My team and I worked
-    'feedbacks' -> feedback
-    'revert back' -> revert / reply
-    """
+    
     text = (
         "Myself Rahul and I am software engineer. "
         "I passed out from college and I am having 2 years of experience. "
@@ -206,10 +173,7 @@ def test_introduction_and_behavioral_mistakes_detected():
 
 
 def test_per_sentence_independence_and_sentence_context():
-    """
-    Verifies that every sentence is checked independently, c.sentence is populated,
-    and multiple errors within a single sentence are all detected without early termination.
-    """
+   
     text = (
         "he dont have many project and i wants to improves it. "
         "she is good in coding and there is two bug in the system."

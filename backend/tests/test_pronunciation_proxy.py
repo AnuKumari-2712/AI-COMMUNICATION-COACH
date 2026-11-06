@@ -1,9 +1,3 @@
-"""
-MODULE 5 test plan (see AUDIT.md): pronunciation must never be presented
-as a reliably measured score — this project has no audio phoneme-analysis
-model, so pronunciation_proxy() is a documented transcript-only estimate
-that always reports reliable=False and explains its method.
-"""
 from app.speech.speech_metrics import pronunciation_proxy
 
 

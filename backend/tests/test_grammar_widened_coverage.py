@@ -1,13 +1,3 @@
-"""
-Tests for the widened grammar/spelling coverage added after users reported
-that written feedback missed obvious mistakes.
-
-Two kinds of test: (1) each new rule fires on the mistake it targets with the
-exact correction, and (2) a false-positive guard — correct sentences that
-superficially resemble a rule must produce NO corrections.
-
-Run with:  cd backend && pytest tests/test_grammar_widened_coverage.py -v
-"""
 import pytest
 
 from app.nlp import grammar_rules

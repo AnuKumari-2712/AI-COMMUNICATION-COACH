@@ -1,25 +1,4 @@
-"""
-Real, stdlib-only audio analysis for WAV/PCM input.
 
-The frontend now converts the browser's webm/opus recording to 16 kHz mono WAV
-before uploading (src/lib/audioToWav.ts), so this analyzer receives real WAV in
-the normal flow — no ffmpeg needed on the server. When the file still isn't
-parseable as WAV, callers fall back to a transcript-based pause estimate (see
-`speech_metrics.py`), and that fallback is always reported to the client as
-"estimated".
-
-Pause definition (documented so the numbers can be verified by hand):
-- The audio is cut into `window_ms` windows and each window's RMS energy is
-  compared with a silence threshold.
-- The threshold is ADAPTIVE by default: it is derived from this recording's own
-  noise floor and speech level (capped at half the speech level so continuous
-  speech is never misread as silence), because a fixed number marks a quiet-microphone
-  recording as "all silence" and a noisy room as "no silence at all".
-- A pause is a run of silent windows lasting at least `min_pause_ms` that sits
-  BETWEEN speech. Silence before the first word and after the last word is not a
-  pause in speech and is excluded.
-- A "long pause" is one lasting at least `long_pause_ms` (hesitation-length).
-"""
 try:
     import audioop
 except ImportError:

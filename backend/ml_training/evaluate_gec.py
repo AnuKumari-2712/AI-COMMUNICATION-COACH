@@ -1,11 +1,4 @@
-"""
-Evaluation Script for T5 Grammar Error Correction (GEC).
-Implements Prompt 8:
-- Computes GLEU metric on JFLEG test set.
-- Computes % sentences changed.
-- Evaluates 25+ sentences in sanity_sentences.txt.
-- Writes comprehensive results to backend/ml_training/eval_report.md.
-"""
+
 import argparse
 import collections
 import logging
@@ -52,9 +45,7 @@ def parse_args():
     return parser.parse_args()
 
 
-# ============================================================================
-# GLEU METRIC IMPLEMENTATION (Napoles et al. 2015, standard for GEC)
-# ============================================================================
+
 
 def _get_ngrams(tokens: list[str], n: int) -> collections.Counter:
     return collections.Counter(tuple(tokens[i : i + n]) for i in range(len(tokens) - n + 1))

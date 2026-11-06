@@ -1,21 +1,4 @@
-"""
-Adaptive difficulty engine — a real scikit-learn classifier, not a lookup
-table.
 
-There's no historical performance dataset yet (this is a fresh project), so
-we bootstrap one: `_synthetic_training_data()` generates labeled examples
-from the same domain rule a human coach would use (strong + improving ->
-raise difficulty, weak + declining -> lower it), with random noise so the
-model has to actually learn the boundary rather than memorize it. A
-`RandomForestClassifier` is trained on that data once, at process start, and
-cached.
-
-This is the intended replacement point: once real practice-session outcomes
-are logged (see `learner_profile.py`'s `practice_history`), swap
-`_synthetic_training_data()` for a query against that history and retrain
-periodically. Nothing else in the codebase needs to change — callers only
-see `predict_difficulty(features) -> DifficultyLevel`.
-"""
 import logging
 from functools import lru_cache
 

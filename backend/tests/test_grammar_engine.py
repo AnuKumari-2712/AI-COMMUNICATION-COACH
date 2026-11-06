@@ -1,20 +1,4 @@
-"""
-Tests for Prompt 4: Multi-Engine Grammar Checker (Claude, T5, Rules fallback chain).
 
-Verifies:
-1. Fallback chain respects GRAMMAR_ENGINE_ORDER (default: "claude,t5,rules").
-2. Without ANTHROPIC_API_KEY, falls back cleanly to 'rules' engine and logs fallback reason.
-3. Test string catches all expected errors:
-   - 'dont' (apostrophe)
-   - 'dont have no' (double negative)
-   - 'gonna' (informal)
-   - 'alot' (spelling)
-   - 'work alot hard' (word order)
-   - 'Neither of the teams were' (were -> was)
-4. With Claude mocked, parses strict JSON and sets grammar_engine = "claude".
-5. Python independently recomputes total_mistakes and sentence_count (never blindly trusts model arithmetic).
-6. End-to-end /assessment/text endpoint includes grammar_engine and sentence-by-sentence analysis.
-"""
 import json
 import os
 from unittest.mock import MagicMock, patch
@@ -50,7 +34,7 @@ def client():
 TEST_STRING = "I dont have no experience but I am gonna work alot hard. Neither of the teams were ready."
 
 
-class TestPrompt4GrammarEngine:
+class TestGrammarEngine:
     def test_without_api_key_falls_back_to_rules(self, monkeypatch):
         """Without ANTHROPIC_API_KEY, check_grammar must fall back to 'rules' engine."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -71,21 +55,19 @@ class TestPrompt4GrammarEngine:
         wrongs = [m["wrong"].lower() for m in all_mistakes]
         rules_types = [m["type"].lower() for m in all_mistakes]
 
-        # Verify expected errors are detected
-        # 1. dont (apostrophe/spelling)
         assert any("dont" in w for w in wrongs), "Expected 'dont' detected"
-        # 2. double negative (dont have no)
+    
         assert any("no" in w for w in wrongs) or any("double" in t for t in rules_types), "Expected double negative detected"
-        # 3. gonna (informal)
+    
         assert any("gonna" in w for w in wrongs), "Expected 'gonna' detected"
-        # 4. alot (spelling)
+        
         assert any("alot" in w for w in wrongs), "Expected 'alot' detected"
-        # 5. work alot hard (word order)
+        
         assert any("hard" in w for w in wrongs) or any("order" in t for t in rules_types), "Expected word order issue detected"
-        # 6. were (were -> was)
+        
         assert any("were" in w for w in wrongs), "Expected 'were' (should be was) detected"
 
-        # Python recomputes total_mistakes exactly
+    
         assert res["total_mistakes"] == len(all_mistakes)
 
     def test_with_claude_mock_detects_all_errors(self, monkeypatch):

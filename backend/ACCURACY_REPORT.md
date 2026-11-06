@@ -2,13 +2,13 @@
 
 Generated 2026-09-23 by `scripts/generate_accuracy_report.py`, run against the ground-truth benchmark in `tests/ground_truth_data.py` — the exact same functions the live API calls, not a separate reimplementation.
 
-**This is not a claim of real-world accuracy at scale.** It is a small, manually-curated benchmark (28 examples across 5 metrics) proving the implementation does what its own documented rules say it does, on cases a human has checked by hand. See `AUDIT.md` for the full per-module accuracy problems found and fixed, and the honestly-documented limitations of each metric — this report never claims 100% accuracy beyond what is demonstrated below.
+**This is not a claim of real-world accuracy at scale.** It is a small, manually-curated benchmark (28 examples across 5 metrics) proving the implementation does what its own documented rules say it does, on cases checked by hand. See project documentation for the full limitations of each metric — this report demonstrates verification on the test suite below.
 
 ## Overall: 29/29 (100.0%) ground-truth examples matched
 
 ## Grammar — 8/8 (100.0%)
 
-**Known limitations:** Only the 7 hand-coded rule patterns in grammar_rules.py are checked — see AUDIT.md Module 1 for coverage limits (e.g. 'dont' without an apostrophe is not matched by the double-negative rule).
+**Known limitations:** Only the 7 rule patterns in grammar_rules.py are checked (e.g. 'dont' without an apostrophe is not matched by the double-negative rule).
 
 | Method | Input | Expected | Actual | Match |
 |---|---|---|---|---|
@@ -23,7 +23,7 @@ Generated 2026-09-23 by `scripts/generate_accuracy_report.py`, run against the g
 
 ## Filler Words — 8/8 (100.0%)
 
-**Known limitations:** Context-aware for 'like'/'kind of'/'you know'/'actually' (see AUDIT.md Module 3); relies on spaCy POS tagging, which has known small-model limitations documented there.
+**Known limitations:** Context-aware for 'like'/'kind of'/'you know'/'actually'; relies on spaCy POS tagging, which has known small-model limitations.
 
 | Method | Input | Expected | Actual | Match |
 |---|---|---|---|---|
@@ -38,7 +38,7 @@ Generated 2026-09-23 by `scripts/generate_accuracy_report.py`, run against the g
 
 ## Speaking Pace (WPM) — 5/5 (100.0%)
 
-**Known limitations:** WPM is computed by exact definition (words / minutes) — this category is expected to match 100% by construction, not because pace prediction is 'solved'; see AUDIT.md Module 4 for pace_source measured-vs-estimated distinction.
+**Known limitations:** WPM is computed by exact definition (words / minutes) — this category is expected to match 100% by construction, not because pace prediction is 'solved'; pace_source distinguishes measured vs estimated speech.
 
 | Method | Input | Expected | Actual | Match |
 |---|---|---|---|---|
@@ -50,7 +50,7 @@ Generated 2026-09-23 by `scripts/generate_accuracy_report.py`, run against the g
 
 ## Answer Relevance — 4/4 (100.0%)
 
-**Known limitations:** Keyword/lemma overlap, not semantic understanding — an answer echoing the question's own words without answering it would still score well; see AUDIT.md Module 7.
+**Known limitations:** Keyword/lemma overlap, not semantic understanding — an answer echoing the question's own words without answering it would still score well.
 
 | Method | Input | Expected | Actual | Match |
 |---|---|---|---|---|
@@ -61,7 +61,7 @@ Generated 2026-09-23 by `scripts/generate_accuracy_report.py`, run against the g
 
 ## Technical Correctness — 4/4 (100.0%)
 
-**Known limitations:** Only the 5 fixed technical-interview questions have a verified concept checklist; checks for keyword presence, not contextual correctness of usage; see AUDIT.md Module 8.
+**Known limitations:** Only the 5 fixed technical-interview questions have a verified concept checklist; checks for keyword presence, not contextual correctness of usage.
 
 | Method | Input | Expected | Actual | Match |
 |---|---|---|---|---|

@@ -1,15 +1,3 @@
-"""
-MODULE 12 (see AUDIT.md): ground-truth benchmark — runs the manually
-verified examples in ground_truth_data.py against the real analysis
-functions and asserts actual matches expected. This is distinct from the
-per-module unit tests (which check internal logic/formulas in isolation):
-this is the audit's explicit "small benchmark with manually verified
-examples" requirement (section 18), covering grammar, fillers, pace,
-relevance and technical correctness in one place, in the same input/
-expected/actual shape used by the accuracy report
-(scripts/generate_accuracy_report.py generates backend/ACCURACY_REPORT.md
-from this exact same dataset).
-"""
 import pytest
 
 from app.interview.technical_knowledge import evaluate_technical_correctness

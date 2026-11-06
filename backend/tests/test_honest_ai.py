@@ -1,12 +1,3 @@
-"""
-Test suite for Prompt 9: Honest AI Mode & Engine Health Status.
-
-Covers:
-1. USE_MOCK_AI defaults to False.
-2. Auto-disables USE_MOCK_AI when real engines (Claude, T5, Whisper, spaCy) are configured.
-3. /api/v1/health returns honest use_mock_ai: false and engines dictionary {"claude", "t5", "whisper", "spacy"}.
-4. Health endpoint backward compatibility.
-"""
 from fastapi.testclient import TestClient
 import pytest
 
@@ -14,7 +5,7 @@ from app.core.config import Settings
 from app.main import app
 
 
-class TestPrompt9HonestAIMode:
+class TestHonestAIMode:
     def test_default_use_mock_ai_is_false(self):
         """Settings defaults use_mock_ai to False (honest AI mode)."""
         settings = Settings(use_mock_ai=False, anthropic_api_key=None, enable_whisper=False)

@@ -1,22 +1,6 @@
-"""
-MODULE 12 (see AUDIT.md): ground-truth benchmark data.
 
-A small, manually-verified set of labeled examples per metric — sections
-18-19 of the original audit spec. Each example's `expected` value was
-confirmed by actually running the real function against it (not guessed)
-before being written down here; the ground-truth label and the passing
-test are two separate things that must independently agree, which is the
-whole point of a benchmark. This file holds only data: no test framework
-import, so it can be reused by both the pytest suite
-(test_ground_truth_benchmark.py) and the report generator
-(scripts/generate_accuracy_report.py).
-"""
 
-# ---------------------------------------------------------------------------
-# Grammar: sentences with a manually verified correct/incorrect label.
-# "incorrect" means grammar_rules.analyze() should find >=1 issue in the
-# "grammar" category specifically (not spelling/style).
-# ---------------------------------------------------------------------------
+
 GRAMMAR_EXAMPLES = [
     {"text": "She goes to school every day.", "expected_has_grammar_issue": False, "note": "correct present-tense agreement"},
     {"text": "The team finished the project on time.", "expected_has_grammar_issue": False, "note": "correct simple past"},
@@ -28,10 +12,6 @@ GRAMMAR_EXAMPLES = [
     {"text": "I'm gonna finish it by Friday.", "expected_has_grammar_issue": False, "note": "style/formality issue only ('gonna') — must NOT count as a grammar issue"},
 ]
 
-# ---------------------------------------------------------------------------
-# Filler words: transcripts with a manually verified expected count,
-# including the known false-positive cases from Module 3.
-# ---------------------------------------------------------------------------
 FILLER_EXAMPLES = [
     {"text": "Um, I think we should proceed.", "expected_filler_count": 1, "note": "unambiguous 'um'"},
     {"text": "Do you know the deadline?", "expected_filler_count": 0, "note": "'you know' mid-clause in a genuine question, not filler"},
@@ -43,10 +23,7 @@ FILLER_EXAMPLES = [
     {"text": "Uh, basically, we finished the project on time.", "expected_filler_count": 2, "note": "'uh' + clause-initial 'basically'"},
 ]
 
-# ---------------------------------------------------------------------------
-# Speaking pace: exact word_count/duration pairs -> exact expected WPM
-# (WPM = word_count / (duration_seconds/60), by definition).
-# ---------------------------------------------------------------------------
+
 PACE_EXAMPLES = [
     {"word_count": 150, "duration_seconds": 60.0, "expected_wpm": 150.0},
     {"word_count": 100, "duration_seconds": 60.0, "expected_wpm": 100.0},
@@ -55,10 +32,7 @@ PACE_EXAMPLES = [
     {"word_count": 0, "duration_seconds": 10.0, "expected_wpm": 0.0},
 ]
 
-# ---------------------------------------------------------------------------
-# Answer relevance: question/answer pairs with a manually verified
-# relevant/irrelevant label (threshold: score >= 50 counts as "relevant").
-# ---------------------------------------------------------------------------
+
 RELEVANCE_EXAMPLES = [
     {
         "question": "Tell me about a time you led a team through a difficult project.",
@@ -82,10 +56,7 @@ RELEVANCE_EXAMPLES = [
     },
 ]
 
-# ---------------------------------------------------------------------------
-# Technical correctness: the fixed technical-interview questions with a
-# manually verified correct/incorrect answer each.
-# ---------------------------------------------------------------------------
+
 TECHNICAL_EXAMPLES = [
     {
         "question": "Explain how a hash map works and its average time complexity.",

@@ -1,14 +1,4 @@
-"""
-Tests for Prompt 1: real name/email + frontend-backend connection.
 
-Verifies:
-- Signup creates a real named profile (not "Ananya Sharma").
-- Login returns a valid token for that profile.
-- GET /students/me with the token returns the real name/email.
-- A token for an unknown student_id returns 404 (not the demo profile).
-- No Authorization header returns 200 with the demo profile.
-- Invalid bearer token returns 401.
-"""
 import pytest
 from fastapi.testclient import TestClient
 

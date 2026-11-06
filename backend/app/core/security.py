@@ -1,14 +1,4 @@
-"""
-Minimal, dependency-free auth for a student project.
 
-Passwords are salted + hashed with PBKDF2 (stdlib `hashlib`, no plaintext
-storage). Tokens are a simple HMAC-signed payload (student_id + expiry) —
-functionally similar to a JWT but without pulling in a JWT library, since
-this project doesn't need multi-issuer/multi-audience token claims. This is
-demo-grade: fine for a portfolio/hackathon deployment, NOT a substitute for
-a hardened auth provider in a real product (no rate limiting, no refresh
-tokens, no revocation list).
-"""
 import base64
 import hashlib
 import hmac

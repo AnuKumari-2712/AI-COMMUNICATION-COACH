@@ -1,10 +1,3 @@
-"""
-Tests for Prompt 5:
-- 16kHz mono WAV conversion with ffmpeg detection and fallbacks.
-- faster-whisper speech recognition with word timestamps and filler prompts.
-- STT fallback chain: Whisper -> Google -> Failed.
-- Transparent reporting without silent mock fallbacks.
-"""
 import os
 import shutil
 import struct
@@ -30,7 +23,7 @@ def _create_wav(channels=1, rate=16000, duration_sec=1.0) -> str:
     return path
 
 
-class TestPrompt5AudioConversion:
+class TestAudioConversion:
     def test_already_16k_mono_wav_returns_same_path(self):
         wav_path = _create_wav(channels=1, rate=16000)
         try:
@@ -66,7 +59,7 @@ class TestPrompt5AudioConversion:
         assert "Audio conversion requires ffmpeg" in str(exc_info.value)
 
 
-class TestPrompt5WhisperSTT:
+class TestWhisperSTT:
     def test_whisper_disabled_via_env(self, monkeypatch):
         monkeypatch.setenv("ENABLE_WHISPER", "false")
         assert whisper_stt.is_whisper_enabled() is False
@@ -100,7 +93,7 @@ class TestPrompt5WhisperSTT:
         assert "Umm, uh, like" in kwargs["initial_prompt"]
 
 
-class TestPrompt5STTFallbackChain:
+class TestSTTFallbackChain:
     def test_fallback_whisper_first_choice(self, monkeypatch):
         monkeypatch.setattr(audio_utils, "convert_to_wav_16k", lambda path: path)
 

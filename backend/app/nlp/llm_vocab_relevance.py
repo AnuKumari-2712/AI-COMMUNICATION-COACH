@@ -1,14 +1,4 @@
-"""
-Claude-powered Vocabulary, Answer Relevance, and Interview Follow-up with heuristic fallbacks.
-Implements Prompt 7:
-1. Vocabulary: context-appropriateness score (0-100), 3-5 elevated word suggestions with example sentences,
-   and weak/repeated words, while preserving all existing lexical metrics and fields.
-2. Relevance: 0-100 semantic relevance score with a one-line reason (does the answer actually answer the question?).
-3. Interview Follow-up: generates one probing follow-up question tailored to specific technical/project details
-   mentioned in the candidate's actual answer.
-Graceful fallback to existing deterministic / rule-based analyzers when ANTHROPIC_API_KEY is not configured
-or on any API failure.
-"""
+
 import json
 import logging
 import os
@@ -108,9 +98,6 @@ def _call_gemini_json_api(system_prompt: str, user_content: str) -> dict:
 
 
 
-# ============================================================================
-# 1. VOCABULARY ANALYSIS
-# ============================================================================
 
 VOCAB_SYSTEM_PROMPT = """You are an expert English vocabulary and communication coach.
 Evaluate the vocabulary quality, context-appropriateness, and word choices in the provided text.

@@ -1,19 +1,4 @@
-"""
-Speech-to-text.
 
-Real path: `speech_recognition` reads the uploaded WAV and calls Google's
-free Web Speech API (no key required for light usage, but it does require
-internet access from the server). This is a genuine STT integration, not a
-mock — it fails loudly with specific, catchable exceptions rather than
-silently returning junk.
-
-The frontend converts the browser recording to WAV before upload, so the real
-path is the normal path. Fallback: if the upload still isn't WAV, the network
-call fails, or no speech is recognized, we return one of a small set of realistic mock transcripts and
-mark the result `AnalysisSource.mock` so the frontend can label it honestly,
-per the project's requirement to never present mock output as real AI
-analysis.
-"""
 try:
     import audioop
 except ImportError:
@@ -27,14 +12,7 @@ logger = logging.getLogger(__name__)
 EMPTY_TRANSCRIPT_FALLBACK = "(No speech detected in audio recording)"
 
 
-# Google's free Web Speech endpoint loses most of a continuous clip when it is
-# called from the deployed server: measured on Render with the same audio, clips
-# up to ~3 s came back complete, a 4 s clip returned only its last word and a
-# 6 s clip only its last 6 words, while the same files were complete when run
-# locally. Audio is therefore sent in pieces of at most ~3 s and the pieces are
-# joined. Each cut is placed at the quietest 50 ms within BOUNDARY_SEARCH_SECONDS
-# of the target so a word is not sliced in half. A piece with no recognizable
-# speech is skipped rather than failing the whole recording.
+
 TARGET_CHUNK_SECONDS = 2.5
 BOUNDARY_SEARCH_SECONDS = 0.5
 _PROBE_SECONDS = 0.05
